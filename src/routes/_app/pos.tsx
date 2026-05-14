@@ -26,7 +26,7 @@ function PosPage() {
   const [tables, setTables] = useState<RTable[]>([]);
   const [openTable, setOpenTable] = useState<RTable | null>(null);
   const [guests, setGuests] = useState(2);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [banner, setBanner] = useState<{ tableCode: string; key: number } | null>(null);
 
   const load = async () => {
     const { data } = await supabase.from("restaurant_tables").select("*").order("code");
@@ -40,14 +40,25 @@ function PosPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "restaurant_tables" }, () => load())
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "orders", filter: "source=eq.qr" }, async (payload) => {
         toast.success(t("qr_alert"));
-        if (audioRef.current) { try { await audioRef.current.play(); } catch {} }
-        if (payload.new && (payload.new as { table_id?: string }).table_id) {
-          await supabase.from("restaurant_tables").update({ has_qr_alert: true }).eq("id", (payload.new as { table_id: string }).table_id);
+        playAlertBeep();
+        const tableId = (payload.new as { table_id?: string } | null)?.table_id;
+        if (tableId) {
+          await supabase.from("restaurant_tables").update({ has_qr_alert: true }).eq("id", tableId);
+          // Look up the table code for the banner
+          const { data: tbl } = await supabase.from("restaurant_tables").select("code").eq("id", tableId).maybeSingle();
+          setBanner({ tableCode: tbl?.code ?? "?", key: Date.now() });
         }
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [t]);
+
+  // Auto-dismiss banner after 8s
+  useEffect(() => {
+    if (!banner) return;
+    const id = setTimeout(() => setBanner(null), 8000);
+    return () => clearTimeout(id);
+  }, [banner]);
 
   const onTableClick = async (tbl: RTable) => {
     if (tbl.status === "available") {
