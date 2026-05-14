@@ -1,12 +1,28 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { createClient } from "@supabase/supabase-js";
+
+import type { Database } from "@/integrations/supabase/types";
 
 export const Route = createFileRoute("/api/public/qr-menu/$tableCode")({
   server: {
     handlers: {
       GET: async ({ params }) => {
+        const supabaseUrl = process.env.SUPABASE_URL;
+        const supabasePublishableKey = process.env.SUPABASE_PUBLISHABLE_KEY;
+
+        if (!supabaseUrl || !supabasePublishableKey) {
+          return new Response("Backend is not configured", { status: 500 });
+        }
+
+        const supabase = createClient<Database>(supabaseUrl, supabasePublishableKey, {
+          auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+          },
+        });
+
         const code = params.tableCode;
-        const { data: table } = await supabaseAdmin
+        const { data: table } = await supabase
           .from("restaurant_tables")
           .select("id,code,capacity,status")
           .eq("code", code)
@@ -14,13 +30,13 @@ export const Route = createFileRoute("/api/public/qr-menu/$tableCode")({
         if (!table) return new Response("Table not found", { status: 404 });
 
         const [{ data: cats }, { data: menus }, { data: settings }] = await Promise.all([
-          supabaseAdmin.from("categories").select("id,name_th,name_en,sort").order("sort"),
-          supabaseAdmin
+          supabase.from("categories").select("id,name_th,name_en,sort").order("sort"),
+          supabase
             .from("menus")
             .select("id,category_id,name_th,name_en,price,available,sort,image_url")
             .eq("available", true)
             .order("sort"),
-          supabaseAdmin.from("settings").select("restaurant_name").eq("id", 1).maybeSingle(),
+          supabase.from("settings").select("restaurant_name").eq("id", 1).maybeSingle(),
         ]);
 
         return Response.json({
