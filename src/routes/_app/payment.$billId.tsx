@@ -203,7 +203,6 @@ function PaymentPage() {
               {totalDisc > 0 && <Row label={t("discount")} value={`- ${thb(totalDisc)}`} />}
               {memberDisc > 0 && <Row label={t("member_discount")} value={`- ${thb(memberDisc)}`} />}
               {bill.vat_mode === "exclusive" && <Row label={`${t("vat")} ${bill.vat_rate}%`} value={thb(vatAmount)} />}
-              {bill.vat_mode === "inclusive" && <Row label={`${t("vat")} ${bill.vat_rate}% (incl.)`} value={thb(vatAmount)} muted />}
               <div className="border-t pt-2 mt-2 flex justify-between text-lg font-bold">
                 <span>{t("total")}</span><span>{thb(total)}</span>
               </div>
