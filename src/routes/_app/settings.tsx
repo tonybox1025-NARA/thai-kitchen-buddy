@@ -10,10 +10,13 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, Printer, QrCode } from "lucide-react";
 import { toast } from "sonner";
+import QRCode from "qrcode";
 
 export const Route = createFileRoute("/_app/settings")({ component: SettingsPage });
+
+type RTable = { id: string; code: string; capacity: number };
 
 type Menu = { id: string; category_id: string | null; name_th: string; name_en: string; name_my: string; price: number; available: boolean };
 type Category = { id: string; name_th: string; name_en: string; name_my: string };
@@ -30,11 +33,13 @@ function SettingsPage() {
           <TabsTrigger value="general">{t("general")}</TabsTrigger>
           <TabsTrigger value="menu">{t("menu_management")}</TabsTrigger>
           <TabsTrigger value="printers">{t("printers")}</TabsTrigger>
+          <TabsTrigger value="qr">{t("qr_codes")}</TabsTrigger>
           <TabsTrigger value="staff">{t("staff")}</TabsTrigger>
         </TabsList>
         <TabsContent value="general"><GeneralTab /></TabsContent>
         <TabsContent value="menu"><MenuTab /></TabsContent>
         <TabsContent value="printers"><PrintersTab /></TabsContent>
+        <TabsContent value="qr"><QrCodesTab /></TabsContent>
         <TabsContent value="staff"><StaffTab /></TabsContent>
       </Tabs>
     </div>
@@ -228,6 +233,97 @@ function StaffTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function QrCodesTab() {
+  const { t } = useI18n();
+  const [tables, setTables] = useState<RTable[]>([]);
+  const [qrs, setQrs] = useState<Record<string, string>>({});
+  const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+
+  useEffect(() => {
+    supabase.from("restaurant_tables").select("id,code,capacity").order("code").then(async ({ data }) => {
+      const list = (data ?? []) as RTable[];
+      setTables(list);
+      const entries = await Promise.all(
+        list.map(async (tbl) => {
+          const url = `${baseUrl}/menu/${encodeURIComponent(tbl.code)}`;
+          const dataUrl = await QRCode.toDataURL(url, { width: 320, margin: 1 });
+          return [tbl.id, dataUrl] as const;
+        })
+      );
+      setQrs(Object.fromEntries(entries));
+    });
+  }, [baseUrl]);
+
+  const printAll = () => {
+    const html = `<html><head><title>QR Codes</title><style>
+      body{font-family:sans-serif;margin:0;padding:16px}
+      .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+      .card{border:1px solid #ddd;border-radius:12px;padding:16px;text-align:center;page-break-inside:avoid}
+      .code{font-size:32px;font-weight:bold;margin-bottom:8px}
+      .url{font-size:11px;color:#666;word-break:break-all;margin-top:8px}
+      img{width:100%;max-width:280px;height:auto}
+      @media print{.noprint{display:none}}
+    </style></head><body>
+      <div class="noprint" style="margin-bottom:16px"><button onclick="window.print()">Print</button></div>
+      <div class="grid">
+        ${tables.map((tbl) => `
+          <div class="card">
+            <div class="code">${t("table")} ${tbl.code}</div>
+            <img src="${qrs[tbl.id] ?? ""}" alt="QR ${tbl.code}" />
+            <div class="url">${baseUrl}/menu/${tbl.code}</div>
+            <div style="font-size:12px;color:#666;margin-top:4px">สแกนเพื่อสั่งอาหาร · Scan to order</div>
+          </div>
+        `).join("")}
+      </div>
+    </body></html>`;
+    const w = window.open("", "_blank");
+    if (w) { w.document.write(html); w.document.close(); }
+  };
+
+  const printOne = (tbl: RTable) => {
+    const html = `<html><head><title>QR ${tbl.code}</title><style>
+      body{font-family:sans-serif;text-align:center;padding:32px}
+      .code{font-size:48px;font-weight:bold;margin-bottom:16px}
+      img{width:320px;height:320px}
+      .url{font-size:12px;color:#666;margin-top:12px;word-break:break-all}
+      @media print{.noprint{display:none}}
+    </style></head><body>
+      <div class="noprint" style="margin-bottom:16px"><button onclick="window.print()">Print</button></div>
+      <div class="code">${t("table")} ${tbl.code}</div>
+      <img src="${qrs[tbl.id] ?? ""}" alt="QR" />
+      <div style="font-size:14px;margin-top:16px">สแกนเพื่อสั่งอาหาร<br/>Scan to order</div>
+      <div class="url">${baseUrl}/menu/${tbl.code}</div>
+    </body></html>`;
+    const w = window.open("", "_blank");
+    if (w) { w.document.write(html); w.document.close(); }
+  };
+
+  return (
+    <div className="mt-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">{t("qr_help")}</p>
+        <Button onClick={printAll} variant="outline"><Printer className="h-4 w-4 mr-1" />{t("print_all")}</Button>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+        {tables.map((tbl) => (
+          <Card key={tbl.id}>
+            <CardContent className="p-4 text-center space-y-2">
+              <div className="font-bold text-lg">{t("table")} {tbl.code}</div>
+              {qrs[tbl.id] ? (
+                <img src={qrs[tbl.id]} alt={`QR ${tbl.code}`} className="w-full max-w-[180px] mx-auto" />
+              ) : (
+                <div className="aspect-square bg-muted rounded grid place-items-center"><QrCode className="h-8 w-8 text-muted-foreground" /></div>
+              )}
+              <div className="text-[10px] text-muted-foreground break-all">/menu/{tbl.code}</div>
+              <Button size="sm" variant="outline" className="w-full" onClick={() => printOne(tbl)}><Printer className="h-3 w-3 mr-1" />{t("print")}</Button>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }
