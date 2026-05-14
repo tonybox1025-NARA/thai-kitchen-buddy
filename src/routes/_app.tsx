@@ -68,24 +68,26 @@ function AppLayout() {
       <header className="h-14 border-b bg-card flex items-center px-4 gap-4 sticky top-0 z-30">
         <div className="font-semibold text-primary">🍽️ {t("app_name")}</div>
         <nav className="flex items-center gap-1 ml-4">
-          {navItems.map((it) => {
+          {navItems.map((it, idx) => {
             const active = path.startsWith(it.to);
             const showBadge = it.to === "/pos" && qrAlertCount > 0;
             return (
-              <Link key={it.to} to={it.to}
-                className={`relative flex items-center gap-2 px-3 py-1.5 rounded-md text-sm ${active ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}>
-                <it.icon className="h-4 w-4" />{it.label}
-                {showBadge && (
-                  <span className="ml-1 inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-destructive text-destructive-foreground text-xs font-bold animate-pulse">
-                    {qrAlertCount}
-                  </span>
-                )}
-              </Link>
+              <span key={it.to} className="flex items-center gap-1">
+                <Link to={it.to}
+                  className={`relative flex items-center gap-2 px-3 py-1.5 rounded-md text-sm ${active ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}>
+                  <it.icon className="h-4 w-4" />{it.label}
+                  {showBadge && (
+                    <span className="ml-1 inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-destructive text-destructive-foreground text-xs font-bold animate-pulse">
+                      {qrAlertCount}
+                    </span>
+                  )}
+                </Link>
+                {idx === 2 && <ShiftStatusButton />}
+              </span>
             );
           })}
         </nav>
         <div className="ml-auto flex items-center gap-2">
-          <ShiftStatusButton />
           <LanguageToggle />
           <Button variant="outline" size="sm" onClick={() => setStaff(null)} className="gap-2">
             <UserCircle2 className="h-4 w-4" />
