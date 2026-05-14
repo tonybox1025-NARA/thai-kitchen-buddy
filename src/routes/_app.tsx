@@ -85,6 +85,7 @@ function AppLayout() {
           })}
         </nav>
         <div className="ml-auto flex items-center gap-2">
+          <ShiftStatusButton />
           <LanguageToggle />
           <Button variant="outline" size="sm" onClick={() => setStaff(null)} className="gap-2">
             <UserCircle2 className="h-4 w-4" />
