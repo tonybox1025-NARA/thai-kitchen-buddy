@@ -17,6 +17,9 @@ function AppLayout() {
   const nav = useNavigate();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const [pinErr, setPinErr] = useState<string | null>(null);
+  const qrAlertCount = useQrAlertCount();
+
+  useEffect(() => { installAudioUnlockListeners(); }, []);
 
   useEffect(() => {
     if (!loading && !session) nav({ to: "/login" });
