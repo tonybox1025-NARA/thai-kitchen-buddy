@@ -6,7 +6,7 @@ import type { Database } from "@/integrations/supabase/types";
 export const Route = createFileRoute("/api/public/qr-menu/$tableCode")({
   server: {
     handlers: {
-      GET: async ({ params }) => {
+      GET: async ({ request }) => {
         const supabaseUrl = process.env.SUPABASE_URL;
         const supabasePublishableKey = process.env.SUPABASE_PUBLISHABLE_KEY;
 
@@ -21,7 +21,9 @@ export const Route = createFileRoute("/api/public/qr-menu/$tableCode")({
           },
         });
 
-        const code = params.tableCode;
+        // params is not populated in TanStack Start server handlers for dynamic routes;
+        // extract the table code from the request URL instead.
+        const code = decodeURIComponent(new URL(request.url).pathname.split("/").pop() ?? "");
         const { data: table } = await supabase
           .from("restaurant_tables")
           .select("id,code,capacity,status")
