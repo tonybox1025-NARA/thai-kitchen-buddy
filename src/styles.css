@@ -121,3 +121,21 @@
   }
   .font-burmese { font-family: var(--font-burmese); }
 }
+
+@keyframes alert-pulse-ring {
+  0%   { box-shadow: 0 0 0 0 var(--destructive); }
+  70%  { box-shadow: 0 0 0 14px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+@keyframes alert-flash {
+  0%, 100% { background-color: var(--destructive); color: var(--destructive-foreground); }
+  50%      { background-color: color-mix(in oklab, var(--destructive) 55%, white); }
+}
+.alert-flash {
+  animation: alert-flash 0.9s ease-in-out infinite, alert-pulse-ring 1.4s ease-out infinite;
+}
+@keyframes banner-slide {
+  from { transform: translateY(-12px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+.alert-banner { animation: banner-slide 0.25s ease-out; }

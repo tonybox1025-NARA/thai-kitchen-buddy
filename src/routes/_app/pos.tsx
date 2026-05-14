@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth";
@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Bell, Users } from "lucide-react";
+import { Bell, Users, X } from "lucide-react";
 import { toast } from "sonner";
+import { playAlertBeep } from "@/lib/audio-alert";
 
 export const Route = createFileRoute("/_app/pos")({ component: PosPage });
 
@@ -25,7 +26,7 @@ function PosPage() {
   const [tables, setTables] = useState<RTable[]>([]);
   const [openTable, setOpenTable] = useState<RTable | null>(null);
   const [guests, setGuests] = useState(2);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [banner, setBanner] = useState<{ tableCode: string; key: number } | null>(null);
 
   const load = async () => {
     const { data } = await supabase.from("restaurant_tables").select("*").order("code");
@@ -39,14 +40,25 @@ function PosPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "restaurant_tables" }, () => load())
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "orders", filter: "source=eq.qr" }, async (payload) => {
         toast.success(t("qr_alert"));
-        if (audioRef.current) { try { await audioRef.current.play(); } catch {} }
-        if (payload.new && (payload.new as { table_id?: string }).table_id) {
-          await supabase.from("restaurant_tables").update({ has_qr_alert: true }).eq("id", (payload.new as { table_id: string }).table_id);
+        playAlertBeep();
+        const tableId = (payload.new as { table_id?: string } | null)?.table_id;
+        if (tableId) {
+          await supabase.from("restaurant_tables").update({ has_qr_alert: true }).eq("id", tableId);
+          // Look up the table code for the banner
+          const { data: tbl } = await supabase.from("restaurant_tables").select("code").eq("id", tableId).maybeSingle();
+          setBanner({ tableCode: tbl?.code ?? "?", key: Date.now() });
         }
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [t]);
+
+  // Auto-dismiss banner after 8s
+  useEffect(() => {
+    if (!banner) return;
+    const id = setTimeout(() => setBanner(null), 8000);
+    return () => clearTimeout(id);
+  }, [banner]);
 
   const onTableClick = async (tbl: RTable) => {
     if (tbl.status === "available") {
@@ -90,7 +102,25 @@ function PosPage() {
 
   return (
     <div className="p-6">
-      <audio ref={audioRef} src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=" preload="auto" />
+      {banner && (
+        <div
+          key={banner.key}
+          className="alert-banner sticky top-14 z-20 mb-4 flex items-center gap-3 rounded-xl border border-destructive bg-destructive px-4 py-3 text-destructive-foreground shadow-lg"
+          role="alert"
+        >
+          <Bell className="h-5 w-5 animate-pulse" />
+          <div className="font-semibold">
+            {t("qr_alert")} — {t("table")} {banner.tableCode}
+          </div>
+          <button
+            onClick={() => setBanner(null)}
+            className="ml-auto rounded p-1 hover:bg-black/10"
+            aria-label="Dismiss"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">{t("nav_pos")}</h1>
         <div className="flex items-center gap-3 text-sm">
@@ -104,12 +134,17 @@ function PosPage() {
           <button
             key={tbl.id}
             onClick={() => onTableClick(tbl)}
-            className={`relative aspect-square rounded-2xl shadow-sm hover:shadow-md transition-all ${colorFor(tbl.status)} flex flex-col items-center justify-center gap-1`}
+            className={`relative aspect-square rounded-2xl shadow-sm hover:shadow-md transition-all ${tbl.has_qr_alert ? "alert-flash" : colorFor(tbl.status)} flex flex-col items-center justify-center gap-1`}
           >
             {tbl.has_qr_alert && (
-              <span className="absolute top-2 right-2 animate-pulse">
-                <Bell className="h-5 w-5" />
-              </span>
+              <>
+                <span className="absolute top-2 right-2">
+                  <Bell className="h-5 w-5 animate-pulse" />
+                </span>
+                <span className="absolute -top-2 -left-2 inline-flex items-center justify-center min-w-6 h-6 px-1.5 rounded-full bg-white text-destructive text-xs font-bold shadow">
+                  NEW
+                </span>
+              </>
             )}
             <div className="text-3xl font-bold">{tbl.code}</div>
             <div className="text-xs opacity-90">{tbl.capacity} seats</div>
