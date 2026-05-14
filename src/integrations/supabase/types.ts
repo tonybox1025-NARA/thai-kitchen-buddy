@@ -714,12 +714,22 @@ export type Database = {
         }
         Returns: string
       }
+      delete_staff: { Args: { _id: string }; Returns: undefined }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
           _staff_id: string
         }
         Returns: boolean
+      }
+      list_staff: {
+        Args: never
+        Returns: {
+          active: boolean
+          id: string
+          name: string
+          role: Database["public"]["Enums"]["app_role"]
+        }[]
       }
       set_staff_pin: {
         Args: { _pin: string; _staff_id: string }
