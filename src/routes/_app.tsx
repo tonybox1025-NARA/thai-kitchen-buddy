@@ -1,0 +1,91 @@
+import { createFileRoute, Outlet, useNavigate, Link, useRouterState } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { useAuth } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
+import { LanguageToggle } from "@/components/LanguageToggle";
+import { PinKeypad } from "@/components/PinKeypad";
+import { Button } from "@/components/ui/button";
+import { LayoutGrid, BarChart3, FileText, Settings, LogOut, UserCircle2 } from "lucide-react";
+
+export const Route = createFileRoute("/_app")({ component: AppLayout });
+
+function AppLayout() {
+  const { loading, session, staff, setStaff, signOut, verifyPin } = useAuth();
+  const { t, lang } = useI18n();
+  const nav = useNavigate();
+  const path = useRouterState({ select: (s) => s.location.pathname });
+  const [pinErr, setPinErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!loading && !session) nav({ to: "/login" });
+  }, [loading, session, nav]);
+
+  if (loading || !session) {
+    return <div className="min-h-screen grid place-items-center text-muted-foreground">{t("loading")}</div>;
+  }
+
+  // Staff PIN gate
+  if (!staff) {
+    return (
+      <div className="min-h-screen grid place-items-center p-4 bg-gradient-to-br from-background to-muted">
+        <div className="absolute top-4 right-4 flex gap-2">
+          <LanguageToggle />
+          <Button variant="ghost" size="sm" onClick={() => signOut()}><LogOut className="h-4 w-4 mr-1" />{t("logout")}</Button>
+        </div>
+        <div className="w-full max-w-sm">
+          <PinKeypad
+            error={pinErr}
+            onSubmit={async (pin) => {
+              const s = await verifyPin(pin);
+              if (s) { setStaff(s); setPinErr(null); }
+              else setPinErr(t("wrong_pin"));
+            }}
+          />
+          <p className="text-xs text-center text-muted-foreground mt-4">
+            Demo: 1234 (admin) · 9999 (manager) · 1111 (staff)
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const navItems = [
+    { to: "/pos", label: t("nav_pos"), icon: LayoutGrid },
+    { to: "/dashboard", label: t("nav_dashboard"), icon: BarChart3 },
+    { to: "/reports", label: t("nav_reports"), icon: FileText },
+    { to: "/settings", label: t("nav_settings"), icon: Settings },
+  ];
+
+  return (
+    <div className="min-h-screen flex flex-col bg-background" lang={lang}>
+      <header className="h-14 border-b bg-card flex items-center px-4 gap-4 sticky top-0 z-30">
+        <div className="font-semibold text-primary">🍽️ {t("app_name")}</div>
+        <nav className="flex items-center gap-1 ml-4">
+          {navItems.map((it) => {
+            const active = path.startsWith(it.to);
+            return (
+              <Link key={it.to} to={it.to}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm ${active ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}>
+                <it.icon className="h-4 w-4" />{it.label}
+              </Link>
+            );
+          })}
+        </nav>
+        <div className="ml-auto flex items-center gap-2">
+          <LanguageToggle />
+          <Button variant="outline" size="sm" onClick={() => setStaff(null)} className="gap-2">
+            <UserCircle2 className="h-4 w-4" />
+            <span className="font-medium">{staff.name}</span>
+            <span className="text-xs text-muted-foreground">({staff.role})</span>
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => signOut()} title={t("logout")}>
+            <LogOut className="h-4 w-4" />
+          </Button>
+        </div>
+      </header>
+      <main className="flex-1">
+        <Outlet />
+      </main>
+    </div>
+  );
+}
