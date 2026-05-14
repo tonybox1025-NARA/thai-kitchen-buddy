@@ -10,10 +10,13 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, Printer, QrCode } from "lucide-react";
 import { toast } from "sonner";
+import QRCode from "qrcode";
 
 export const Route = createFileRoute("/_app/settings")({ component: SettingsPage });
+
+type RTable = { id: string; code: string; capacity: number };
 
 type Menu = { id: string; category_id: string | null; name_th: string; name_en: string; name_my: string; price: number; available: boolean };
 type Category = { id: string; name_th: string; name_en: string; name_my: string };
@@ -30,11 +33,13 @@ function SettingsPage() {
           <TabsTrigger value="general">{t("general")}</TabsTrigger>
           <TabsTrigger value="menu">{t("menu_management")}</TabsTrigger>
           <TabsTrigger value="printers">{t("printers")}</TabsTrigger>
+          <TabsTrigger value="qr">{t("qr_codes")}</TabsTrigger>
           <TabsTrigger value="staff">{t("staff")}</TabsTrigger>
         </TabsList>
         <TabsContent value="general"><GeneralTab /></TabsContent>
         <TabsContent value="menu"><MenuTab /></TabsContent>
         <TabsContent value="printers"><PrintersTab /></TabsContent>
+        <TabsContent value="qr"><QrCodesTab /></TabsContent>
         <TabsContent value="staff"><StaffTab /></TabsContent>
       </Tabs>
     </div>
