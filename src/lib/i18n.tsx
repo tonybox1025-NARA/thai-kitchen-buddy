@@ -125,6 +125,10 @@ const dict: Dict = {
   qr_alert: { th: "ออเดอร์ QR ใหม่!", en: "New QR order!" },
   no_data: { th: "ไม่มีข้อมูล", en: "No data" },
   back: { th: "กลับ", en: "Back" },
+  qr_codes: { th: "QR โต๊ะ", en: "Table QR" },
+  qr_help: { th: "พิมพ์ QR วางบนโต๊ะ ลูกค้าสแกนแล้วสั่งจากมือถือ พนักงานยืนยันก่อนส่งครัว", en: "Print and place on tables. Customers scan to order from their phone; staff confirms before sending to kitchen." },
+  print_all: { th: "พิมพ์ทั้งหมด", en: "Print all" },
+  print: { th: "พิมพ์", en: "Print" },
 };
 
 type Ctx = {
