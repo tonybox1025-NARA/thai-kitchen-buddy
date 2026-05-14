@@ -1,0 +1,280 @@
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useI18n, pickName } from "@/lib/i18n";
+import { useAuth } from "@/lib/auth";
+import { thb } from "@/lib/format";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Plus, Minus, Trash2, ChefHat, Receipt, ArrowLeft, AlertTriangle } from "lucide-react";
+import { ManagerPinDialog } from "@/components/ManagerPinDialog";
+import { toast } from "sonner";
+
+export const Route = createFileRoute("/_app/order/$orderId")({ component: OrderPage });
+
+type Menu = { id: string; category_id: string | null; name_th: string; name_en: string; name_my: string; price: number; available: boolean };
+type Category = { id: string; name_th: string; name_en: string; name_my: string };
+type Item = {
+  id: string; menu_id: string | null; name_th: string; name_en: string; name_my: string;
+  qty: number; unit_price: number; notes: string | null; modifiers: unknown;
+  status: "pending" | "sent" | "served" | "voided";
+};
+
+function OrderPage() {
+  const { orderId } = Route.useParams();
+  const { t, lang } = useI18n();
+  const { staff } = useAuth();
+  const nav = useNavigate();
+  const [menus, setMenus] = useState<Menu[]>([]);
+  const [cats, setCats] = useState<Category[]>([]);
+  const [activeCat, setActiveCat] = useState<string | "all">("all");
+  const [items, setItems] = useState<Item[]>([]);
+  const [selected, setSelected] = useState<Menu | null>(null);
+  const [qty, setQty] = useState(1);
+  const [notes, setNotes] = useState("");
+  const [voidItem, setVoidItem] = useState<Item | null>(null);
+  const [voidReason, setVoidReason] = useState("");
+  const [managerOpen, setManagerOpen] = useState(false);
+  const [managerAction, setManagerAction] = useState<"void" | null>(null);
+  const [tableCode, setTableCode] = useState<string>("");
+
+  const loadAll = async () => {
+    const [{ data: m }, { data: c }, { data: it }, { data: ord }] = await Promise.all([
+      supabase.from("menus").select("*").eq("available", true).order("sort"),
+      supabase.from("categories").select("*").order("sort"),
+      supabase.from("order_items").select("*").eq("order_id", orderId).order("created_at"),
+      supabase.from("orders").select("table_id").eq("id", orderId).single(),
+    ]);
+    if (m) setMenus(m as Menu[]);
+    if (c) setCats(c as Category[]);
+    if (it) setItems(it as Item[]);
+    if (ord?.table_id) {
+      const { data: tbl } = await supabase.from("restaurant_tables").select("code").eq("id", ord.table_id).single();
+      if (tbl) setTableCode(tbl.code);
+    }
+  };
+
+  useEffect(() => {
+    loadAll();
+    const ch = supabase
+      .channel(`order-${orderId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "order_items", filter: `order_id=eq.${orderId}` }, () => loadAll())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderId]);
+
+  const filteredMenus = activeCat === "all" ? menus : menus.filter((m) => m.category_id === activeCat);
+
+  const openMenu = (m: Menu) => { setSelected(m); setQty(1); setNotes(""); };
+
+  const addToOrder = async () => {
+    if (!selected) return;
+    const { error } = await supabase.from("order_items").insert({
+      order_id: orderId, menu_id: selected.id,
+      name_th: selected.name_th, name_en: selected.name_en, name_my: selected.name_my,
+      qty, unit_price: selected.price, notes: notes || null, status: "pending",
+    });
+    if (error) toast.error(error.message);
+    setSelected(null);
+  };
+
+  const adjustQty = async (item: Item, delta: number) => {
+    if (item.status !== "pending") return;
+    const newQty = item.qty + delta;
+    if (newQty <= 0) {
+      await supabase.from("order_items").delete().eq("id", item.id);
+    } else {
+      await supabase.from("order_items").update({ qty: newQty }).eq("id", item.id);
+    }
+  };
+
+  const sendToKitchen = async () => {
+    const pending = items.filter((i) => i.status === "pending");
+    if (pending.length === 0) { toast.info(t("empty_order")); return; }
+    const ids = pending.map((p) => p.id);
+    await supabase.from("order_items").update({ status: "sent", sent_at: new Date().toISOString() }).in("id", ids);
+    // Queue print job (Burmese)
+    const lines = pending.map((p) => ({ name_my: p.name_my, qty: p.qty, notes: p.notes }));
+    await supabase.from("print_jobs").insert({
+      printer: "kitchen",
+      payload: { table: tableCode, lines, sent_at: new Date().toISOString(), language: "my" },
+    });
+    toast.success(t("send_to_kitchen") + " ✓");
+  };
+
+  const requestVoid = (item: Item) => {
+    if (item.status !== "pending") { toast.error(t("void_only_pending")); return; }
+    setVoidItem(item); setVoidReason("");
+  };
+
+  const performVoid = async () => {
+    if (!voidItem || !voidReason.trim()) return;
+    if (staff?.role === "staff") { setManagerAction("void"); setManagerOpen(true); return; }
+    await doVoid();
+  };
+
+  const doVoid = async () => {
+    if (!voidItem) return;
+    await supabase.from("order_items").update({
+      status: "voided", void_reason: voidReason, voided_by: staff?.id, voided_at: new Date().toISOString(),
+    }).eq("id", voidItem.id);
+    await supabase.from("voids").insert({
+      order_item_id: voidItem.id, reason: voidReason, voided_by: staff?.id,
+      amount: voidItem.qty * voidItem.unit_price,
+    });
+    setVoidItem(null); setVoidReason("");
+    toast.success("Voided");
+  };
+
+  const goToPayment = async () => {
+    const live = items.filter((i) => i.status !== "voided");
+    if (live.length === 0) { toast.error(t("empty_order")); return; }
+    const pending = live.some((i) => i.status === "pending");
+    if (pending) { toast.error(t("send_to_kitchen") + " first"); return; }
+    // Get/create bill
+    let { data: bill } = await supabase.from("bills").select("id").eq("order_id", orderId).maybeSingle();
+    if (!bill) {
+      const { data: settings } = await supabase.from("settings").select("vat_mode,vat_rate").eq("id", 1).single();
+      const subtotal = live.reduce((s, i) => s + i.qty * Number(i.unit_price), 0);
+      const { data: ord } = await supabase.from("orders").select("table_id, shift_id").eq("id", orderId).single();
+      const { data: nb } = await supabase.from("bills").insert({
+        order_id: orderId, shift_id: ord?.shift_id, subtotal, total: subtotal,
+        vat_mode: settings?.vat_mode || "inclusive", vat_rate: settings?.vat_rate || 7,
+      }).select("id").single();
+      bill = nb;
+      if (ord?.table_id) await supabase.from("restaurant_tables").update({ status: "bill_requested" }).eq("id", ord.table_id);
+    }
+    if (bill) nav({ to: "/payment/$billId", params: { billId: bill.id } });
+  };
+
+  const liveItems = items.filter((i) => i.status !== "voided");
+  const subtotal = liveItems.reduce((s, i) => s + i.qty * Number(i.unit_price), 0);
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-[1fr_420px] h-[calc(100vh-3.5rem)]">
+      {/* Menu */}
+      <div className="overflow-auto p-4">
+        <div className="flex items-center gap-3 mb-4">
+          <Link to="/pos"><Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4 mr-1" />{t("back")}</Button></Link>
+          <h1 className="text-xl font-bold">{t("table")} {tableCode}</h1>
+        </div>
+        <div className="flex gap-2 mb-4 flex-wrap">
+          <Button variant={activeCat === "all" ? "default" : "outline"} size="sm" onClick={() => setActiveCat("all")}>All</Button>
+          {cats.map((c) => (
+            <Button key={c.id} variant={activeCat === c.id ? "default" : "outline"} size="sm" onClick={() => setActiveCat(c.id)}>
+              {pickName(c, lang)}
+            </Button>
+          ))}
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+          {filteredMenus.map((m) => (
+            <button key={m.id} onClick={() => openMenu(m)} className="text-left p-3 rounded-xl border bg-card hover:border-primary hover:shadow-sm transition">
+              <div className="font-medium leading-tight">{pickName(m, lang)}</div>
+              <div className="text-xs text-muted-foreground mt-0.5">{lang === "th" ? m.name_en : m.name_th}</div>
+              <div className="mt-2 font-bold text-primary">{thb(m.price)}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Order panel */}
+      <aside className="border-l bg-card flex flex-col">
+        <div className="p-4 border-b">
+          <h2 className="font-bold">{t("order")}</h2>
+        </div>
+        <div className="flex-1 overflow-auto p-3 space-y-2">
+          {liveItems.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">{t("empty_order")}</p>}
+          {liveItems.map((i) => (
+            <div key={i.id} className="rounded-lg border p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="font-medium truncate">{pickName(i, lang)}</div>
+                  {i.notes && <div className="text-xs text-muted-foreground">📝 {i.notes}</div>}
+                  <div className="text-xs mt-1">
+                    <span className={`inline-block px-1.5 py-0.5 rounded ${i.status === "pending" ? "bg-warning/20 text-warning-foreground" : "bg-success/20 text-success-foreground"}`}>
+                      {i.status === "pending" ? t("pending") : t("sent")}
+                    </span>
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="font-semibold">{thb(i.qty * Number(i.unit_price))}</div>
+                  <div className="text-xs text-muted-foreground">{i.qty} × {thb(i.unit_price)}</div>
+                </div>
+              </div>
+              {i.status === "pending" && (
+                <div className="flex items-center gap-2 mt-2">
+                  <Button size="sm" variant="outline" onClick={() => adjustQty(i, -1)}><Minus className="h-3 w-3" /></Button>
+                  <span className="text-sm font-medium w-6 text-center">{i.qty}</span>
+                  <Button size="sm" variant="outline" onClick={() => adjustQty(i, 1)}><Plus className="h-3 w-3" /></Button>
+                  <Button size="sm" variant="ghost" className="ml-auto text-destructive" onClick={() => requestVoid(i)}>
+                    <Trash2 className="h-3 w-3 mr-1" />VOID
+                  </Button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="border-t p-4 space-y-3">
+          <div className="flex justify-between text-lg font-bold">
+            <span>{t("subtotal")}</span><span>{thb(subtotal)}</span>
+          </div>
+          <Button className="w-full" size="lg" variant="secondary" onClick={sendToKitchen}>
+            <ChefHat className="h-4 w-4 mr-2" />{t("send_to_kitchen")}
+          </Button>
+          <Button className="w-full" size="lg" onClick={goToPayment}>
+            <Receipt className="h-4 w-4 mr-2" />{t("go_to_payment")}
+          </Button>
+        </div>
+      </aside>
+
+      {/* Add item dialog */}
+      <Dialog open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>{selected ? pickName(selected, lang) : ""}</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>{t("qty")}</Label>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={() => setQty(Math.max(1, qty - 1))}><Minus className="h-4 w-4" /></Button>
+                <Input type="number" min={1} value={qty} onChange={(e) => setQty(Math.max(1, Number(e.target.value)))} className="text-center" />
+                <Button variant="outline" onClick={() => setQty(qty + 1)}><Plus className="h-4 w-4" /></Button>
+              </div>
+            </div>
+            <div>
+              <Label>{t("notes")}</Label>
+              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="ไม่เผ็ด, no spicy…" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSelected(null)}>{t("cancel")}</Button>
+            <Button onClick={addToOrder}>{t("add_to_order")} · {selected ? thb(qty * selected.price) : ""}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Void dialog */}
+      <Dialog open={!!voidItem} onOpenChange={(o) => !o && setVoidItem(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><AlertTriangle className="h-5 w-5 text-warning" />{t("void")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">{voidItem ? pickName(voidItem, lang) : ""}</p>
+            <Label>{t("void_reason")}</Label>
+            <Textarea value={voidReason} onChange={(e) => setVoidReason(e.target.value)} required />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setVoidItem(null)}>{t("cancel")}</Button>
+            <Button variant="destructive" onClick={performVoid} disabled={!voidReason.trim()}>{t("confirm")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ManagerPinDialog open={managerOpen} onOpenChange={setManagerOpen} onApproved={() => { if (managerAction === "void") doVoid(); setManagerAction(null); }} />
+    </div>
+  );
+}
