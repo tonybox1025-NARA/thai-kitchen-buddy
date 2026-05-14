@@ -6,6 +6,8 @@ import { LanguageToggle } from "@/components/LanguageToggle";
 import { PinKeypad } from "@/components/PinKeypad";
 import { Button } from "@/components/ui/button";
 import { LayoutGrid, BarChart3, FileText, Settings, LogOut, UserCircle2 } from "lucide-react";
+import { installAudioUnlockListeners, unlockAudio } from "@/lib/audio-alert";
+import { useQrAlertCount } from "@/lib/qr-alert-count";
 
 export const Route = createFileRoute("/_app")({ component: AppLayout });
 
