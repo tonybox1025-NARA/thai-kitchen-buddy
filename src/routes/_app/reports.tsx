@@ -102,7 +102,7 @@ function Reports() {
         <Card>
           <CardContent className="py-12 text-center space-y-4">
             <p className="text-muted-foreground">{t("no_open_shift")}</p>
-            <Button size="lg" onClick={() => setOpenShiftDlg(true)}>{t("open_shift")}</Button>
+            <p className="text-sm text-muted-foreground">Open a shift from the Shift button above</p>
           </CardContent>
         </Card>
       ) : (
@@ -118,18 +118,6 @@ function Reports() {
       )}
 
       {report && !zDlg && <ReportCard r={report} />}
-
-      <Dialog open={openShiftDlg} onOpenChange={setOpenShiftDlg}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>{t("open_shift")}</DialogTitle></DialogHeader>
-          <Label>{t("opening_float")}</Label>
-          <Input type="number" value={opening} onChange={(e) => setOpening(Number(e.target.value))} />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpenShiftDlg(false)}>{t("cancel")}</Button>
-            <Button onClick={openShift}>{t("confirm")}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={zDlg} onOpenChange={setZDlg}>
         <DialogContent className="max-w-xl">
