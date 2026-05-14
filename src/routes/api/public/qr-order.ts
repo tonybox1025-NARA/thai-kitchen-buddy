@@ -61,7 +61,8 @@ export const Route = createFileRoute("/api/public/qr-order")({
           order = newOrder;
         }
 
-        // Insert pending items
+        // Insert items as already-sent — kitchen gets the ticket automatically, no staff confirmation needed
+        const sentAt = new Date().toISOString();
         const rows = items.map((it) => {
           const m = menuMap.get(it.menu_id)!;
           return {
@@ -73,11 +74,19 @@ export const Route = createFileRoute("/api/public/qr-order")({
             qty: it.qty,
             unit_price: m.price,
             notes: it.notes ?? null,
-            status: "pending" as const,
+            status: "sent" as const,
+            sent_at: sentAt,
           };
         });
         const { error: itemsErr } = await supabaseAdmin.from("order_items").insert(rows);
         if (itemsErr) return new Response(itemsErr.message, { status: 500 });
+
+        // Auto-send kitchen print job (same payload format as sendToKitchen in order.$orderId.tsx)
+        const lines = rows.map((r) => ({ name_my: r.name_my, qty: r.qty, notes: r.notes }));
+        await supabaseAdmin.from("print_jobs").insert({
+          printer: "kitchen",
+          payload: { table: table_code, lines, sent_at: sentAt, language: "my" },
+        });
 
         // Mark table occupied + raise QR alert flag (the POS realtime listener will react)
         await supabaseAdmin.from("restaurant_tables").update({
