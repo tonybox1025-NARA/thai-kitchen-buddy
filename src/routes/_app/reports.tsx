@@ -35,13 +35,6 @@ function Reports() {
 
   useEffect(() => { loadShift(); }, []);
 
-  const openShift = async () => {
-    if (!staff) return;
-    const today = new Date().toISOString().slice(0, 10);
-    await supabase.from("shifts").insert({ business_day: today, opened_by: staff.id, opening_float: opening });
-    setOpenShiftDlg(false); setOpening(0);
-    loadShift();
-  };
 
   const buildReport = async (s: Shift): Promise<ReportData> => {
     const { data: bills } = await supabase.from("bills").select("id,total,subtotal,discount_amount,member_discount_amount").eq("shift_id", s.id).eq("status", "paid");
