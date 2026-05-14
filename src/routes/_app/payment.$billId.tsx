@@ -111,7 +111,7 @@ function PaymentPage() {
 
   useEffect(() => { persistBill(); /* eslint-disable-next-line */ }, [discAmt, discPct, memberDisc, bill?.id, subtotal]);
 
-  const addPayment = async (method: Payment["method"], amount: number, extras: Partial<Payment> = {}) => {
+  const addPayment = async (method: Payment["method"], amount: number, extras: Record<string, unknown> = {}) => {
     if (!bill || amount <= 0) return;
     await supabase.from("payments").insert({ bill_id: bill.id, method, amount, ...extras });
     await load();
