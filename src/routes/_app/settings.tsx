@@ -12,7 +12,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Trash2, Plus, Printer, QrCode } from "lucide-react";
 import { toast } from "sonner";
-import QRCode from "qrcode";
+// qrcode is dynamically imported inside QrCodesTab to avoid Node deps at SSR module-eval
 
 export const Route = createFileRoute("/_app/settings")({ component: SettingsPage });
 
@@ -244,8 +244,12 @@ function QrCodesTab() {
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
 
   useEffect(() => {
-    supabase.from("restaurant_tables").select("id,code,capacity").order("code").then(async ({ data }) => {
+    let cancelled = false;
+    (async () => {
+      const { default: QRCode } = await import("qrcode");
+      const { data } = await supabase.from("restaurant_tables").select("id,code,capacity").order("code");
       const list = (data ?? []) as RTable[];
+      if (cancelled) return;
       setTables(list);
       const entries = await Promise.all(
         list.map(async (tbl) => {
@@ -254,8 +258,9 @@ function QrCodesTab() {
           return [tbl.id, dataUrl] as const;
         })
       );
-      setQrs(Object.fromEntries(entries));
-    });
+      if (!cancelled) setQrs(Object.fromEntries(entries));
+    })();
+    return () => { cancelled = true; };
   }, [baseUrl]);
 
   const printAll = () => {
