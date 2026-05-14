@@ -110,11 +110,7 @@ export function ShiftStatusButton() {
             <DialogTitle>{t("open_shift")}</DialogTitle>
           </DialogHeader>
           <Label>{t("opening_float")}</Label>
-          <Input
-            type="number"
-            value={opening}
-            onChange={(e) => setOpening(Number(e.target.value))}
-          />
+          <AmountKeypad value={opening} onChange={setOpening} />
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpenDlg(false)}>
               {t("cancel")}
