@@ -41,6 +41,7 @@ function AppLayout() {
           <PinKeypad
             error={pinErr}
             onSubmit={async (pin) => {
+              await unlockAudio();
               const s = await verifyPin(pin);
               if (s) { setStaff(s); setPinErr(null); }
               else setPinErr(t("wrong_pin"));
