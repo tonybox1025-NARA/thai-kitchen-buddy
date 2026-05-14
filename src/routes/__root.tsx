@@ -42,6 +42,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { name: "google", content: "notranslate" },
       { title: "Restaurant POS" },
       { name: "description", content: "Restaurant POS for Thailand — Thai/English UI, Burmese kitchen tickets" },
       { property: "og:title", content: "Restaurant POS" },
