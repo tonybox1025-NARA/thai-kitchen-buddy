@@ -69,7 +69,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" translate="no" className="notranslate">
       <head><HeadContent /></head>
       <body style={{ fontFamily: "Inter, 'Noto Sans Thai', system-ui, sans-serif" }}>
         {children}
