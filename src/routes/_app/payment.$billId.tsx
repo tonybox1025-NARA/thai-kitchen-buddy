@@ -41,6 +41,7 @@ function PaymentPage() {
   const [memberDisc, setMemberDisc] = useState(0);
   const [tableCode, setTableCode] = useState("");
   const [restName, setRestName] = useState("");
+  const [settingsVatMode, setSettingsVatMode] = useState<"inclusive" | "exclusive">("inclusive");
 
   // Cash dialog
   const [cashOpen, setCashOpen] = useState(false);
@@ -58,7 +59,7 @@ function PaymentPage() {
     const [{ data: b }, { data: ps }, { data: s }] = await Promise.all([
       supabase.from("bills").select("*").eq("id", billId).single(),
       supabase.from("payments").select("*").eq("bill_id", billId),
-      supabase.from("settings").select("restaurant_name").eq("id", 1).single(),
+      supabase.from("settings").select("restaurant_name, vat_mode, vat_rate").eq("id", 1).single(),
     ]);
     if (b) {
       setBill(b as Bill);
@@ -73,7 +74,7 @@ function PaymentPage() {
       }
     }
     if (ps) setPayments(ps as Payment[]);
-    if (s) setRestName(s.restaurant_name);
+    if (s) { setRestName(s.restaurant_name); setSettingsVatMode((s.vat_mode as "inclusive" | "exclusive") || "inclusive"); }
   };
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [billId]);
@@ -87,11 +88,10 @@ function PaymentPage() {
   let total = afterDisc;
   if (bill) {
     const rate = Number(bill.vat_rate) / 100;
-    if (bill.vat_mode === "exclusive") {
+    if (settingsVatMode === "exclusive") {
       vatAmount = afterDisc * rate;
       total = afterDisc + vatAmount;
     } else {
-      // inclusive: VAT is part of price; split it out for display only
       vatAmount = afterDisc - afterDisc / (1 + rate);
       total = afterDisc;
     }
@@ -131,7 +131,7 @@ function PaymentPage() {
     // Queue receipt print job
     await supabase.from("print_jobs").insert({
       printer: "counter",
-      payload: { kind: "receipt", bill_id: bill.id, restaurant: restName, table: tableCode, items, total, vatAmount, payments: [...payments], language: lang },
+      payload: { kind: "receipt", bill_id: bill.id, restaurant: restName, table: tableCode, items, total, vatAmount: settingsVatMode === "exclusive" ? vatAmount : 0, vat_mode: settingsVatMode, payments: [...payments], language: lang },
     });
     toast.success(t("paid"));
   };
@@ -202,7 +202,7 @@ function PaymentPage() {
               <Row label={t("subtotal")} value={thb(subtotal)} />
               {totalDisc > 0 && <Row label={t("discount")} value={`- ${thb(totalDisc)}`} />}
               {memberDisc > 0 && <Row label={t("member_discount")} value={`- ${thb(memberDisc)}`} />}
-              {bill.vat_mode === "exclusive" && <Row label={`${t("vat")} ${bill.vat_rate}%`} value={thb(vatAmount)} />}
+              {settingsVatMode === "exclusive" && <Row label={`${t("vat")} ${bill.vat_rate}%`} value={thb(vatAmount)} />}
               <div className="border-t pt-2 mt-2 flex justify-between text-lg font-bold">
                 <span>{t("total")}</span><span>{thb(total)}</span>
               </div>
