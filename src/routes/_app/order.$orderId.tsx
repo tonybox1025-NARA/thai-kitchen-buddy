@@ -15,6 +15,12 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/order/$orderId")({ component: OrderPage });
 
+const VOID_PRESETS = [
+  { key: "void_reason_changed_mind" as const },
+  { key: "void_reason_wrong_order" as const },
+  { key: "void_reason_other" as const },
+] satisfies { key: "void_reason_changed_mind" | "void_reason_wrong_order" | "void_reason_other" }[];
+
 type Menu = { id: string; category_id: string | null; name_th: string; name_en: string; name_my: string; price: number; available: boolean };
 type Category = { id: string; name_th: string; name_en: string; name_my: string };
 type Item = {
@@ -37,6 +43,7 @@ function OrderPage() {
   const [notes, setNotes] = useState("");
   const [voidItem, setVoidItem] = useState<Item | null>(null);
   const [voidReason, setVoidReason] = useState("");
+  const [voidPreset, setVoidPreset] = useState<string>("");
   const [managerOpen, setManagerOpen] = useState(false);
   const [managerAction, setManagerAction] = useState<"void" | null>(null);
   const [tableCode, setTableCode] = useState<string>("");
@@ -107,8 +114,11 @@ function OrderPage() {
   };
 
   const requestVoid = (item: Item) => {
-    if (item.status !== "pending") { toast.error(t("void_only_pending")); return; }
-    setVoidItem(item); setVoidReason("");
+    setVoidItem(item); setVoidReason(""); setVoidPreset("");
+  };
+
+  const closeVoidDialog = () => {
+    setVoidItem(null); setVoidReason(""); setVoidPreset("");
   };
 
   const performVoid = async () => {
@@ -126,7 +136,7 @@ function OrderPage() {
       order_item_id: voidItem.id, reason: voidReason, voided_by: staff?.id,
       amount: voidItem.qty * voidItem.unit_price,
     });
-    setVoidItem(null); setVoidReason("");
+    setVoidItem(null); setVoidReason(""); setVoidPreset("");
     toast.success("Voided");
   };
 
@@ -215,6 +225,13 @@ function OrderPage() {
                   </Button>
                 </div>
               )}
+              {i.status === "sent" && (
+                <div className="flex justify-end mt-2">
+                  <Button size="sm" variant="ghost" className="text-destructive" onClick={() => requestVoid(i)}>
+                    <Trash2 className="h-3 w-3 mr-1" />VOID
+                  </Button>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -257,18 +274,42 @@ function OrderPage() {
       </Dialog>
 
       {/* Void dialog */}
-      <Dialog open={!!voidItem} onOpenChange={(o) => !o && setVoidItem(null)}>
+      <Dialog open={!!voidItem} onOpenChange={(o) => !o && closeVoidDialog()}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><AlertTriangle className="h-5 w-5 text-warning" />{t("void")}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-2">
+          <div className="space-y-3">
             <p className="text-sm text-muted-foreground">{voidItem ? pickName(voidItem, lang) : ""}</p>
             <Label>{t("void_reason")}</Label>
-            <Textarea value={voidReason} onChange={(e) => setVoidReason(e.target.value)} required />
+            <div className="flex flex-col gap-2">
+              {VOID_PRESETS.map((p) => (
+                <Button
+                  key={p.key}
+                  type="button"
+                  variant={voidPreset === p.key ? "default" : "outline"}
+                  size="sm"
+                  className="justify-start"
+                  onClick={() => {
+                    setVoidPreset(p.key);
+                    if (p.key !== "void_reason_other") setVoidReason(t(p.key));
+                    else setVoidReason("");
+                  }}
+                >
+                  {t(p.key)}
+                </Button>
+              ))}
+            </div>
+            {voidPreset === "void_reason_other" && (
+              <Textarea
+                value={voidReason}
+                onChange={(e) => setVoidReason(e.target.value)}
+                placeholder={lang === "th" ? "ระบุเหตุผล…" : "Enter reason…"}
+              />
+            )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setVoidItem(null)}>{t("cancel")}</Button>
+            <Button variant="outline" onClick={closeVoidDialog}>{t("cancel")}</Button>
             <Button variant="destructive" onClick={performVoid} disabled={!voidReason.trim()}>{t("confirm")}</Button>
           </DialogFooter>
         </DialogContent>
