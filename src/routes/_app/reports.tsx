@@ -22,8 +22,6 @@ function Reports() {
   const { staff } = useAuth();
   const { t } = useI18n();
   const [shift, setShift] = useState<Shift | null>(null);
-  const [openShiftDlg, setOpenShiftDlg] = useState(false);
-  const [opening, setOpening] = useState(0);
   const [report, setReport] = useState<ReportData | null>(null);
   const [zDlg, setZDlg] = useState(false);
   const [cashCount, setCashCount] = useState<Record<number, number>>({});
@@ -37,13 +35,6 @@ function Reports() {
 
   useEffect(() => { loadShift(); }, []);
 
-  const openShift = async () => {
-    if (!staff) return;
-    const today = new Date().toISOString().slice(0, 10);
-    await supabase.from("shifts").insert({ business_day: today, opened_by: staff.id, opening_float: opening });
-    setOpenShiftDlg(false); setOpening(0);
-    loadShift();
-  };
 
   const buildReport = async (s: Shift): Promise<ReportData> => {
     const { data: bills } = await supabase.from("bills").select("id,total,subtotal,discount_amount,member_discount_amount").eq("shift_id", s.id).eq("status", "paid");
@@ -111,7 +102,7 @@ function Reports() {
         <Card>
           <CardContent className="py-12 text-center space-y-4">
             <p className="text-muted-foreground">{t("no_open_shift")}</p>
-            <Button size="lg" onClick={() => setOpenShiftDlg(true)}>{t("open_shift")}</Button>
+            <p className="text-sm text-muted-foreground">Open a shift from the Shift button above</p>
           </CardContent>
         </Card>
       ) : (
@@ -127,18 +118,6 @@ function Reports() {
       )}
 
       {report && !zDlg && <ReportCard r={report} />}
-
-      <Dialog open={openShiftDlg} onOpenChange={setOpenShiftDlg}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>{t("open_shift")}</DialogTitle></DialogHeader>
-          <Label>{t("opening_float")}</Label>
-          <Input type="number" value={opening} onChange={(e) => setOpening(Number(e.target.value))} />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpenShiftDlg(false)}>{t("cancel")}</Button>
-            <Button onClick={openShift}>{t("confirm")}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={zDlg} onOpenChange={setZDlg}>
         <DialogContent className="max-w-xl">
