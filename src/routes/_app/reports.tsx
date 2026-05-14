@@ -22,8 +22,6 @@ function Reports() {
   const { staff } = useAuth();
   const { t } = useI18n();
   const [shift, setShift] = useState<Shift | null>(null);
-  const [openShiftDlg, setOpenShiftDlg] = useState(false);
-  const [opening, setOpening] = useState(0);
   const [report, setReport] = useState<ReportData | null>(null);
   const [zDlg, setZDlg] = useState(false);
   const [cashCount, setCashCount] = useState<Record<number, number>>({});
