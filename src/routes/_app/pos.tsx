@@ -102,7 +102,25 @@ function PosPage() {
 
   return (
     <div className="p-6">
-      <audio ref={audioRef} src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=" preload="auto" />
+      {banner && (
+        <div
+          key={banner.key}
+          className="alert-banner sticky top-14 z-20 mb-4 flex items-center gap-3 rounded-xl border border-destructive bg-destructive px-4 py-3 text-destructive-foreground shadow-lg"
+          role="alert"
+        >
+          <Bell className="h-5 w-5 animate-pulse" />
+          <div className="font-semibold">
+            {t("qr_alert")} — {t("table")} {banner.tableCode}
+          </div>
+          <button
+            onClick={() => setBanner(null)}
+            className="ml-auto rounded p-1 hover:bg-black/10"
+            aria-label="Dismiss"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">{t("nav_pos")}</h1>
         <div className="flex items-center gap-3 text-sm">
@@ -116,12 +134,17 @@ function PosPage() {
           <button
             key={tbl.id}
             onClick={() => onTableClick(tbl)}
-            className={`relative aspect-square rounded-2xl shadow-sm hover:shadow-md transition-all ${colorFor(tbl.status)} flex flex-col items-center justify-center gap-1`}
+            className={`relative aspect-square rounded-2xl shadow-sm hover:shadow-md transition-all ${tbl.has_qr_alert ? "alert-flash" : colorFor(tbl.status)} flex flex-col items-center justify-center gap-1`}
           >
             {tbl.has_qr_alert && (
-              <span className="absolute top-2 right-2 animate-pulse">
-                <Bell className="h-5 w-5" />
-              </span>
+              <>
+                <span className="absolute top-2 right-2">
+                  <Bell className="h-5 w-5 animate-pulse" />
+                </span>
+                <span className="absolute -top-2 -left-2 inline-flex items-center justify-center min-w-6 h-6 px-1.5 rounded-full bg-white text-destructive text-xs font-bold shadow">
+                  NEW
+                </span>
+              </>
             )}
             <div className="text-3xl font-bold">{tbl.code}</div>
             <div className="text-xs opacity-90">{tbl.capacity} seats</div>
