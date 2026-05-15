@@ -145,6 +145,7 @@ function Reports() {
     const cashTotal = Object.entries(cashCount).reduce((s, [d, c]) => s + Number(d) * (c || 0), 0);
     const expected = report.openingFloat + report.byMethod.cash;
     const overShort = cashTotal - expected;
+    printReport("Z", report, cashCount);
     await supabase.from("shifts").update({
       closed_at: new Date().toISOString(), closed_by: staff?.id, status: "closed",
       cash_count: cashCount, totals: { ...report, cashTotal, expected, overShort },
