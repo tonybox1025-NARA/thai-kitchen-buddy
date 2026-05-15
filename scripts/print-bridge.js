@@ -5,12 +5,16 @@
  * Subscribes to Supabase Realtime on print_jobs table.
  * When a job arrives, connects via TCP (default port 9100) and sends ESC/POS.
  *
- * Printer IPs are read from the settings table (printer_counter_ip / printer_kitchen_ip).
- * Fallback: PRINTER_COUNTER_IP / PRINTER_KITCHEN_IP env vars.
+ * Works with anon key (SUPABASE_PUBLISHABLE_KEY) — no service role needed.
+ * Requires these RLS policies on print_jobs (run once in Supabase SQL editor):
+ *
+ *   create policy "anon select print_jobs"
+ *     on public.print_jobs for select to anon using (true);
+ *   create policy "anon update print_jobs"
+ *     on public.print_jobs for update to anon using (true) with check (true);
  *
  * Usage:
- *   1. Add SUPABASE_SERVICE_ROLE_KEY to .env
- *   2. node scripts/print-bridge.js
+ *   node scripts/print-bridge.js
  *
  * Keep this running on any device on the same LAN as the printer (tablet, PC, RPi).
  */
@@ -25,15 +29,25 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 config({ path: resolve(__dirname, "../.env") });
 
 // ── Config ────────────────────────────────────────────────────────────────────
-const SUPABASE_URL      = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
-const SUPABASE_KEY      = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const PRINTER_PORT      = 9100;
-const COLS              = 48;   // characters per line on 80mm at standard font
-const RETRY_DELAY_MS    = 3000; // retry failed jobs every 3s on startup
+const SUPABASE_URL = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
+// Prefer service role if available; fall back to anon/publishable key
+const SUPABASE_KEY =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ??
+  process.env.SUPABASE_PUBLISHABLE_KEY ??
+  process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+const PRINTER_PORT = 9100;
+const COLS         = 48;   // characters per line on 80mm at standard font
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
-  console.error("❌  Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env");
+  console.error("❌  Missing SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY in .env");
   process.exit(1);
+}
+
+const usingAnonKey = !process.env.SUPABASE_SERVICE_ROLE_KEY;
+if (usingAnonKey) {
+  console.log("ℹ️   Using anon key — make sure anon RLS policies are applied on print_jobs.");
+  console.log("    (See comment at top of this file for the required SQL.)");
 }
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
