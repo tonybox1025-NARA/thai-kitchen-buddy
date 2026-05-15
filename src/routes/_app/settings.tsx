@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Trash2, Plus, Printer, QrCode } from "lucide-react";
+import { Trash2, Plus, Printer, QrCode, Wifi, WifiOff } from "lucide-react";
 import { toast } from "sonner";
 // qrcode is dynamically imported inside QrCodesTab to avoid Node deps at SSR module-eval
 
@@ -79,16 +79,67 @@ function GeneralTab() {
 function PrintersTab() {
   const { t } = useI18n();
   const [s, setS] = useState<Settings | null>(null);
-  useEffect(() => { supabase.from("settings").select("*").eq("id", 1).single().then(({ data }) => setS(data as Settings)); }, []);
+  const [recentJob, setRecentJob] = useState<{ status: string; printed_at: string | null; created_at: string } | null>(null);
+
+  useEffect(() => {
+    supabase.from("settings").select("*").eq("id", 1).single().then(({ data }) => setS(data as Settings));
+    supabase.from("print_jobs").select("status,printed_at,created_at").order("created_at", { ascending: false }).limit(1).maybeSingle()
+      .then(({ data }) => setRecentJob(data as typeof recentJob));
+  }, []);
+
   if (!s) return null;
-  const save = async () => { await supabase.from("settings").update({ printer_counter_ip: s.printer_counter_ip, printer_kitchen_ip: s.printer_kitchen_ip }).eq("id", 1); toast.success("Saved"); };
+  const save = async () => {
+    await supabase.from("settings").update({ printer_counter_ip: s.printer_counter_ip, printer_kitchen_ip: s.printer_kitchen_ip }).eq("id", 1);
+    toast.success("Saved");
+  };
+
+  const sendTestPrint = async () => {
+    await supabase.from("print_jobs").insert({
+      printer: "counter",
+      payload: { kind: "receipt", restaurant: "TEST PRINT", table: "T01", items: [{ name_en: "Test Item", qty: 1, unit_price: 99 }], total: 99, vatAmount: 0, vat_mode: "inclusive", payments: [{ method: "cash", amount: 99 }] },
+    });
+    toast.success("Test print job queued");
+  };
+
+  const bridgeAlive = recentJob && new Date(recentJob.printed_at ?? 0).getTime() > Date.now() - 60_000;
+
   return (
     <Card className="max-w-xl mt-4">
-      <CardContent className="space-y-4 pt-6">
-        <div><Label>{t("printer_counter_ip")}</Label><Input placeholder="192.168.1.50" value={s.printer_counter_ip ?? ""} onChange={(e) => setS({ ...s, printer_counter_ip: e.target.value })} /></div>
-        <div><Label>{t("printer_kitchen_ip")}</Label><Input placeholder="192.168.1.51" value={s.printer_kitchen_ip ?? ""} onChange={(e) => setS({ ...s, printer_kitchen_ip: e.target.value })} /></div>
-        <p className="text-xs text-muted-foreground">Print jobs are queued in the database for a local print bridge to consume and forward to the Sunmi printers (kitchen tickets in Burmese).</p>
-        <Button onClick={save}>{t("save")}</Button>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Printer className="h-4 w-4" /> Printer Settings — ESC/POS (port 9100)
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div>
+          <Label>{t("printer_counter_ip")} — Receipt (Q80A)</Label>
+          <Input placeholder="192.168.1.220" value={s.printer_counter_ip ?? ""} onChange={(e) => setS({ ...s, printer_counter_ip: e.target.value })} />
+        </div>
+        <div>
+          <Label>{t("printer_kitchen_ip")} — Kitchen ticket</Label>
+          <Input placeholder="192.168.1.221" value={s.printer_kitchen_ip ?? ""} onChange={(e) => setS({ ...s, printer_kitchen_ip: e.target.value })} />
+        </div>
+
+        <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-1">
+          <div className="flex items-center gap-2 font-medium">
+            {bridgeAlive
+              ? <><Wifi className="h-4 w-4 text-green-500" /><span className="text-green-600">Print bridge online</span></>
+              : <><WifiOff className="h-4 w-4 text-muted-foreground" /><span className="text-muted-foreground">Print bridge not detected</span></>}
+          </div>
+          <p className="text-muted-foreground">
+            Run the bridge on any device on the same LAN as the printer:
+          </p>
+          <code className="block bg-muted rounded px-2 py-1 text-xs select-all">
+            npm run print-bridge
+          </code>
+        </div>
+
+        <div className="flex gap-2">
+          <Button onClick={save}>{t("save")}</Button>
+          <Button variant="outline" onClick={sendTestPrint}>
+            <Printer className="h-4 w-4 mr-2" /> Test print
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

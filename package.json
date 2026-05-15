@@ -9,7 +9,9 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "print-bridge": "node scripts/print-bridge.js",
+    "seed-sql": "node scripts/generate-seed-sql.js"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "^1.25.5",
