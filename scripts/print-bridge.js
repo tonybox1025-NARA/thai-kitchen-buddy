@@ -251,6 +251,8 @@ async function loadPrinterIPs() {
 // ── Process a single print job ────────────────────────────────────────────────
 async function processJob(job) {
   const { id, printer, payload } = job;
+  // Reload IPs from settings on every job so changes saved in the UI take effect immediately
+  await loadPrinterIPs();
   const ip = printer === "kitchen" ? printerIPs.kitchen : printerIPs.counter;
 
   console.log(`📄 Job ${id.slice(0, 8)}…  printer=${printer}  ip=${ip}`);

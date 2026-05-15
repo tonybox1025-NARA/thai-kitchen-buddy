@@ -89,7 +89,8 @@ function PrintersTab() {
 
   if (!s) return null;
   const save = async () => {
-    await supabase.from("settings").update({ printer_counter_ip: s.printer_counter_ip, printer_kitchen_ip: s.printer_kitchen_ip }).eq("id", 1);
+    const { error } = await supabase.from("settings").update({ printer_counter_ip: s.printer_counter_ip, printer_kitchen_ip: s.printer_kitchen_ip }).eq("id", 1);
+    if (error) { toast.error(`Save failed: ${error.message}`); return; }
     toast.success("Saved");
   };
 
