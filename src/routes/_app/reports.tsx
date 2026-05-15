@@ -25,6 +25,7 @@ function Reports() {
   const [cashCount, setCashCount] = useState<Record<number, number>>({});
   const [managerOpen, setManagerOpen] = useState(false);
   const [pendingZ, setPendingZ] = useState(false);
+  const [xLoading, setXLoading] = useState(false);
 
   const loadShift = async () => {
     const { data } = await supabase.from("shifts").select("*").eq("status", "open").maybeSingle();
@@ -57,8 +58,15 @@ function Reports() {
 
   const runX = async () => {
     if (!shift) return;
-    const r = await buildReport(shift);
-    setReport(r);
+    setXLoading(true);
+    try {
+      const r = await buildReport(shift);
+      setReport(r);
+    } catch (e) {
+      toast.error("Failed to load report");
+    } finally {
+      setXLoading(false);
+    }
   };
 
   const startZ = async () => {
@@ -113,7 +121,7 @@ function Reports() {
             <CardTitle>{t("shift")} · {t("business_day")}: {shift.business_day}</CardTitle>
           </CardHeader>
           <CardContent className="flex gap-3">
-            <Button onClick={runX} variant="outline">{t("x_report")}</Button>
+            <Button onClick={runX} variant="outline" disabled={xLoading}>{xLoading ? "Loading…" : t("x_report")}</Button>
             <Button onClick={startZ} variant="destructive">{t("z_report")}</Button>
           </CardContent>
         </Card>
@@ -185,20 +193,17 @@ function DenomGrid({ cashCount, onChange }: { cashCount: Record<number, number>;
           <label key={d} className="block rounded-lg border bg-card p-2 cursor-text hover:border-primary transition-colors">
             <div className="text-xs text-muted-foreground font-medium">{d}฿</div>
             <input
-              type="number"
+              type="text"
               inputMode="numeric"
               pattern="[0-9]*"
-              min={0}
               value={count === 0 ? "" : count}
               placeholder="0"
+              onFocus={(e) => e.target.select()}
               onChange={(e) => {
-                const v = e.target.value === "" ? 0 : Math.max(0, parseInt(e.target.value) || 0);
+                const v = e.target.value === "" ? 0 : Math.max(0, parseInt(e.target.value.replace(/\D/g, "")) || 0);
                 onChange({ ...cashCount, [d]: v });
               }}
-              className="block w-full bg-transparent text-2xl font-bold outline-none mt-0.5
-                [appearance:textfield]
-                [&::-webkit-outer-spin-button]:appearance-none
-                [&::-webkit-inner-spin-button]:appearance-none"
+              className="block w-full bg-transparent text-2xl font-bold outline-none mt-0.5"
             />
             <div className="text-xs text-muted-foreground mt-0.5">
               {count > 0 ? `= ${thb(count * d)}` : "—"}
