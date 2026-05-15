@@ -22,7 +22,9 @@ function Reports() {
   const [shift, setShift] = useState<Shift | null>(null);
   const [report, setReport] = useState<ReportData | null>(null);
   const [zDlg, setZDlg] = useState(false);
+  const [xDlg, setXDlg] = useState(false);
   const [cashCount, setCashCount] = useState<Record<number, number>>({});
+  const [xCashCount, setXCashCount] = useState<Record<number, number>>({});
   const [managerOpen, setManagerOpen] = useState(false);
   const [pendingZ, setPendingZ] = useState(false);
   const [xLoading, setXLoading] = useState(false);
