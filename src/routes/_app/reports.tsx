@@ -9,7 +9,6 @@ import { thb } from "@/lib/format";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ManagerPinDialog } from "@/components/ManagerPinDialog";
-import { CountKeypad } from "@/components/CountKeypad";
 
 export const Route = createFileRoute("/_app/reports")({ component: Reports });
 
@@ -24,8 +23,6 @@ function Reports() {
   const [report, setReport] = useState<ReportData | null>(null);
   const [zDlg, setZDlg] = useState(false);
   const [cashCount, setCashCount] = useState<Record<number, number>>({});
-  const [activeDenom, setActiveDenom] = useState<number | null>(null);
-  const [denomCount, setDenomCount] = useState(0);
   const [managerOpen, setManagerOpen] = useState(false);
   const [pendingZ, setPendingZ] = useState(false);
 
@@ -35,7 +32,6 @@ function Reports() {
   };
 
   useEffect(() => { loadShift(); }, []);
-
 
   const buildReport = async (s: Shift): Promise<ReportData> => {
     const { data: bills } = await supabase.from("bills").select("id,total,subtotal,discount_amount,member_discount_amount").eq("shift_id", s.id).eq("status", "paid");
@@ -70,7 +66,6 @@ function Reports() {
     const r = await buildReport(shift);
     setReport(r);
     setCashCount({});
-    setActiveDenom(null);
     setZDlg(true);
   };
 
@@ -89,11 +84,16 @@ function Reports() {
       closed_at: new Date().toISOString(), closed_by: staff?.id, status: "closed",
       cash_count: cashCount, totals: { ...report, cashTotal, expected, overShort },
     }).eq("id", shift.id);
-    // Advance business day on settings
     const next = new Date(); next.setDate(next.getDate() + 1);
     await supabase.from("settings").update({ current_business_day: next.toISOString().slice(0, 10) }).eq("id", 1);
     setZDlg(false); setShift(null); setReport(null);
     toast.success("Z report saved · day closed");
+  };
+
+  const cashSummary = (r: ReportData) => {
+    const cashTotal = Object.entries(cashCount).reduce((s, [d, c]) => s + Number(d) * (c || 0), 0);
+    const expected = r.openingFloat + r.byMethod.cash;
+    return { cashTotal, expected, overShort: cashTotal - expected };
   };
 
   return (
@@ -119,35 +119,39 @@ function Reports() {
         </Card>
       )}
 
-      {report && !zDlg && <ReportCard r={report} />}
+      {/* X Report: sales summary + inline cash count */}
+      {report && !zDlg && (
+        <>
+          <ReportCard r={report} />
+          <Card>
+            <CardHeader><CardTitle className="text-base">{t("cash_count")}</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <DenomGrid cashCount={cashCount} onChange={setCashCount} />
+              {(() => {
+                const { cashTotal, expected, overShort } = cashSummary(report);
+                return (
+                  <div className="text-sm space-y-1 pt-2 border-t">
+                    <Row label="Counted" value={thb(cashTotal)} />
+                    <Row label="Expected" value={thb(expected)} />
+                    <Row label={t("over_short")} value={thb(overShort)} />
+                  </div>
+                );
+              })()}
+            </CardContent>
+          </Card>
+        </>
+      )}
 
+      {/* Z Report dialog: compact summary + inline cash count + close shift */}
       <Dialog open={zDlg} onOpenChange={setZDlg}>
         <DialogContent className="max-w-xl">
           <DialogHeader><DialogTitle>{t("z_report")} — {t("cash_count")}</DialogTitle></DialogHeader>
           {report && <ReportCard r={report} compact />}
-          <div className="grid grid-cols-4 gap-2">
-            {DENOMS.map((d) => {
-              const count = cashCount[d] ?? 0;
-              return (
-                <button
-                  key={d}
-                  type="button"
-                  onClick={() => { setDenomCount(cashCount[d] ?? 0); setActiveDenom(d); }}
-                  className="rounded-lg border bg-card p-2 text-left hover:border-primary hover:shadow-sm transition focus:outline-none focus:ring-2 focus:ring-primary"
-                >
-                  <div className="text-xs text-muted-foreground font-medium">{d}฿</div>
-                  <div className="text-xl font-bold mt-0.5">{count}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">{count > 0 ? thb(count * d) : "—"}</div>
-                </button>
-              );
-            })}
-          </div>
+          <DenomGrid cashCount={cashCount} onChange={setCashCount} />
           {report && (() => {
-            const cashTotal = Object.entries(cashCount).reduce((s, [d, c]) => s + Number(d) * (c || 0), 0);
-            const expected = report.openingFloat + report.byMethod.cash;
-            const overShort = cashTotal - expected;
+            const { cashTotal, expected, overShort } = cashSummary(report);
             return (
-              <div className="text-sm space-y-1 pt-2">
+              <div className="text-sm space-y-1 pt-2 border-t">
                 <Row label="Counted" value={thb(cashTotal)} />
                 <Row label="Expected" value={thb(expected)} />
                 <Row label={t("over_short")} value={thb(overShort)} />
@@ -157,26 +161,6 @@ function Reports() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setZDlg(false)}>{t("cancel")}</Button>
             <Button onClick={submitZ}>{t("close_shift")}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Denomination numpad popup — layered on top of the Z Report dialog */}
-      <Dialog open={activeDenom !== null} onOpenChange={(o) => !o && setActiveDenom(null)}>
-        <DialogContent className="max-w-xs">
-          <DialogHeader>
-            <DialogTitle className="text-center tabular-nums">
-              {activeDenom}฿ &times; <span className="text-primary">{denomCount}</span>
-              {denomCount > 0 && <span className="text-muted-foreground text-base font-normal ml-2">= {thb(denomCount * (activeDenom ?? 0))}</span>}
-            </DialogTitle>
-          </DialogHeader>
-          <CountKeypad value={denomCount} onChange={setDenomCount} />
-          <DialogFooter className="gap-2">
-            <Button variant="outline" className="flex-1" onClick={() => setActiveDenom(null)}>{t("cancel")}</Button>
-            <Button className="flex-1" onClick={() => {
-              if (activeDenom !== null) setCashCount((prev) => ({ ...prev, [activeDenom]: denomCount }));
-              setActiveDenom(null);
-            }}>{t("confirm")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -191,6 +175,40 @@ type ReportData = {
   voids: number; refunds: number; byMethod: Record<string, number>;
   openingFloat: number; bills: number;
 };
+
+function DenomGrid({ cashCount, onChange }: { cashCount: Record<number, number>; onChange: (c: Record<number, number>) => void }) {
+  return (
+    <div className="grid grid-cols-4 gap-2">
+      {DENOMS.map((d) => {
+        const count = cashCount[d] ?? 0;
+        return (
+          <label key={d} className="block rounded-lg border bg-card p-2 cursor-text hover:border-primary transition-colors">
+            <div className="text-xs text-muted-foreground font-medium">{d}฿</div>
+            <input
+              type="number"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              min={0}
+              value={count === 0 ? "" : count}
+              placeholder="0"
+              onChange={(e) => {
+                const v = e.target.value === "" ? 0 : Math.max(0, parseInt(e.target.value) || 0);
+                onChange({ ...cashCount, [d]: v });
+              }}
+              className="block w-full bg-transparent text-2xl font-bold outline-none mt-0.5
+                [appearance:textfield]
+                [&::-webkit-outer-spin-button]:appearance-none
+                [&::-webkit-inner-spin-button]:appearance-none"
+            />
+            <div className="text-xs text-muted-foreground mt-0.5">
+              {count > 0 ? `= ${thb(count * d)}` : "—"}
+            </div>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
 
 function ReportCard({ r, compact }: { r: ReportData; compact?: boolean }) {
   return (
