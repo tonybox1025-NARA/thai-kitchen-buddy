@@ -255,16 +255,17 @@ async function processJob(job) {
   await loadPrinterIPs();
   const ip = printer === "kitchen" ? printerIPs.kitchen : printerIPs.counter;
 
-  console.log(`📄 Job ${id.slice(0, 8)}…  printer=${printer}  ip=${ip}`);
+  console.log(`📄 Job ${id.slice(0, 8)}…  printer=${printer}  ip=${ip}  kind=${payload?.kind}`);
 
   let data;
   try {
-    if (payload?.kind === "receipt") {
-      data = buildReceipt(payload);
-    } else if (payload?.kind === "order_ticket" || printer === "kitchen") {
-      data = buildKitchen(payload);
+    const kind = typeof payload === "string" ? JSON.parse(payload).kind : payload?.kind;
+    if (kind === "receipt") {
+      data = buildReceipt(typeof payload === "string" ? JSON.parse(payload) : payload);
+    } else if (kind === "order_ticket" || printer === "kitchen") {
+      data = buildKitchen(typeof payload === "string" ? JSON.parse(payload) : payload);
     } else {
-      throw new Error(`Unknown job kind: ${payload?.kind}`);
+      throw new Error(`Unknown job kind: ${kind}`);
     }
   } catch (e) {
     console.error(`   ❌ Format error: ${e.message}`);
