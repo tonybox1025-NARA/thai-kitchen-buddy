@@ -78,6 +78,8 @@ const dict: Dict = {
   shift: { th: "กะ", en: "Shift" },
   open_shift: { th: "เปิดกะ", en: "Open shift" },
   close_shift: { th: "ปิดกะ", en: "Close shift" },
+  close_table: { th: "ปิดโต๊ะ", en: "Close table" },
+  move_table: { th: "ย้ายโต๊ะ", en: "Move table" },
   opening_float: { th: "เงินทอนต้นกะ", en: "Opening float" },
   x_report: { th: "รายงาน X (กลางกะ)", en: "X Report (mid-shift)" },
   z_report: { th: "รายงาน Z (ปิดวัน)", en: "Z Report (end of day)" },

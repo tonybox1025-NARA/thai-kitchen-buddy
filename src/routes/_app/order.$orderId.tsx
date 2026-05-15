@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Minus, Trash2, ChefHat, Receipt, ArrowLeft, AlertTriangle } from "lucide-react";
+import { Plus, Minus, Trash2, ChefHat, Receipt, ArrowLeft, AlertTriangle, ArrowLeftRight, X } from "lucide-react";
 import { ManagerPinDialog } from "@/components/ManagerPinDialog";
 import { toast } from "sonner";
 
@@ -45,8 +45,12 @@ function OrderPage() {
   const [voidReason, setVoidReason] = useState("");
   const [voidPreset, setVoidPreset] = useState<string>("");
   const [managerOpen, setManagerOpen] = useState(false);
-  const [managerAction, setManagerAction] = useState<"void" | null>(null);
+  const [managerAction, setManagerAction] = useState<"void" | "close_table" | "move_table" | null>(null);
   const [tableCode, setTableCode] = useState<string>("");
+  const [tableId, setTableId] = useState<string>("");
+  const [closeTableOpen, setCloseTableOpen] = useState(false);
+  const [moveTableOpen, setMoveTableOpen] = useState(false);
+  const [availableTables, setAvailableTables] = useState<{ id: string; code: string }[]>([]);
 
   const loadAll = async () => {
     const [{ data: m }, { data: c }, { data: it }, { data: ord }] = await Promise.all([
@@ -59,6 +63,7 @@ function OrderPage() {
     if (c) setCats(c as Category[]);
     if (it) setItems(it as Item[]);
     if (ord?.table_id) {
+      setTableId(ord.table_id);
       const { data: tbl } = await supabase.from("restaurant_tables").select("code").eq("id", ord.table_id).single();
       if (tbl) setTableCode(tbl.code);
     }
@@ -161,6 +166,50 @@ function OrderPage() {
     if (bill) nav({ to: "/payment/$billId", params: { billId: bill.id } });
   };
 
+  const loadAvailableTables = async () => {
+    const { data } = await supabase.from("restaurant_tables").select("id,code").eq("status", "available").order("code");
+    setAvailableTables(data ?? []);
+  };
+
+  const openCloseTable = () => {
+    if (staff?.role === "staff") { setManagerAction("close_table"); setManagerOpen(true); return; }
+    setCloseTableOpen(true);
+  };
+
+  const openMoveTable = async () => {
+    if (staff?.role === "staff") { setManagerAction("move_table"); setManagerOpen(true); return; }
+    await loadAvailableTables();
+    setMoveTableOpen(true);
+  };
+
+  const doCloseTable = async () => {
+    if (!tableId) return;
+    const liveIds = items.filter((i) => i.status !== "voided").map((i) => i.id);
+    if (liveIds.length > 0) {
+      await supabase.from("order_items").update({
+        status: "voided", void_reason: "Table closed", voided_by: staff?.id, voided_at: new Date().toISOString(),
+      }).in("id", liveIds);
+    }
+    await supabase.from("orders").update({ status: "cancelled", closed_at: new Date().toISOString() }).eq("id", orderId);
+    await supabase.from("restaurant_tables").update({ status: "available", guests: 0, has_qr_alert: false }).eq("id", tableId);
+    setCloseTableOpen(false);
+    toast.success(lang === "th" ? "ปิดโต๊ะแล้ว" : "Table closed");
+    nav({ to: "/pos" });
+  };
+
+  const doMoveTable = async (targetId: string) => {
+    if (!tableId) return;
+    const { data: ord } = await supabase.from("orders").select("guests").eq("id", orderId).single();
+    await supabase.from("orders").update({ table_id: targetId }).eq("id", orderId);
+    await supabase.from("restaurant_tables").update({ status: "available", guests: 0, has_qr_alert: false }).eq("id", tableId);
+    await supabase.from("restaurant_tables").update({ status: "occupied", guests: ord?.guests ?? 1 }).eq("id", targetId);
+    const { data: newTbl } = await supabase.from("restaurant_tables").select("code").eq("id", targetId).single();
+    setTableId(targetId);
+    if (newTbl) setTableCode(newTbl.code);
+    setMoveTableOpen(false);
+    toast.success(lang === "th" ? `ย้ายไปโต๊ะ ${newTbl?.code ?? ""}` : `Moved to table ${newTbl?.code ?? ""}`);
+  };
+
   const liveItems = items.filter((i) => i.status !== "voided");
   const subtotal = liveItems.reduce((s, i) => s + i.qty * Number(i.unit_price), 0);
 
@@ -168,9 +217,17 @@ function OrderPage() {
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_420px] h-[calc(100vh-3.5rem)]">
       {/* Menu */}
       <div className="overflow-auto p-4">
-        <div className="flex items-center gap-3 mb-4">
+        <div className="flex items-center gap-3 mb-4 flex-wrap">
           <Link to="/pos"><Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4 mr-1" />{t("back")}</Button></Link>
           <h1 className="text-xl font-bold">{t("table")} {tableCode}</h1>
+          <div className="ml-auto flex gap-2">
+            <Button size="sm" variant="outline" onClick={openMoveTable}>
+              <ArrowLeftRight className="h-4 w-4 mr-1" />{t("move_table")}
+            </Button>
+            <Button size="sm" variant="destructive" onClick={openCloseTable}>
+              <X className="h-4 w-4 mr-1" />{t("close_table")}
+            </Button>
+          </div>
         </div>
         <div className="flex gap-2 mb-4 flex-wrap">
           <Button variant={activeCat === "all" ? "default" : "outline"} size="sm" onClick={() => setActiveCat("all")}>All</Button>
@@ -315,7 +372,59 @@ function OrderPage() {
         </DialogContent>
       </Dialog>
 
-      <ManagerPinDialog open={managerOpen} onOpenChange={setManagerOpen} onApproved={() => { if (managerAction === "void") doVoid(); setManagerAction(null); }} />
+      {/* Close table confirmation dialog */}
+      <Dialog open={closeTableOpen} onOpenChange={setCloseTableOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />{t("close_table")}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {lang === "th"
+              ? `ยืนยันปิดโต๊ะ ${tableCode}? รายการทั้งหมดจะถูกยกเลิกและโต๊ะจะว่าง`
+              : `Close table ${tableCode}? All items will be voided and the table freed.`}
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCloseTableOpen(false)}>{t("cancel")}</Button>
+            <Button variant="destructive" onClick={doCloseTable}>{t("confirm")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Move table dialog */}
+      <Dialog open={moveTableOpen} onOpenChange={setMoveTableOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("move_table")} — {lang === "th" ? "เลือกโต๊ะที่ว่าง" : "Select an available table"}</DialogTitle>
+          </DialogHeader>
+          {availableTables.length === 0 ? (
+            <p className="text-center text-muted-foreground py-6">{lang === "th" ? "ไม่มีโต๊ะว่าง" : "No available tables"}</p>
+          ) : (
+            <div className="grid grid-cols-4 gap-2 py-2">
+              {availableTables.map((tbl) => (
+                <Button key={tbl.id} variant="outline" className="h-14 text-base font-bold" onClick={() => doMoveTable(tbl.id)}>
+                  {tbl.code}
+                </Button>
+              ))}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMoveTableOpen(false)}>{t("cancel")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ManagerPinDialog
+        open={managerOpen}
+        onOpenChange={setManagerOpen}
+        onApproved={async () => {
+          if (managerAction === "void") { doVoid(); }
+          else if (managerAction === "close_table") { setCloseTableOpen(true); }
+          else if (managerAction === "move_table") { await loadAvailableTables(); setMoveTableOpen(true); }
+          setManagerAction(null);
+        }}
+      />
     </div>
   );
 }
