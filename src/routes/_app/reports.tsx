@@ -144,8 +144,8 @@ function Reports() {
     toast.success("Z report saved · day closed");
   };
 
-  const cashSummary = (r: ReportData) => {
-    const cashTotal = Object.entries(cashCount).reduce((s, [d, c]) => s + Number(d) * (c || 0), 0);
+  const cashSummary = (r: ReportData, counts: Record<number, number>) => {
+    const cashTotal = Object.entries(counts).reduce((s, [d, c]) => s + Number(d) * (c || 0), 0);
     const expected = r.openingFloat + r.byMethod.cash;
     return { cashTotal, expected, overShort: cashTotal - expected };
   };
