@@ -173,37 +173,37 @@ function Reports() {
         </Card>
       )}
 
-      {/* X Report: sales summary + inline cash count */}
-      {report && !zDlg && (
-        <>
-          <ReportCard r={report} />
-          <Card>
-            <CardHeader><CardTitle className="text-base">{t("cash_count")}</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              <DenomGrid cashCount={cashCount} onChange={setCashCount} />
-              {(() => {
-                const { cashTotal, expected, overShort } = cashSummary(report);
-                return (
-                  <div className="text-sm space-y-1 pt-2 border-t">
-                    <Row label="Counted" value={thb(cashTotal)} />
-                    <Row label="Expected" value={thb(expected)} />
-                    <Row label={t("over_short")} value={thb(overShort)} />
-                  </div>
-                );
-              })()}
-            </CardContent>
-          </Card>
-        </>
-      )}
+      {/* X Report dialog: summary + cash count, does NOT close shift */}
+      <Dialog open={xDlg} onOpenChange={setXDlg}>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>{t("x_report")} — {shift?.business_day}</DialogTitle></DialogHeader>
+          {report && <ReportCard r={report} compact />}
+          <DenomGrid cashCount={xCashCount} onChange={setXCashCount} />
+          {report && (() => {
+            const { cashTotal, expected, overShort } = cashSummary(report, xCashCount);
+            return (
+              <div className="text-sm space-y-1 pt-2 border-t">
+                <Row label="Counted" value={thb(cashTotal)} />
+                <Row label="Expected" value={thb(expected)} />
+                <Row label={t("over_short")} value={thb(overShort)} />
+              </div>
+            );
+          })()}
+          <DialogFooter>
+            <Button variant="outline" onClick={printX}>Print X Report</Button>
+            <Button onClick={() => setXDlg(false)}>{t("cancel")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Z Report dialog: compact summary + inline cash count + close shift */}
       <Dialog open={zDlg} onOpenChange={setZDlg}>
-        <DialogContent className="max-w-xl">
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{t("z_report")} — {t("cash_count")}</DialogTitle></DialogHeader>
           {report && <ReportCard r={report} compact />}
           <DenomGrid cashCount={cashCount} onChange={setCashCount} />
           {report && (() => {
-            const { cashTotal, expected, overShort } = cashSummary(report);
+            const { cashTotal, expected, overShort } = cashSummary(report, cashCount);
             return (
               <div className="text-sm space-y-1 pt-2 border-t">
                 <Row label="Counted" value={thb(cashTotal)} />
