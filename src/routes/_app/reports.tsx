@@ -5,12 +5,11 @@ import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { thb } from "@/lib/format";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ManagerPinDialog } from "@/components/ManagerPinDialog";
+import { CountKeypad } from "@/components/CountKeypad";
 
 export const Route = createFileRoute("/_app/reports")({ component: Reports });
 
@@ -25,6 +24,8 @@ function Reports() {
   const [report, setReport] = useState<ReportData | null>(null);
   const [zDlg, setZDlg] = useState(false);
   const [cashCount, setCashCount] = useState<Record<number, number>>({});
+  const [activeDenom, setActiveDenom] = useState<number | null>(null);
+  const [denomCount, setDenomCount] = useState(0);
   const [managerOpen, setManagerOpen] = useState(false);
   const [pendingZ, setPendingZ] = useState(false);
 
@@ -69,6 +70,7 @@ function Reports() {
     const r = await buildReport(shift);
     setReport(r);
     setCashCount({});
+    setActiveDenom(null);
     setZDlg(true);
   };
 
@@ -124,12 +126,21 @@ function Reports() {
           <DialogHeader><DialogTitle>{t("z_report")} — {t("cash_count")}</DialogTitle></DialogHeader>
           {report && <ReportCard r={report} compact />}
           <div className="grid grid-cols-4 gap-2">
-            {DENOMS.map((d) => (
-              <div key={d}>
-                <Label className="text-xs">{d}฿</Label>
-                <Input type="number" min={0} value={cashCount[d] ?? 0} onChange={(e) => setCashCount({ ...cashCount, [d]: Number(e.target.value) })} />
-              </div>
-            ))}
+            {DENOMS.map((d) => {
+              const count = cashCount[d] ?? 0;
+              return (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => { setDenomCount(cashCount[d] ?? 0); setActiveDenom(d); }}
+                  className="rounded-lg border bg-card p-2 text-left hover:border-primary hover:shadow-sm transition focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <div className="text-xs text-muted-foreground font-medium">{d}฿</div>
+                  <div className="text-xl font-bold mt-0.5">{count}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{count > 0 ? thb(count * d) : "—"}</div>
+                </button>
+              );
+            })}
           </div>
           {report && (() => {
             const cashTotal = Object.entries(cashCount).reduce((s, [d, c]) => s + Number(d) * (c || 0), 0);
@@ -146,6 +157,26 @@ function Reports() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setZDlg(false)}>{t("cancel")}</Button>
             <Button onClick={submitZ}>{t("close_shift")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Denomination numpad popup — layered on top of the Z Report dialog */}
+      <Dialog open={activeDenom !== null} onOpenChange={(o) => !o && setActiveDenom(null)}>
+        <DialogContent className="max-w-xs">
+          <DialogHeader>
+            <DialogTitle className="text-center tabular-nums">
+              {activeDenom}฿ &times; <span className="text-primary">{denomCount}</span>
+              {denomCount > 0 && <span className="text-muted-foreground text-base font-normal ml-2">= {thb(denomCount * (activeDenom ?? 0))}</span>}
+            </DialogTitle>
+          </DialogHeader>
+          <CountKeypad value={denomCount} onChange={setDenomCount} />
+          <DialogFooter className="gap-2">
+            <Button variant="outline" className="flex-1" onClick={() => setActiveDenom(null)}>{t("cancel")}</Button>
+            <Button className="flex-1" onClick={() => {
+              if (activeDenom !== null) setCashCount((prev) => ({ ...prev, [activeDenom]: denomCount }));
+              setActiveDenom(null);
+            }}>{t("confirm")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
