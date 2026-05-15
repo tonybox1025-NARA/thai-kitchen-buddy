@@ -73,47 +73,58 @@ function Reports() {
     }
   };
 
-  const printX = () => {
-    if (!shift || !report) return;
-    const { cashTotal, expected, overShort } = (() => {
-      const t = Object.entries(xCashCount).reduce((s, [d, c]) => s + Number(d) * (c || 0), 0);
-      const e = report.openingFloat + report.byMethod.cash;
-      return { cashTotal: t, expected: e, overShort: t - e };
-    })();
-    const row = (l: string, v: string) => `<tr><td>${l}</td><td style="text-align:right">${v}</td></tr>`;
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>X Report</title>
-      <style>body{font-family:ui-sans-serif,system-ui;padding:24px;max-width:480px;margin:auto}h1{font-size:18px;margin:0 0 4px}h2{font-size:14px;margin:16px 0 4px;border-bottom:1px solid #ccc;padding-bottom:2px}table{width:100%;border-collapse:collapse;font-size:13px}td{padding:2px 0}.b{font-weight:700}</style>
+  const [restaurantName, setRestaurantName] = useState<string>("");
+  useEffect(() => {
+    supabase.from("settings").select("restaurant_name").eq("id", 1).maybeSingle().then(({ data }) => {
+      setRestaurantName((data as any)?.restaurant_name ?? "");
+    });
+  }, []);
+
+  const printReport = (kind: "X" | "Z", r: ReportData, counts: Record<number, number>) => {
+    if (!shift) return;
+    const { cashTotal, expected, overShort } = cashSummary(r, counts);
+    const row = (l: string, v: string, b = false) => `<tr${b ? ' style="font-weight:700"' : ""}><td>${l}</td><td style="text-align:right">${v}</td></tr>`;
+    const denomRows = DENOMS.filter((d) => (counts[d] ?? 0) > 0)
+      .map((d) => row(`${d}฿ × ${counts[d]}`, thb(d * counts[d])))
+      .join("") || `<tr><td colspan="2" style="color:#888">No denominations entered</td></tr>`;
+    const now = new Date();
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${kind} Report</title>
+      <style>body{font-family:ui-sans-serif,system-ui;padding:24px;max-width:480px;margin:auto}h1{font-size:20px;margin:0 0 4px;text-align:center}h2{font-size:14px;margin:16px 0 4px;border-bottom:1px solid #ccc;padding-bottom:2px}table{width:100%;border-collapse:collapse;font-size:13px}td{padding:2px 0}.meta{text-align:center;font-size:12px;color:#555;margin-bottom:8px}</style>
       </head><body>
-      <h1>X Report</h1>
-      <div>Business day: ${shift.business_day}</div>
-      <div>Printed: ${new Date().toLocaleString()}</div>
+      <h1>${restaurantName || "Restaurant"}</h1>
+      <div class="meta">${kind} Report · Business day ${shift.business_day}<br/>Printed ${now.toLocaleString()}</div>
       <h2>Sales</h2><table>
-      ${row("Gross sales", thb(report.gross))}
-      ${row("Discount", `- ${thb(report.discount)}`)}
-      ${row("Member discount", `- ${thb(report.member)}`)}
-      <tr class="b">${row("Net sales", thb(report.net)).replace(/<\/?tr>/g, "")}</tr>
+      ${row("Gross sales", thb(r.gross))}
+      ${row("Discount", `- ${thb(r.discount)}`)}
+      ${row("Member discount", `- ${thb(r.member)}`)}
+      ${row("Net sales", thb(r.net), true)}
       </table>
       <h2>Payments</h2><table>
-      ${row("Cash", thb(report.byMethod.cash))}
-      ${row("QR Transfer", thb(report.byMethod.qr))}
-      ${row("Credit card", thb(report.byMethod.card))}
+      ${row("Cash", thb(r.byMethod.cash))}
+      ${row("QR Transfer", thb(r.byMethod.qr))}
+      ${row("Credit card", thb(r.byMethod.card))}
       </table>
       <h2>Other</h2><table>
-      ${row("Voids total", thb(report.voids))}
-      ${row("Refunds total", thb(report.refunds))}
-      ${row("Bills", String(report.bills))}
+      ${row("Voids total", thb(r.voids))}
+      ${row("Refunds total", thb(r.refunds))}
+      ${row("Bills", String(r.bills))}
+      </table>
+      <h2>Cash count</h2><table>
+      ${denomRows}
       </table>
       <h2>Cash drawer</h2><table>
-      ${row("Opening float", thb(report.openingFloat))}
+      ${row("Opening float", thb(r.openingFloat))}
       ${row("Counted", thb(cashTotal))}
       ${row("Expected", thb(expected))}
-      ${row("Over / Short", thb(overShort))}
+      ${row("Over / Short", thb(overShort), true)}
       </table>
-      <script>window.onload=()=>window.print()</script>
+      <script>window.onload=()=>setTimeout(()=>window.print(),100)</script>
       </body></html>`;
     const w = window.open("", "_blank");
     if (w) { w.document.write(html); w.document.close(); }
   };
+
+  const printX = () => { if (report) printReport("X", report, xCashCount); };
 
   const startZ = async () => {
     if (!shift) return;
