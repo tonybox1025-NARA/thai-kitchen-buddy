@@ -108,13 +108,15 @@ function OrderPage() {
     const pending = items.filter((i) => i.status === "pending");
     if (pending.length === 0) { toast.info(t("empty_order")); return; }
     const ids = pending.map((p) => p.id);
-    await supabase.from("order_items").update({ status: "sent", sent_at: new Date().toISOString() }).in("id", ids);
-    // Queue print job (Burmese)
-    const lines = pending.map((p) => ({ name_my: p.name_my, qty: p.qty, notes: p.notes }));
-    await supabase.from("print_jobs").insert({
-      printer: "kitchen",
-      payload: { table: tableCode, lines, sent_at: new Date().toISOString(), language: "my" },
-    });
+    const sentAt = new Date().toISOString();
+    await supabase.from("order_items").update({ status: "sent", sent_at: sentAt }).in("id", ids);
+    // Queue print jobs — kitchen (Burmese) + counter (order copy)
+    const lines = pending.map((p) => ({ name_my: p.name_my, name_en: p.name_en, name_th: p.name_th, qty: p.qty, notes: p.notes }));
+    const ticketPayload = { kind: "order_ticket", table: tableCode, lines, sent_at: sentAt };
+    await supabase.from("print_jobs").insert([
+      { printer: "kitchen", payload: { ...ticketPayload, language: "my" } },
+      { printer: "counter", payload: { ...ticketPayload, language: "th" } },
+    ]);
     toast.success(t("send_to_kitchen") + " ✓");
   };
 

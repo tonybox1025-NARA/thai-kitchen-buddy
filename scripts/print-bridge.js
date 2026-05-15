@@ -237,7 +237,12 @@ let printerIPs = {
 };
 
 async function loadPrinterIPs() {
-  const { data } = await supabase.from("settings").select("printer_counter_ip,printer_kitchen_ip").eq("id", 1).maybeSingle();
+  const { data, error } = await supabase.from("settings").select("printer_counter_ip,printer_kitchen_ip").eq("id", 1).maybeSingle();
+  if (error) {
+    console.warn(`⚠️  Could not read settings (${error.message}) — using env/default IPs.`);
+    console.warn("   If using anon key, run this SQL once in Supabase dashboard:");
+    console.warn("   create policy \"anon select settings\" on public.settings for select to anon using (true);");
+  }
   if (data?.printer_counter_ip) printerIPs.counter = data.printer_counter_ip;
   if (data?.printer_kitchen_ip) printerIPs.kitchen = data.printer_kitchen_ip;
   console.log(`🖨️  Counter: ${printerIPs.counter || "(not set)"}  |  Kitchen: ${printerIPs.kitchen || "(not set)"}`);
@@ -252,9 +257,9 @@ async function processJob(job) {
 
   let data;
   try {
-    if (printer === "counter" && payload?.kind === "receipt") {
+    if (payload?.kind === "receipt") {
       data = buildReceipt(payload);
-    } else if (printer === "kitchen") {
+    } else if (payload?.kind === "order_ticket" || printer === "kitchen") {
       data = buildKitchen(payload);
     } else {
       throw new Error(`Unknown job kind: ${payload?.kind}`);
@@ -277,12 +282,20 @@ async function processJob(job) {
 
 // ── Drain any pending jobs from before bridge started ─────────────────────────
 async function drainPending() {
-  const { data: jobs } = await supabase
+  const { data: jobs, error } = await supabase
     .from("print_jobs")
     .select("*")
     .eq("status", "pending")
     .order("created_at");
-  if (!jobs?.length) return;
+  if (error) {
+    console.error(`❌  Cannot read print_jobs: ${error.message}`);
+    console.error("   Run these SQL policies in Supabase dashboard:");
+    console.error("   create policy \"anon select print_jobs\" on public.print_jobs for select to anon using (true);");
+    console.error("   create policy \"anon update print_jobs\" on public.print_jobs for update to anon using (true) with check (true);");
+    console.error("   create policy \"anon select settings\"  on public.settings   for select to anon using (true);");
+    return;
+  }
+  if (!jobs?.length) { console.log("✓  No pending jobs in queue."); return; }
   console.log(`⏳  ${jobs.length} pending job(s) in queue — processing…`);
   for (const job of jobs) await processJob(job);
 }
