@@ -22,7 +22,9 @@ function Reports() {
   const [shift, setShift] = useState<Shift | null>(null);
   const [report, setReport] = useState<ReportData | null>(null);
   const [zDlg, setZDlg] = useState(false);
+  const [xDlg, setXDlg] = useState(false);
   const [cashCount, setCashCount] = useState<Record<number, number>>({});
+  const [xCashCount, setXCashCount] = useState<Record<number, number>>({});
   const [managerOpen, setManagerOpen] = useState(false);
   const [pendingZ, setPendingZ] = useState(false);
   const [xLoading, setXLoading] = useState(false);
@@ -62,11 +64,55 @@ function Reports() {
     try {
       const r = await buildReport(shift);
       setReport(r);
+      setXCashCount({});
+      setXDlg(true);
     } catch (e) {
       toast.error("Failed to load report");
     } finally {
       setXLoading(false);
     }
+  };
+
+  const printX = () => {
+    if (!shift || !report) return;
+    const { cashTotal, expected, overShort } = (() => {
+      const t = Object.entries(xCashCount).reduce((s, [d, c]) => s + Number(d) * (c || 0), 0);
+      const e = report.openingFloat + report.byMethod.cash;
+      return { cashTotal: t, expected: e, overShort: t - e };
+    })();
+    const row = (l: string, v: string) => `<tr><td>${l}</td><td style="text-align:right">${v}</td></tr>`;
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>X Report</title>
+      <style>body{font-family:ui-sans-serif,system-ui;padding:24px;max-width:480px;margin:auto}h1{font-size:18px;margin:0 0 4px}h2{font-size:14px;margin:16px 0 4px;border-bottom:1px solid #ccc;padding-bottom:2px}table{width:100%;border-collapse:collapse;font-size:13px}td{padding:2px 0}.b{font-weight:700}</style>
+      </head><body>
+      <h1>X Report</h1>
+      <div>Business day: ${shift.business_day}</div>
+      <div>Printed: ${new Date().toLocaleString()}</div>
+      <h2>Sales</h2><table>
+      ${row("Gross sales", thb(report.gross))}
+      ${row("Discount", `- ${thb(report.discount)}`)}
+      ${row("Member discount", `- ${thb(report.member)}`)}
+      <tr class="b">${row("Net sales", thb(report.net)).replace(/<\/?tr>/g, "")}</tr>
+      </table>
+      <h2>Payments</h2><table>
+      ${row("Cash", thb(report.byMethod.cash))}
+      ${row("QR Transfer", thb(report.byMethod.qr))}
+      ${row("Credit card", thb(report.byMethod.card))}
+      </table>
+      <h2>Other</h2><table>
+      ${row("Voids total", thb(report.voids))}
+      ${row("Refunds total", thb(report.refunds))}
+      ${row("Bills", String(report.bills))}
+      </table>
+      <h2>Cash drawer</h2><table>
+      ${row("Opening float", thb(report.openingFloat))}
+      ${row("Counted", thb(cashTotal))}
+      ${row("Expected", thb(expected))}
+      ${row("Over / Short", thb(overShort))}
+      </table>
+      <script>window.onload=()=>window.print()</script>
+      </body></html>`;
+    const w = window.open("", "_blank");
+    if (w) { w.document.write(html); w.document.close(); }
   };
 
   const startZ = async () => {
@@ -98,8 +144,8 @@ function Reports() {
     toast.success("Z report saved · day closed");
   };
 
-  const cashSummary = (r: ReportData) => {
-    const cashTotal = Object.entries(cashCount).reduce((s, [d, c]) => s + Number(d) * (c || 0), 0);
+  const cashSummary = (r: ReportData, counts: Record<number, number>) => {
+    const cashTotal = Object.entries(counts).reduce((s, [d, c]) => s + Number(d) * (c || 0), 0);
     const expected = r.openingFloat + r.byMethod.cash;
     return { cashTotal, expected, overShort: cashTotal - expected };
   };
@@ -127,37 +173,37 @@ function Reports() {
         </Card>
       )}
 
-      {/* X Report: sales summary + inline cash count */}
-      {report && !zDlg && (
-        <>
-          <ReportCard r={report} />
-          <Card>
-            <CardHeader><CardTitle className="text-base">{t("cash_count")}</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              <DenomGrid cashCount={cashCount} onChange={setCashCount} />
-              {(() => {
-                const { cashTotal, expected, overShort } = cashSummary(report);
-                return (
-                  <div className="text-sm space-y-1 pt-2 border-t">
-                    <Row label="Counted" value={thb(cashTotal)} />
-                    <Row label="Expected" value={thb(expected)} />
-                    <Row label={t("over_short")} value={thb(overShort)} />
-                  </div>
-                );
-              })()}
-            </CardContent>
-          </Card>
-        </>
-      )}
+      {/* X Report dialog: summary + cash count, does NOT close shift */}
+      <Dialog open={xDlg} onOpenChange={setXDlg}>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>{t("x_report")} — {shift?.business_day}</DialogTitle></DialogHeader>
+          {report && <ReportCard r={report} compact />}
+          <DenomGrid cashCount={xCashCount} onChange={setXCashCount} />
+          {report && (() => {
+            const { cashTotal, expected, overShort } = cashSummary(report, xCashCount);
+            return (
+              <div className="text-sm space-y-1 pt-2 border-t">
+                <Row label="Counted" value={thb(cashTotal)} />
+                <Row label="Expected" value={thb(expected)} />
+                <Row label={t("over_short")} value={thb(overShort)} />
+              </div>
+            );
+          })()}
+          <DialogFooter>
+            <Button variant="outline" onClick={printX}>Print X Report</Button>
+            <Button onClick={() => setXDlg(false)}>{t("cancel")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Z Report dialog: compact summary + inline cash count + close shift */}
       <Dialog open={zDlg} onOpenChange={setZDlg}>
-        <DialogContent className="max-w-xl">
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{t("z_report")} — {t("cash_count")}</DialogTitle></DialogHeader>
           {report && <ReportCard r={report} compact />}
           <DenomGrid cashCount={cashCount} onChange={setCashCount} />
           {report && (() => {
-            const { cashTotal, expected, overShort } = cashSummary(report);
+            const { cashTotal, expected, overShort } = cashSummary(report, cashCount);
             return (
               <div className="text-sm space-y-1 pt-2 border-t">
                 <Row label="Counted" value={thb(cashTotal)} />
@@ -193,17 +239,18 @@ function DenomGrid({ cashCount, onChange }: { cashCount: Record<number, number>;
           <label key={d} className="block rounded-lg border bg-card p-2 cursor-text hover:border-primary transition-colors">
             <div className="text-xs text-muted-foreground font-medium">{d}฿</div>
             <input
-              type="text"
+              type="number"
+              min={0}
+              step={1}
               inputMode="numeric"
-              pattern="[0-9]*"
               value={count === 0 ? "" : count}
               placeholder="0"
               onFocus={(e) => e.target.select()}
               onChange={(e) => {
-                const v = e.target.value === "" ? 0 : Math.max(0, parseInt(e.target.value.replace(/\D/g, "")) || 0);
+                const v = e.target.value === "" ? 0 : Math.max(0, parseInt(e.target.value) || 0);
                 onChange({ ...cashCount, [d]: v });
               }}
-              className="block w-full bg-transparent text-2xl font-bold outline-none mt-0.5"
+              className="block w-full bg-transparent text-2xl font-bold outline-none mt-0.5 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             />
             <div className="text-xs text-muted-foreground mt-0.5">
               {count > 0 ? `= ${thb(count * d)}` : "—"}
