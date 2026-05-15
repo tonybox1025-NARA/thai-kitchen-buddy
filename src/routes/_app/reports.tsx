@@ -239,17 +239,18 @@ function DenomGrid({ cashCount, onChange }: { cashCount: Record<number, number>;
           <label key={d} className="block rounded-lg border bg-card p-2 cursor-text hover:border-primary transition-colors">
             <div className="text-xs text-muted-foreground font-medium">{d}฿</div>
             <input
-              type="text"
+              type="number"
+              min={0}
+              step={1}
               inputMode="numeric"
-              pattern="[0-9]*"
               value={count === 0 ? "" : count}
               placeholder="0"
               onFocus={(e) => e.target.select()}
               onChange={(e) => {
-                const v = e.target.value === "" ? 0 : Math.max(0, parseInt(e.target.value.replace(/\D/g, "")) || 0);
+                const v = e.target.value === "" ? 0 : Math.max(0, parseInt(e.target.value) || 0);
                 onChange({ ...cashCount, [d]: v });
               }}
-              className="block w-full bg-transparent text-2xl font-bold outline-none mt-0.5"
+              className="block w-full bg-transparent text-2xl font-bold outline-none mt-0.5 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             />
             <div className="text-xs text-muted-foreground mt-0.5">
               {count > 0 ? `= ${thb(count * d)}` : "—"}
