@@ -129,28 +129,28 @@ function PosPage() {
           <Legend color="bg-table-bill" label={t("bill_requested")} />
         </div>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-2">
         {tables.map((tbl) => (
           <button
             key={tbl.id}
             onClick={() => onTableClick(tbl)}
-            className={`relative aspect-square rounded-2xl shadow-sm hover:shadow-md transition-all ${tbl.has_qr_alert ? "alert-flash" : colorFor(tbl.status)} flex flex-col items-center justify-center gap-1`}
+            className={`relative aspect-square rounded-xl shadow-sm hover:shadow-md transition-all ${tbl.has_qr_alert ? "alert-flash" : colorFor(tbl.status)} flex flex-col items-center justify-center gap-0.5 p-1`}
           >
             {tbl.has_qr_alert && (
               <>
-                <span className="absolute top-2 right-2">
-                  <Bell className="h-5 w-5 animate-pulse" />
+                <span className="absolute top-1 right-1">
+                  <Bell className="h-3.5 w-3.5 animate-pulse" />
                 </span>
-                <span className="absolute -top-2 -left-2 inline-flex items-center justify-center min-w-6 h-6 px-1.5 rounded-full bg-white text-destructive text-xs font-bold shadow">
+                <span className="absolute -top-1 -left-1 inline-flex items-center justify-center min-w-5 h-5 px-1 rounded-full bg-white text-destructive text-[10px] font-bold shadow">
                   NEW
                 </span>
               </>
             )}
-            <div className="text-3xl font-bold">{tbl.code}</div>
-            <div className="text-xs opacity-90">{tbl.capacity} seats</div>
+            <div className="text-xl font-bold leading-none">{tbl.code}</div>
+            <div className="text-[10px] opacity-90">{tbl.capacity} seats</div>
             {tbl.status !== "available" && (
-              <div className="flex items-center gap-1 text-sm mt-1">
-                <Users className="h-3.5 w-3.5" /> {tbl.guests}
+              <div className="flex items-center gap-0.5 text-xs mt-0.5">
+                <Users className="h-3 w-3" /> {tbl.guests}
               </div>
             )}
           </button>
