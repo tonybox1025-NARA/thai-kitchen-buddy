@@ -138,19 +138,19 @@ function PosPage() {
           >
             {tbl.has_qr_alert && (
               <>
-                <span className="absolute top-2 right-2">
-                  <Bell className="h-5 w-5 animate-pulse" />
+                <span className="absolute top-1 right-1">
+                  <Bell className="h-3.5 w-3.5 animate-pulse" />
                 </span>
-                <span className="absolute -top-2 -left-2 inline-flex items-center justify-center min-w-6 h-6 px-1.5 rounded-full bg-white text-destructive text-xs font-bold shadow">
+                <span className="absolute -top-1 -left-1 inline-flex items-center justify-center min-w-5 h-5 px-1 rounded-full bg-white text-destructive text-[10px] font-bold shadow">
                   NEW
                 </span>
               </>
             )}
-            <div className="text-3xl font-bold">{tbl.code}</div>
-            <div className="text-xs opacity-90">{tbl.capacity} seats</div>
+            <div className="text-xl font-bold leading-none">{tbl.code}</div>
+            <div className="text-[10px] opacity-90">{tbl.capacity} seats</div>
             {tbl.status !== "available" && (
-              <div className="flex items-center gap-1 text-sm mt-1">
-                <Users className="h-3.5 w-3.5" /> {tbl.guests}
+              <div className="flex items-center gap-0.5 text-xs mt-0.5">
+                <Users className="h-3 w-3" /> {tbl.guests}
               </div>
             )}
           </button>
