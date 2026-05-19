@@ -3,8 +3,15 @@ import { createFileRoute } from "@tanstack/react-router";
 import type { Database } from "@/integrations/supabase/types";
 
 function createPublicServerClient() {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_PUBLISHABLE_KEY;
+  const url =
+    process.env.SUPABASE_URL ??
+    process.env.VITE_SUPABASE_URL;
+  // Prefer service role key (bypasses RLS for public read).
+  // Falls back to publishable/anon key — requires anon SELECT policies on relevant tables.
+  const key =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ??
+    process.env.SUPABASE_PUBLISHABLE_KEY ??
+    process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
   if (!url || !key) return null;
 
