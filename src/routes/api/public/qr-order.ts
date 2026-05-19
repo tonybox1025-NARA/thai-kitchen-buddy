@@ -81,12 +81,19 @@ export const Route = createFileRoute("/api/public/qr-order")({
         const { error: itemsErr } = await supabaseAdmin.from("order_items").insert(rows);
         if (itemsErr) return new Response(itemsErr.message, { status: 500 });
 
-        // Auto-send kitchen print job (same payload format as sendToKitchen in order.$orderId.tsx)
-        const lines = rows.map((r) => ({ name_my: r.name_my, qty: r.qty, notes: r.notes }));
-        await supabaseAdmin.from("print_jobs").insert({
-          printer: "kitchen",
-          payload: { table: table_code, lines, sent_at: sentAt, language: "my" },
-        });
+        // Queue kitchen + counter print jobs (same format as sendToKitchen in order.$orderId.tsx)
+        const lines = rows.map((r) => ({
+          name_th: r.name_th,
+          name_en: r.name_en,
+          name_my: r.name_my,
+          qty: r.qty,
+          notes: r.notes,
+        }));
+        const ticketPayload = { kind: "order_ticket", table: table_code, source: "qr", lines, sent_at: sentAt };
+        await supabaseAdmin.from("print_jobs").insert([
+          { printer: "kitchen", payload: { ...ticketPayload, language: "my" } },
+          { printer: "counter", payload: { ...ticketPayload, language: "th" } },
+        ]);
 
         // Mark table occupied + raise QR alert flag (the POS realtime listener will react)
         await supabaseAdmin.from("restaurant_tables").update({
