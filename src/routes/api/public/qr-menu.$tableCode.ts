@@ -59,12 +59,20 @@ export const Route = createFileRoute("/api/public/qr-menu/$tableCode")({
           return new Response("Failed to load menu", { status: 500 });
         }
 
-        return Response.json({
-          table,
-          categories: cats ?? [],
-          menus: menus ?? [],
-          restaurant_name: settings?.restaurant_name ?? "Restaurant",
-        });
+        return Response.json(
+          {
+            table,
+            categories: cats ?? [],
+            menus: menus ?? [],
+            restaurant_name: settings?.restaurant_name ?? "Restaurant",
+          },
+          {
+            headers: {
+              // Fresh 30s; serve stale up to 2min while revalidating in background
+              "Cache-Control": "public, max-age=30, stale-while-revalidate=120",
+            },
+          },
+        );
       },
     },
   },
