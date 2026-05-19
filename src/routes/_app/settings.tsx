@@ -298,19 +298,28 @@ function QrCodesTab() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { default: QRCode } = await import("qrcode");
-      const { data } = await supabase.from("restaurant_tables").select("id,code,capacity").order("code");
-      const list = (data ?? []) as RTable[];
-      if (cancelled) return;
-      setTables(list);
-      const entries = await Promise.all(
-        list.map(async (tbl) => {
-          const url = `${baseUrl}/menu/${encodeURIComponent(tbl.code)}`;
-          const dataUrl = await QRCode.toDataURL(url, { width: 320, margin: 1 });
-          return [tbl.id, dataUrl] as const;
-        })
-      );
-      if (!cancelled) setQrs(Object.fromEntries(entries));
+      try {
+        const { default: QRCode } = await import("qrcode");
+        const { data } = await supabase.from("restaurant_tables").select("id,code,capacity").order("code");
+        const list = (data ?? []) as RTable[];
+        if (cancelled) return;
+        setTables(list);
+        const entries = await Promise.allSettled(
+          list.map(async (tbl) => {
+            const url = `${baseUrl}/menu/${encodeURIComponent(tbl.code)}`;
+            const dataUrl = await QRCode.toDataURL(url, { width: 320, margin: 1 });
+            return [tbl.id, dataUrl] as const;
+          })
+        );
+        if (!cancelled) {
+          const resolved = entries
+            .filter((r): r is PromiseFulfilledResult<readonly [string, string]> => r.status === "fulfilled")
+            .map((r) => r.value);
+          setQrs(Object.fromEntries(resolved));
+        }
+      } catch (e) {
+        console.error("QR generation error:", e);
+      }
     })();
     return () => { cancelled = true; };
   }, [baseUrl]);

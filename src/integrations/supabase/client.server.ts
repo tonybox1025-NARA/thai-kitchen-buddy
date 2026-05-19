@@ -6,20 +6,32 @@ import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
 function createSupabaseAdminClient() {
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // Try SUPABASE_URL first, fall back to VITE_ variant (Lovable injects VITE_ vars)
+  const SUPABASE_URL =
+    process.env.SUPABASE_URL ??
+    process.env.VITE_SUPABASE_URL;
 
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  // Prefer service role key (bypasses RLS); fall back to publishable key (respects RLS)
+  const key =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ??
+    process.env.SUPABASE_PUBLISHABLE_KEY ??
+    process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+  if (!SUPABASE_URL || !key) {
     const missing = [
       ...(!SUPABASE_URL ? ['SUPABASE_URL'] : []),
-      ...(!SUPABASE_SERVICE_ROLE_KEY ? ['SUPABASE_SERVICE_ROLE_KEY'] : []),
+      ...(!key ? ['SUPABASE_SERVICE_ROLE_KEY / SUPABASE_PUBLISHABLE_KEY'] : []),
     ];
     const message = `Missing Supabase environment variable(s): ${missing.join(', ')}. Connect Supabase in Lovable Cloud.`;
     console.error(`[Supabase] ${message}`);
     throw new Error(message);
   }
 
-  return createClient<Database>(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.warn('[Supabase] No service role key — using publishable key. Ensure anon RLS policies are set for server routes.');
+  }
+
+  return createClient<Database>(SUPABASE_URL, key, {
     auth: {
       storage: undefined,
       persistSession: false,
