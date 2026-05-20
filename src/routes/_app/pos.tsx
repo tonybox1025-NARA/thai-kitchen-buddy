@@ -79,11 +79,13 @@ function PosPage() {
 
   const startTable = async () => {
     if (!openTable || !staff) return;
-    // Open shift if needed
+    // Open shift if needed — uses configured starting cash as opening float
     let { data: shift } = await supabase.from("shifts").select("id").eq("status", "open").maybeSingle();
     if (!shift) {
       const today = new Date().toISOString().slice(0, 10);
-      const { data: newShift } = await supabase.from("shifts").insert({ business_day: today, opened_by: staff.id, opening_float: 0 }).select("id").single();
+      const { data: cfg } = await supabase.from("settings").select("starting_cash").eq("id", 1).maybeSingle();
+      const opening = Number((cfg as { starting_cash?: number } | null)?.starting_cash ?? 0);
+      const { data: newShift } = await supabase.from("shifts").insert({ business_day: today, opened_by: staff.id, opening_float: opening }).select("id").single();
       shift = newShift;
     }
     const { data: order, error } = await supabase.from("orders").insert({
