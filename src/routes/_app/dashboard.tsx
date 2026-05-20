@@ -46,13 +46,21 @@ function Dashboard() {
     if (!bounds) return;
     (async () => {
       const [from, to] = bounds;
-      // Aggregate by SHIFT business_day (matches Z report), not calendar paid_at.
-      const fromDay = from.toISOString().slice(0, 10);
-      const toDay = to.toISOString().slice(0, 10);
-      const { data: shifts } = await supabase
-        .from("shifts").select("id")
-        .gte("business_day", fromDay).lte("business_day", toDay);
-      const shiftIds = (shifts ?? []).map((s) => s.id);
+      let shiftIds: string[] = [];
+      if (range === "today") {
+        // "Today" = current active (open) shift only. After Z Report, resets to 0.
+        const { data: openShifts } = await supabase
+          .from("shifts").select("id").eq("status", "open").order("opened_at", { ascending: false }).limit(1);
+        shiftIds = (openShifts ?? []).map((s) => s.id);
+      } else {
+        // Historical ranges: aggregate by closed-shift business_day.
+        const fromDay = from.toISOString().slice(0, 10);
+        const toDay = to.toISOString().slice(0, 10);
+        const { data: shifts } = await supabase
+          .from("shifts").select("id")
+          .gte("business_day", fromDay).lte("business_day", toDay);
+        shiftIds = (shifts ?? []).map((s) => s.id);
+      }
       if (!shiftIds.length) { setBills([]); setPayments([]); return; }
       const { data: b } = await supabase
         .from("bills")
@@ -66,7 +74,7 @@ function Dashboard() {
         setPayments((p ?? []) as typeof payments);
       } else setPayments([]);
     })();
-  }, [bounds]);
+  }, [bounds, range]);
 
   const stats = useMemo(() => {
     const gross = bills.reduce((s, b) => s + Number(b.subtotal), 0);
