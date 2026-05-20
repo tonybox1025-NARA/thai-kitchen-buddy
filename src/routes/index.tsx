@@ -1,9 +1,7 @@
-import { createFileRoute, Navigate } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/")({
-  component: IndexRedirect,
+  beforeLoad: () => {
+    throw redirect({ to: "/login" });
+  },
 });
-
-function IndexRedirect() {
-  return <Navigate to="/login" />;
-}
