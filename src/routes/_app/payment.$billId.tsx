@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { ArrowLeft, Banknote, QrCode, CreditCard, Printer, RotateCcw, PencilLine } from "lucide-react";
+import { ArrowLeft, Banknote, QrCode, CreditCard, Printer, RotateCcw, PencilLine, Eye } from "lucide-react";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -59,6 +59,9 @@ function PaymentPage() {
   const [refundAmt, setRefundAmt] = useState(0);
   const [managerOpen, setManagerOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<"refund" | "correction" | null>(null);
+
+  // Customer-facing view
+  const [customerViewOpen, setCustomerViewOpen] = useState(false);
 
   // Payment type correction (Scenario 1: quick fix within 10 min)
   const [corrOpen, setCorrOpen] = useState(false);
@@ -245,6 +248,9 @@ function PaymentPage() {
                 <span>{t("total")}</span><span>{thb(total)}</span>
               </div>
             </div>
+            <Button variant="outline" size="sm" className="w-full mt-3 text-muted-foreground" onClick={() => setCustomerViewOpen(true)}>
+              <Eye className="h-3.5 w-3.5 mr-1.5" />Show to Customer
+            </Button>
           </CardContent>
         </Card>
 
@@ -434,6 +440,37 @@ function PaymentPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Customer-facing full-screen bill view */}
+      {customerViewOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-background flex flex-col items-center justify-center p-8 cursor-pointer select-none"
+          onClick={() => setCustomerViewOpen(false)}
+        >
+          <p className="text-base text-muted-foreground">{restName}</p>
+          <p className="text-3xl font-bold mt-1 mb-8">{t("table")} {tableCode}</p>
+          <div className="w-full max-w-xs space-y-2 mb-8">
+            {items.filter((i) => i.status !== "voided").map((i) => (
+              <div key={i.id} className="flex justify-between text-lg">
+                <span className="truncate mr-2">{pickName(i, lang)} <span className="text-muted-foreground text-base">×{i.qty}</span></span>
+                <span className="shrink-0 tabular-nums">{thb(i.qty * Number(i.unit_price))}</span>
+              </div>
+            ))}
+          </div>
+          <div className="w-full max-w-xs space-y-1 text-sm text-muted-foreground">
+            {(discAmt + (subtotal * discPct / 100)) > 0 && (
+              <div className="flex justify-between"><span>{t("discount")}</span><span>- {thb(discAmt + subtotal * discPct / 100)}</span></div>
+            )}
+            {memberDisc > 0 && <div className="flex justify-between"><span>{t("member_discount")}</span><span>- {thb(memberDisc)}</span></div>}
+            {settingsVatMode === "exclusive" && <div className="flex justify-between"><span>VAT {bill?.vat_rate}%</span><span>{thb(vatAmount)}</span></div>}
+          </div>
+          <div className="border-t w-full max-w-xs pt-6 text-center mt-4">
+            <p className="text-muted-foreground text-lg">{t("total")}</p>
+            <p className="text-8xl font-black mt-2 tabular-nums">{thb(total)}</p>
+          </div>
+          <p className="text-sm text-muted-foreground mt-16 animate-pulse">Tap anywhere to close</p>
+        </div>
+      )}
     </div>
   );
 }

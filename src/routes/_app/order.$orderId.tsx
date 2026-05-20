@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Minus, Trash2, ChefHat, Receipt, ArrowLeft, AlertTriangle, ArrowLeftRight, X } from "lucide-react";
+import { Plus, Minus, Trash2, ChefHat, Receipt, ArrowLeft, AlertTriangle, ArrowLeftRight, X, Printer, Eye } from "lucide-react";
 import { ManagerPinDialog } from "@/components/ManagerPinDialog";
 import { toast } from "sonner";
 
@@ -52,16 +52,25 @@ function OrderPage() {
   const [moveTableOpen, setMoveTableOpen] = useState(false);
   const [availableTables, setAvailableTables] = useState<{ id: string; code: string }[]>([]);
 
+  // Bill preview
+  const [billOpen, setBillOpen] = useState(false);
+  const [customerViewOpen, setCustomerViewOpen] = useState(false);
+  const [settingsVatMode, setSettingsVatMode] = useState<"inclusive" | "exclusive">("inclusive");
+  const [settingsVatRate, setSettingsVatRate] = useState(7);
+  const [restaurantName, setRestaurantName] = useState("");
+
   const loadAll = async () => {
-    const [{ data: m }, { data: c }, { data: it }, { data: ord }] = await Promise.all([
+    const [{ data: m }, { data: c }, { data: it }, { data: ord }, { data: s }] = await Promise.all([
       supabase.from("menus").select("*").eq("available", true).order("sort"),
       supabase.from("categories").select("*").order("sort"),
       supabase.from("order_items").select("*").eq("order_id", orderId).order("created_at"),
       supabase.from("orders").select("table_id").eq("id", orderId).single(),
+      supabase.from("settings").select("vat_mode,vat_rate,restaurant_name").eq("id", 1).single(),
     ]);
     if (m) setMenus(m as Menu[]);
     if (c) setCats(c as Category[]);
     if (it) setItems(it as Item[]);
+    if (s) { setSettingsVatMode((s.vat_mode as "inclusive" | "exclusive") || "inclusive"); setSettingsVatRate(Number(s.vat_rate) || 7); setRestaurantName(s.restaurant_name); }
     if (ord?.table_id) {
       setTableId(ord.table_id);
       const { data: tbl } = await supabase.from("restaurant_tables").select("code").eq("id", ord.table_id).single();
@@ -215,6 +224,27 @@ function OrderPage() {
   const liveItems = items.filter((i) => i.status !== "voided");
   const subtotal = liveItems.reduce((s, i) => s + i.qty * Number(i.unit_price), 0);
 
+  // Bill preview totals (mirrors payment screen VAT logic)
+  const vatRate = settingsVatRate / 100;
+  const billVatAmount = settingsVatMode === "exclusive"
+    ? subtotal * vatRate
+    : subtotal - subtotal / (1 + vatRate);
+  const billTotal = settingsVatMode === "exclusive" ? subtotal + billVatAmount : subtotal;
+
+  const printBillPreview = async () => {
+    if (liveItems.length === 0) { toast.error(t("empty_order")); return; }
+    await supabase.from("print_jobs").insert({
+      printer: "counter",
+      payload: {
+        kind: "receipt", table: tableCode, restaurant: restaurantName,
+        items: liveItems, total: billTotal,
+        vatAmount: settingsVatMode === "exclusive" ? billVatAmount : 0,
+        vat_mode: settingsVatMode, payments: [], language: lang,
+      },
+    });
+    toast.success("Bill sent to printer");
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_420px] h-[calc(100vh-3.5rem)]">
       {/* Menu */}
@@ -300,6 +330,9 @@ function OrderPage() {
           </div>
           <Button className="w-full" size="lg" variant="secondary" onClick={sendToKitchen}>
             <ChefHat className="h-4 w-4 mr-2" />{t("send_to_kitchen")}
+          </Button>
+          <Button className="w-full" size="lg" variant="outline" onClick={() => setBillOpen(true)} disabled={liveItems.length === 0}>
+            <Printer className="h-4 w-4 mr-2" />Print Bill
           </Button>
           <Button className="w-full" size="lg" onClick={goToPayment}>
             <Receipt className="h-4 w-4 mr-2" />{t("go_to_payment")}
@@ -427,6 +460,72 @@ function OrderPage() {
           setManagerAction(null);
         }}
       />
+
+      {/* Bill preview dialog */}
+      <Dialog open={billOpen} onOpenChange={setBillOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-center">{restaurantName || "Restaurant"}</DialogTitle>
+          </DialogHeader>
+          <p className="text-center text-sm text-muted-foreground -mt-2">{t("table")} {tableCode} · {new Date().toLocaleString(lang === "th" ? "th-TH" : "en-US")}</p>
+          <div className="space-y-1 max-h-56 overflow-y-auto text-sm border rounded-lg p-3 bg-muted/30">
+            {liveItems.map((i) => (
+              <div key={i.id} className="flex justify-between">
+                <span className="truncate mr-2">{pickName(i, lang)} <span className="text-muted-foreground">×{i.qty}</span></span>
+                <span className="shrink-0 tabular-nums">{thb(i.qty * Number(i.unit_price))}</span>
+              </div>
+            ))}
+          </div>
+          <div className="space-y-1 text-sm">
+            <div className="flex justify-between text-muted-foreground">
+              <span>{t("subtotal")}</span><span className="tabular-nums">{thb(subtotal)}</span>
+            </div>
+            {settingsVatMode === "exclusive" && billVatAmount > 0 && (
+              <div className="flex justify-between text-muted-foreground">
+                <span>VAT {settingsVatRate}%</span><span className="tabular-nums">{thb(billVatAmount)}</span>
+              </div>
+            )}
+            <div className="flex justify-between text-xl font-bold border-t pt-2 mt-1">
+              <span>{t("total")}</span><span className="tabular-nums">{thb(billTotal)}</span>
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button variant="outline" className="flex-1" onClick={() => { setBillOpen(false); setCustomerViewOpen(true); }}>
+              <Eye className="h-4 w-4 mr-1" />Show Customer
+            </Button>
+            <Button className="flex-1" onClick={() => { printBillPreview(); setBillOpen(false); }}>
+              <Printer className="h-4 w-4 mr-1" />Print
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Customer-facing full-screen bill view */}
+      {customerViewOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-background flex flex-col items-center justify-center p-8 cursor-pointer select-none"
+          onClick={() => setCustomerViewOpen(false)}
+        >
+          <p className="text-base text-muted-foreground">{restaurantName}</p>
+          <p className="text-3xl font-bold mt-1 mb-8">{t("table")} {tableCode}</p>
+          <div className="w-full max-w-xs space-y-2 mb-8">
+            {liveItems.map((i) => (
+              <div key={i.id} className="flex justify-between text-lg">
+                <span className="truncate mr-2">{pickName(i, lang)} <span className="text-muted-foreground text-base">×{i.qty}</span></span>
+                <span className="shrink-0 tabular-nums">{thb(i.qty * Number(i.unit_price))}</span>
+              </div>
+            ))}
+          </div>
+          {settingsVatMode === "exclusive" && billVatAmount > 0 && (
+            <p className="text-muted-foreground text-lg mb-1">VAT {settingsVatRate}%: {thb(billVatAmount)}</p>
+          )}
+          <div className="border-t w-full max-w-xs pt-6 text-center">
+            <p className="text-muted-foreground text-lg">{t("total")}</p>
+            <p className="text-8xl font-black mt-2 tabular-nums">{thb(billTotal)}</p>
+          </div>
+          <p className="text-sm text-muted-foreground mt-16 animate-pulse">Tap anywhere to close</p>
+        </div>
+      )}
     </div>
   );
 }
