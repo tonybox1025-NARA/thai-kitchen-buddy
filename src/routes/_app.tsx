@@ -56,8 +56,8 @@ function AppLayout() {
   }
 
   const navItems = [
-    { to: "/pos", label: t("nav_pos"), icon: LayoutGrid },
     { to: "/dashboard", label: t("nav_dashboard"), icon: BarChart3 },
+    { to: "/pos", label: t("nav_pos"), icon: LayoutGrid },
     { to: "/reports", label: t("nav_reports"), icon: FileText },
     { to: "/settings", label: t("nav_settings"), icon: Settings },
   ];
