@@ -13,7 +13,12 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { PencilLine, ArrowRight } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
+import { format } from "date-fns";
+import type { DateRange } from "react-day-picker";
+import { PencilLine, ArrowRight, CalendarIcon } from "lucide-react";
 
 export const Route = createFileRoute("/_app/reports")({ component: Reports });
 
@@ -462,19 +467,42 @@ function Reports() {
   );
 }
 
+type HistRange = "today" | "yesterday" | "week" | "month" | "custom";
+
+function histBounds(r: Exclude<HistRange, "custom">): [Date, Date] {
+  const now = new Date();
+  const s = new Date(now); const e = new Date(now);
+  if (r === "today") { s.setHours(0,0,0,0); e.setHours(23,59,59,999); }
+  else if (r === "yesterday") { s.setDate(s.getDate()-1); s.setHours(0,0,0,0); e.setDate(e.getDate()-1); e.setHours(23,59,59,999); }
+  else if (r === "week") { const d = s.getDay()||7; s.setDate(s.getDate()-(d-1)); s.setHours(0,0,0,0); e.setHours(23,59,59,999); }
+  else { s.setDate(1); s.setHours(0,0,0,0); e.setHours(23,59,59,999); }
+  return [s, e];
+}
+
 function BillHistoryTab() {
-  const today = new Date().toISOString().slice(0, 10);
-  const [from, setFrom] = useState(today);
-  const [to, setTo] = useState(today);
+  const [range, setRange] = useState<HistRange>("today");
+  const [custom, setCustom] = useState<DateRange | undefined>();
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [bills, setBills] = useState<BillRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
+  const getBounds = (): [Date, Date] | null => {
+    if (range === "custom") {
+      if (!custom?.from) return null;
+      const s = new Date(custom.from); s.setHours(0,0,0,0);
+      const e = new Date(custom.to ?? custom.from); e.setHours(23,59,59,999);
+      return [s, e];
+    }
+    return histBounds(range);
+  };
+
   const load = async () => {
+    const bounds = getBounds();
+    if (!bounds) return;
     setLoading(true);
     try {
-      const fromDt = new Date(from + "T00:00:00");
-      const toDt = new Date(to + "T23:59:59");
+      const [fromDt, toDt] = bounds;
 
       const { data: rawBills } = await supabase
         .from("bills")
@@ -523,7 +551,8 @@ function BillHistoryTab() {
     }
   };
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [range]);
+  useEffect(() => { if (range === "custom" && custom?.from && custom?.to) load(); /* eslint-disable-next-line */ }, [custom]);
 
   const methodChip = (method: string, amount: number) => {
     const cls =
@@ -538,26 +567,38 @@ function BillHistoryTab() {
     );
   };
 
+  const customLabel = custom?.from
+    ? custom.to && custom.to.getTime() !== custom.from.getTime()
+      ? `${format(custom.from, "dd MMM")} – ${format(custom.to, "dd MMM yyyy")}`
+      : format(custom.from, "dd MMM yyyy")
+    : "Custom range";
+
   return (
     <div className="space-y-4">
-      <Card>
-        <CardContent className="pt-4 pb-4 flex items-center gap-3 flex-wrap">
-          <div className="flex items-center gap-2">
-            <Label className="text-xs shrink-0">From</Label>
-            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-36 h-8 text-sm" />
-          </div>
-          <div className="flex items-center gap-2">
-            <Label className="text-xs shrink-0">To</Label>
-            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-36 h-8 text-sm" />
-          </div>
-          <Button size="sm" onClick={load} disabled={loading}>
-            {loading ? "Loading…" : "Search"}
+      <div className="flex gap-2 flex-wrap items-center">
+        {(["today","yesterday","week","month"] as const).map((r) => (
+          <Button key={r} size="sm" variant={range === r ? "default" : "outline"}
+            onClick={() => { setRange(r); }}
+          >
+            {r === "today" ? "Today" : r === "yesterday" ? "Yesterday" : r === "week" ? "This week" : "This month"}
           </Button>
-          {loaded && (
-            <span className="text-xs text-muted-foreground">{bills.length} bill{bills.length !== 1 ? "s" : ""}</span>
-          )}
-        </CardContent>
-      </Card>
+        ))}
+        <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+          <PopoverTrigger asChild>
+            <Button size="sm" variant={range === "custom" ? "default" : "outline"}
+              className={cn(!custom?.from && "text-muted-foreground")}>
+              <CalendarIcon className="h-3.5 w-3.5 mr-1" />
+              {range === "custom" ? customLabel : "Custom range"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar mode="range" selected={custom}
+              onSelect={(r) => { setCustom(r); setRange("custom"); if (r?.from && r?.to) setPickerOpen(false); }}
+              numberOfMonths={2} initialFocus className={cn("p-3 pointer-events-auto")} />
+          </PopoverContent>
+        </Popover>
+        {loaded && <span className="text-xs text-muted-foreground ml-1">{bills.length} bill{bills.length !== 1 ? "s" : ""}</span>}
+      </div>
 
       {loaded && (
         bills.length === 0 ? (
