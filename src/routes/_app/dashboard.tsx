@@ -30,7 +30,7 @@ function Dashboard() {
   const [custom, setCustom] = useState<DateRange | undefined>();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [bills, setBills] = useState<{ id: string; total: number; subtotal: number; discount_amount: number; member_discount_amount: number }[]>([]);
-  const [payments, setPayments] = useState<{ method: string; amount: number; bill_id: string }[]>([]);
+  const [payments, setPayments] = useState<{ method: string; amount: number; tip_amount: number; bill_id: string }[]>([]);
 
   const bounds = useMemo<[Date, Date] | null>(() => {
     if (range === "custom") {
@@ -50,7 +50,7 @@ function Dashboard() {
       setBills((b ?? []) as typeof bills);
       const ids = (b ?? []).map((x) => x.id);
       if (ids.length) {
-        const { data: p } = await supabase.from("payments").select("method,amount,bill_id").in("bill_id", ids);
+        const { data: p } = await supabase.from("payments").select("method,amount,tip_amount,bill_id").in("bill_id", ids);
         setPayments((p ?? []) as typeof payments);
       } else setPayments([]);
     })();
@@ -62,7 +62,8 @@ function Dashboard() {
     const discounts = bills.reduce((s, b) => s + Number(b.discount_amount) + Number(b.member_discount_amount), 0);
     const byMethod: Record<string, number> = { cash: 0, qr: 0, card: 0 };
     payments.forEach((p) => { byMethod[p.method] = (byMethod[p.method] ?? 0) + Number(p.amount); });
-    return { gross, net, discounts, byMethod, count: bills.length };
+    const tipTotal = payments.filter((p) => p.method === "qr").reduce((s, p) => s + Number(p.tip_amount ?? 0), 0);
+    return { gross, net, discounts, byMethod, count: bills.length, tipTotal };
   }, [bills, payments]);
 
   const customLabel = custom?.from
@@ -117,10 +118,23 @@ function Dashboard() {
       </div>
       <Card>
         <CardHeader><CardTitle>By payment method</CardTitle></CardHeader>
-        <CardContent className="grid grid-cols-3 gap-4">
-          <Stat title="Cash" value={thb(stats.byMethod.cash)} />
-          <Stat title="QR Transfer" value={thb(stats.byMethod.qr)} />
-          <Stat title="Credit card" value={thb(stats.byMethod.card)} />
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-3 gap-4">
+            <Stat title="Cash" value={thb(stats.byMethod.cash)} />
+            <Stat title="QR Transfer" value={thb(stats.byMethod.qr)} />
+            <Stat title="Credit card" value={thb(stats.byMethod.card)} />
+          </div>
+          {stats.tipTotal > 0 && (
+            <div className="border-t pt-4 grid grid-cols-3 gap-4">
+              <Stat title="Tips collected (QR)" value={thb(stats.tipTotal)} />
+              <Stat title="Net QR sales" value={thb(stats.byMethod.qr - stats.tipTotal)} />
+              <div className="rounded-xl border-2 border-amber-400 bg-amber-50 dark:bg-amber-950/30 p-4">
+                <p className="text-xs uppercase tracking-wide text-amber-700 dark:text-amber-400 font-semibold">Tips — cash payout</p>
+                <p className="text-2xl font-bold mt-1 text-amber-700 dark:text-amber-300">{thb(stats.tipTotal)}</p>
+                <p className="text-xs text-amber-600 dark:text-amber-500 mt-1">Pay this to staff in cash</p>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
