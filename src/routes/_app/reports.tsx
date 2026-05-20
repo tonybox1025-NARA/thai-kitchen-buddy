@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -10,7 +10,10 @@ import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ManagerPinDialog } from "@/components/ManagerPinDialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { PencilLine } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { PencilLine, ArrowRight } from "lucide-react";
 
 export const Route = createFileRoute("/_app/reports")({ component: Reports });
 
@@ -28,6 +31,12 @@ type AdjPay = {
   payment_id: string; bill_id: string; table_code: string;
   amount: number; tip_amount: number;
   method: "cash" | "qr" | "card"; paid_at: string;
+};
+
+type BillRow = {
+  id: string; paid_at: string; total: number;
+  table_code: string;
+  payments: { method: string; amount: number }[];
 };
 
 function getQrGrossReceived(r: ReportData) {
@@ -275,29 +284,42 @@ function Reports() {
   }, [adjPays, adjChanges]);
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-4">
       <h1 className="text-2xl font-bold">{t("nav_reports")}</h1>
 
-      {!shift ? (
-        <Card>
-          <CardContent className="py-12 text-center space-y-4">
-            <p className="text-muted-foreground">{t("no_open_shift")}</p>
-            <p className="text-sm text-muted-foreground">A new shift starts automatically with the next sale, using the configured starting cash.</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("shift")} · {t("business_day")}: {shift.business_day}</CardTitle>
-          </CardHeader>
-          <CardContent className="flex gap-3">
-            <Button onClick={runX} variant="outline" disabled={xLoading}>
-              {xLoading ? "Loading…" : t("x_report")}
-            </Button>
-            <Button onClick={startZ} variant="destructive">{t("z_report")}</Button>
-          </CardContent>
-        </Card>
-      )}
+      <Tabs defaultValue="shift">
+        <TabsList>
+          <TabsTrigger value="shift">Shift Reports</TabsTrigger>
+          <TabsTrigger value="history">Bill History</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="shift" className="space-y-6 mt-4">
+          {!shift ? (
+            <Card>
+              <CardContent className="py-12 text-center space-y-4">
+                <p className="text-muted-foreground">{t("no_open_shift")}</p>
+                <p className="text-sm text-muted-foreground">A new shift starts automatically with the next sale, using the configured starting cash.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle>{t("shift")} · {t("business_day")}: {shift.business_day}</CardTitle>
+              </CardHeader>
+              <CardContent className="flex gap-3">
+                <Button onClick={runX} variant="outline" disabled={xLoading}>
+                  {xLoading ? "Loading…" : t("x_report")}
+                </Button>
+                <Button onClick={startZ} variant="destructive">{t("z_report")}</Button>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="history" className="mt-4">
+          <BillHistoryTab />
+        </TabsContent>
+      </Tabs>
 
       {/* X Report dialog */}
       <Dialog open={xDlg} onOpenChange={setXDlg}>
@@ -436,6 +458,141 @@ function Reports() {
         onOpenChange={setManagerOpen}
         onApproved={() => { if (pendingZ) doZ(); setPendingZ(false); }}
       />
+    </div>
+  );
+}
+
+function BillHistoryTab() {
+  const today = new Date().toISOString().slice(0, 10);
+  const [from, setFrom] = useState(today);
+  const [to, setTo] = useState(today);
+  const [bills, setBills] = useState<BillRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const fromDt = new Date(from + "T00:00:00");
+      const toDt = new Date(to + "T23:59:59");
+
+      const { data: rawBills } = await supabase
+        .from("bills")
+        .select("id,total,paid_at,order_id")
+        .eq("status", "paid")
+        .gte("paid_at", fromDt.toISOString())
+        .lte("paid_at", toDt.toISOString())
+        .order("paid_at", { ascending: false })
+        .limit(500);
+
+      if (!rawBills?.length) { setBills([]); setLoaded(true); return; }
+
+      const billIds = rawBills.map((b) => b.id);
+      const orderIds = rawBills.map((b) => b.order_id).filter(Boolean) as string[];
+
+      const [{ data: orders }, { data: pays }] = await Promise.all([
+        supabase.from("orders").select("id,table_id").in("id", orderIds),
+        supabase.from("payments").select("bill_id,method,amount").in("bill_id", billIds),
+      ]);
+
+      const tableIds = [...new Set((orders ?? []).map((o) => o.table_id).filter(Boolean))] as string[];
+      const { data: tables } = tableIds.length
+        ? await supabase.from("restaurant_tables").select("id,code").in("id", tableIds)
+        : { data: [] as { id: string; code: string }[] };
+
+      const tableMap = new Map((tables ?? []).map((t) => [t.id, t.code]));
+      const orderMap = new Map((orders ?? []).map((o) => [o.id, o.table_id as string]));
+
+      const result: BillRow[] = rawBills.map((b) => {
+        const tableId = orderMap.get(b.order_id ?? "");
+        return {
+          id: b.id,
+          paid_at: b.paid_at ?? "",
+          total: Number(b.total),
+          table_code: tableId ? (tableMap.get(tableId) ?? "—") : "—",
+          payments: (pays ?? [])
+            .filter((p) => p.bill_id === b.id)
+            .map((p) => ({ method: p.method, amount: Number(p.amount) })),
+        };
+      });
+
+      setBills(result);
+      setLoaded(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+
+  const methodChip = (method: string, amount: number) => {
+    const cls =
+      method === "cash" ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400" :
+      method === "qr"   ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400" :
+                          "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400";
+    const label = method === "qr" ? "QR" : method === "card" ? "Card" : "Cash";
+    return (
+      <span key={method + amount} className={`text-xs px-2 py-0.5 rounded-full font-medium ${cls}`}>
+        {label} {thb(amount)}
+      </span>
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardContent className="pt-4 pb-4 flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Label className="text-xs shrink-0">From</Label>
+            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-36 h-8 text-sm" />
+          </div>
+          <div className="flex items-center gap-2">
+            <Label className="text-xs shrink-0">To</Label>
+            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-36 h-8 text-sm" />
+          </div>
+          <Button size="sm" onClick={load} disabled={loading}>
+            {loading ? "Loading…" : "Search"}
+          </Button>
+          {loaded && (
+            <span className="text-xs text-muted-foreground">{bills.length} bill{bills.length !== 1 ? "s" : ""}</span>
+          )}
+        </CardContent>
+      </Card>
+
+      {loaded && (
+        bills.length === 0 ? (
+          <Card>
+            <CardContent className="py-12 text-center text-muted-foreground text-sm">
+              No paid bills found for this period
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-1.5">
+            {bills.map((b) => (
+              <Card key={b.id} className="hover:bg-muted/30 transition-colors">
+                <CardContent className="py-3 flex items-center gap-3">
+                  <div className="text-xs text-muted-foreground shrink-0 w-24 tabular-nums">
+                    <div>{new Date(b.paid_at).toLocaleDateString()}</div>
+                    <div>{new Date(b.paid_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
+                  </div>
+                  <span className="font-semibold text-sm shrink-0 w-10">{b.table_code}</span>
+                  <span className="font-bold tabular-nums shrink-0 w-24 text-right">{thb(b.total)}</span>
+                  <div className="flex gap-1 flex-wrap flex-1 min-w-0">
+                    {b.payments.map((p, i) => (
+                      <span key={i}>{methodChip(p.method, p.amount)}</span>
+                    ))}
+                  </div>
+                  <Link to="/payment/$billId" params={{ billId: b.id }} className="shrink-0">
+                    <Button size="sm" variant="outline">
+                      View <ArrowRight className="h-3 w-3 ml-1" />
+                    </Button>
+                  </Link>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )
+      )}
     </div>
   );
 }
