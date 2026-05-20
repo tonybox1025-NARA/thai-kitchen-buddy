@@ -46,7 +46,19 @@ function Dashboard() {
     if (!bounds) return;
     (async () => {
       const [from, to] = bounds;
-      const { data: b } = await supabase.from("bills").select("id,total,subtotal,discount_amount,member_discount_amount,paid_at").eq("status", "paid").gte("paid_at", from.toISOString()).lte("paid_at", to.toISOString());
+      // Aggregate by SHIFT business_day (matches Z report), not calendar paid_at.
+      const fromDay = from.toISOString().slice(0, 10);
+      const toDay = to.toISOString().slice(0, 10);
+      const { data: shifts } = await supabase
+        .from("shifts").select("id")
+        .gte("business_day", fromDay).lte("business_day", toDay);
+      const shiftIds = (shifts ?? []).map((s) => s.id);
+      if (!shiftIds.length) { setBills([]); setPayments([]); return; }
+      const { data: b } = await supabase
+        .from("bills")
+        .select("id,total,subtotal,discount_amount,member_discount_amount")
+        .eq("status", "paid")
+        .in("shift_id", shiftIds);
       setBills((b ?? []) as typeof bills);
       const ids = (b ?? []).map((x) => x.id);
       if (ids.length) {
