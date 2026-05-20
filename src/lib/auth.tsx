@@ -36,17 +36,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     const initSession = async () => {
+      let timedOut = false;
+      const timeoutId = setTimeout(() => {
+        timedOut = true;
+        if (!mounted) return;
+        console.warn("Auth session initialization timed out; falling back to signed-out state.");
+        setSession(null);
+        setLoading(false);
+      }, 3000);
+
       try {
         const { data, error } = await supabase.auth.getSession();
         if (error) throw error;
-        if (!mounted) return;
+        if (!mounted || timedOut) return;
         setSession(data.session ?? null);
       } catch (error) {
         console.error("Failed to initialize auth session", error);
-        if (!mounted) return;
+        if (!mounted || timedOut) return;
         setSession(null);
       } finally {
-        if (mounted) setLoading(false);
+        clearTimeout(timeoutId);
+        if (mounted && !timedOut) setLoading(false);
       }
     };
 
