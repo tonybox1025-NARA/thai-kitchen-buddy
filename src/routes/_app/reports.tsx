@@ -177,7 +177,7 @@ function Reports() {
         <Card>
           <CardContent className="py-12 text-center space-y-4">
             <p className="text-muted-foreground">{t("no_open_shift")}</p>
-            <p className="text-sm text-muted-foreground">Open a shift from the Shift button above</p>
+            <p className="text-sm text-muted-foreground">A new shift starts automatically with the next sale, using the configured starting cash.</p>
           </CardContent>
         </Card>
       ) : (
