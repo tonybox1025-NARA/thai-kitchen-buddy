@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { ArrowLeft, Banknote, QrCode, CreditCard, Printer, RotateCcw } from "lucide-react";
+import { ArrowLeft, Banknote, QrCode, CreditCard, Printer, RotateCcw, PencilLine } from "lucide-react";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { ManagerPinDialog } from "@/components/ManagerPinDialog";
@@ -20,7 +21,7 @@ export const Route = createFileRoute("/_app/payment/$billId")({ component: Payme
 type Bill = {
   id: string; order_id: string; subtotal: number; discount_amount: number;
   member_discount_amount: number; vat_mode: "inclusive" | "exclusive"; vat_rate: number;
-  vat_amount: number; total: number; status: string;
+  vat_amount: number; total: number; status: string; paid_at: string | null;
 };
 type Item = { id: string; name_th: string; name_en: string; qty: number; unit_price: number; status: string };
 type Payment = { id: string; method: "qr" | "cash" | "card"; amount: number; cash_received: number | null; change_due: number | null; tip_amount: number };
@@ -57,7 +58,12 @@ function PaymentPage() {
   const [refundReason, setRefundReason] = useState("");
   const [refundAmt, setRefundAmt] = useState(0);
   const [managerOpen, setManagerOpen] = useState(false);
-  const [pendingAction, setPendingAction] = useState<"refund" | null>(null);
+  const [pendingAction, setPendingAction] = useState<"refund" | "correction" | null>(null);
+
+  // Payment type correction (Scenario 1: quick fix within 10 min)
+  const [corrOpen, setCorrOpen] = useState(false);
+  const [corrChanges, setCorrChanges] = useState<Record<string, "qr" | "cash" | "card">>({});
+  const [corrReason, setCorrReason] = useState("");
 
   const load = async () => {
     const [{ data: b }, { data: ps }, { data: s }] = await Promise.all([
@@ -174,6 +180,36 @@ function PaymentPage() {
 
   const printReceipt = () => {
     window.print();
+  };
+
+  // Within 10 minutes of payment — correction window
+  const withinTenMin = bill?.paid_at
+    ? Date.now() - new Date(bill.paid_at).getTime() < 10 * 60 * 1000
+    : false;
+  const canCorrect = paidStatus &&
+    (staff?.role === "admin" || staff?.role === "manager") &&
+    withinTenMin;
+
+  const openCorr = () => {
+    if (staff?.role === "manager") { setPendingAction("correction"); setManagerOpen(true); return; }
+    setCorrChanges({}); setCorrReason(""); setCorrOpen(true);
+  };
+
+  const applyCorrection = async () => {
+    if (!bill || !staff) return;
+    const changed = payments.filter((p) => corrChanges[p.id] && corrChanges[p.id] !== p.method);
+    if (!changed.length) { setCorrOpen(false); return; }
+    for (const p of changed) {
+      await supabase.from("payments").update({ method: corrChanges[p.id] }).eq("id", p.id);
+      await supabase.from("payment_corrections").insert({
+        payment_id: p.id, bill_id: bill.id,
+        corrected_by: staff.id, old_method: p.method, new_method: corrChanges[p.id],
+        reason: corrReason || null,
+      });
+    }
+    setCorrOpen(false); setCorrReason(""); setCorrChanges({});
+    await load();
+    toast.success(`${changed.length} payment${changed.length > 1 ? "s" : ""} corrected`);
   };
 
   if (!bill) return <div className="p-8 text-center text-muted-foreground">{t("loading")}</div>;
@@ -301,6 +337,11 @@ function PaymentPage() {
               <div className="text-xl font-bold mt-2">{t("paid")}</div>
             </div>
             <Button className="w-full" onClick={printReceipt}><Printer className="h-4 w-4 mr-2" />{t("print_receipt")}</Button>
+            {canCorrect && (
+              <Button variant="outline" className="w-full border-amber-400 text-amber-700 hover:bg-amber-50 dark:text-amber-400" onClick={openCorr}>
+                <PencilLine className="h-4 w-4 mr-2" />Edit Payment Type
+              </Button>
+            )}
             <Button variant="outline" className="w-full" onClick={() => { setRefundAmt(Number(bill.total)); setRefundOpen(true); }}>
               <RotateCcw className="h-4 w-4 mr-2" />{t("refund")}
             </Button>
@@ -351,7 +392,53 @@ function PaymentPage() {
         </DialogContent>
       </Dialog>
 
-      <ManagerPinDialog open={managerOpen} onOpenChange={setManagerOpen} onApproved={() => { if (pendingAction === "refund") doRefund(); setPendingAction(null); }} />
+      <ManagerPinDialog open={managerOpen} onOpenChange={setManagerOpen} onApproved={() => {
+        if (pendingAction === "refund") doRefund();
+        if (pendingAction === "correction") { setCorrChanges({}); setCorrReason(""); setCorrOpen(true); }
+        setPendingAction(null);
+      }} />
+
+      {/* Payment type correction dialog */}
+      <Dialog open={corrOpen} onOpenChange={setCorrOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><PencilLine className="h-4 w-4" />Edit Payment Type</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground">Admin / Manager only · within 10 min of payment · logged for audit</p>
+          <div className="space-y-3 pt-1">
+            {payments.map((p) => {
+              const next = corrChanges[p.id] ?? p.method;
+              const changed = next !== p.method;
+              return (
+                <div key={p.id} className={`flex items-center gap-3 rounded-lg border p-2 ${changed ? "border-amber-400 bg-amber-50 dark:bg-amber-950/30" : ""}`}>
+                  <span className="text-sm font-medium w-20 shrink-0">{thb(p.amount)}</span>
+                  <Select value={next} onValueChange={(v) => setCorrChanges({ ...corrChanges, [p.id]: v as "cash" | "qr" | "card" })}>
+                    <SelectTrigger className="flex-1 h-8"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="qr">QR Transfer</SelectItem>
+                      <SelectItem value="card">Credit card</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {changed && <span className="text-xs text-amber-600 shrink-0">{p.method} → {next}</span>}
+                </div>
+              );
+            })}
+          </div>
+          <div>
+            <Label className="text-xs">Reason (optional)</Label>
+            <Textarea value={corrReason} onChange={(e) => setCorrReason(e.target.value)}
+              placeholder="e.g. Customer paid cash, entered QR by mistake" className="text-sm" rows={2} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCorrOpen(false)}>{t("cancel")}</Button>
+            <Button onClick={applyCorrection}
+              disabled={!payments.some((p) => corrChanges[p.id] && corrChanges[p.id] !== p.method)}>
+              Apply Correction
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

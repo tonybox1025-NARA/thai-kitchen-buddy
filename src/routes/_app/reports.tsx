@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
@@ -9,6 +9,8 @@ import { thb } from "@/lib/format";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ManagerPinDialog } from "@/components/ManagerPinDialog";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { PencilLine } from "lucide-react";
 
 export const Route = createFileRoute("/_app/reports")({ component: Reports });
 
@@ -20,6 +22,12 @@ type ReportData = {
   voids: number; refunds: number; byMethod: Record<string, number>;
   openingFloat: number; bills: number;
   tipTotal: number; // sum of tip_amount on QR payments; payment.amount excludes tip
+};
+
+type AdjPay = {
+  payment_id: string; bill_id: string; table_code: string;
+  amount: number; tip_amount: number;
+  method: "cash" | "qr" | "card"; paid_at: string;
 };
 
 function getQrGrossReceived(r: ReportData) {
@@ -102,6 +110,12 @@ function Reports() {
   const [pendingZ, setPendingZ] = useState(false);
   const [xLoading, setXLoading] = useState(false);
 
+  // Scenario 2: Z-report payment type adjustment
+  const [adjDlg, setAdjDlg] = useState(false);
+  const [adjPays, setAdjPays] = useState<AdjPay[]>([]);
+  const [adjChanges, setAdjChanges] = useState<Record<string, "cash" | "qr" | "card">>({});
+  const [adjLoading, setAdjLoading] = useState(false);
+
   useEffect(() => {
     supabase.from("shifts").select("*").eq("status", "open").maybeSingle().then(({ data }) => {
       setShift((data as Shift) ?? null);
@@ -177,6 +191,89 @@ function Reports() {
     toast.success("Z report saved · next sale will start a new shift");
   };
 
+  const openAdj = async () => {
+    if (!shift) return;
+    setAdjLoading(true);
+    try {
+      // Fetch paid bills for this shift
+      const { data: bills } = await supabase
+        .from("bills").select("id,total,paid_at,order_id")
+        .eq("shift_id", shift.id).eq("status", "paid").order("paid_at");
+      if (!bills?.length) { toast.error("No paid bills this shift"); return; }
+
+      const billIds = bills.map((b) => b.id);
+      const orderIds = bills.map((b) => b.order_id).filter(Boolean) as string[];
+
+      // Resolve table codes
+      const { data: orders } = await supabase.from("orders").select("id,table_id").in("id", orderIds);
+      const tableIds = [...new Set((orders ?? []).map((o) => o.table_id).filter(Boolean))] as string[];
+      const { data: tables } = tableIds.length
+        ? await supabase.from("restaurant_tables").select("id,code").in("id", tableIds)
+        : { data: [] as { id: string; code: string }[] };
+
+      const tableMap = new Map((tables ?? []).map((t) => [t.id, t.code]));
+      const orderMap = new Map((orders ?? []).map((o) => [o.id, o.table_id as string]));
+      const billOrderMap = new Map(bills.map((b) => [b.id, b.order_id as string]));
+
+      // Fetch payments for those bills
+      const { data: pays } = await supabase
+        .from("payments").select("id,bill_id,method,amount,tip_amount,created_at")
+        .in("bill_id", billIds).order("created_at");
+
+      const list: AdjPay[] = (pays ?? []).map((p) => {
+        const bill = bills.find((b) => b.id === p.bill_id);
+        const orderId = billOrderMap.get(p.bill_id);
+        const tableId = orderId ? orderMap.get(orderId) : undefined;
+        const tableCode = tableId ? (tableMap.get(tableId) ?? "—") : "—";
+        return {
+          payment_id: p.id, bill_id: p.bill_id, table_code: tableCode,
+          amount: Number(p.amount), tip_amount: Number(p.tip_amount ?? 0),
+          method: p.method as "cash" | "qr" | "card",
+          paid_at: bill?.paid_at ?? (p.created_at as string),
+        };
+      });
+
+      setAdjPays(list);
+      setAdjChanges({});
+      setAdjDlg(true);
+    } catch {
+      toast.error("Failed to load payments");
+    } finally {
+      setAdjLoading(false);
+    }
+  };
+
+  const applyAdj = async () => {
+    if (!staff) return;
+    const changed = adjPays.filter((p) => adjChanges[p.payment_id] && adjChanges[p.payment_id] !== p.method);
+    if (!changed.length) { setAdjDlg(false); return; }
+    for (const p of changed) {
+      await supabase.from("payments").update({ method: adjChanges[p.payment_id] }).eq("id", p.payment_id);
+      await supabase.from("payment_corrections").insert({
+        payment_id: p.payment_id, bill_id: p.bill_id,
+        corrected_by: staff.id, old_method: p.method,
+        new_method: adjChanges[p.payment_id], reason: "Z Report adjustment",
+      });
+    }
+    toast.success(`${changed.length} payment${changed.length > 1 ? "s" : ""} corrected`);
+    setAdjDlg(false);
+    // Refresh report data with corrected payment methods
+    if (shift) { const updated = await buildReport(shift); setReport(updated); }
+  };
+
+  const adjSummary = useMemo(() => {
+    if (!adjPays.length) return null;
+    const before: Record<string, number> = { cash: 0, qr: 0, card: 0 };
+    const after: Record<string, number> = { cash: 0, qr: 0, card: 0 };
+    for (const p of adjPays) {
+      before[p.method] = (before[p.method] ?? 0) + p.amount;
+      const m = adjChanges[p.payment_id] ?? p.method;
+      after[m] = (after[m] ?? 0) + p.amount;
+    }
+    const changeCount = adjPays.filter((p) => adjChanges[p.payment_id] && adjChanges[p.payment_id] !== p.method).length;
+    return { before, after, changeCount };
+  }, [adjPays, adjChanges]);
+
   return (
     <div className="p-6 space-y-6">
       <h1 className="text-2xl font-bold">{t("nav_reports")}</h1>
@@ -236,6 +333,11 @@ function Reports() {
           {report && (
             <div className="space-y-4">
               <ReportCard r={report} />
+              <Button variant="outline" className="w-full border-amber-400 text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
+                onClick={openAdj} disabled={adjLoading}>
+                <PencilLine className="h-4 w-4 mr-2" />
+                {adjLoading ? "Loading…" : "Adjust Payment Types"}
+              </Button>
               <div className="space-y-3">
                 <p className="text-sm font-semibold">{t("cash_count")}</p>
                 <DenomGrid cashCount={cashCount} onChange={setCashCount} />
@@ -250,6 +352,80 @@ function Reports() {
               submitZ();
             }}>
               Print &amp; Close shift
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Adjust Payment Types dialog (Scenario 2) */}
+      <Dialog open={adjDlg} onOpenChange={setAdjDlg}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <PencilLine className="h-4 w-4" />Adjust Payment Types
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground">Admin / Manager only · all changes are logged for audit · totals update after Apply</p>
+
+          {/* Payment rows */}
+          <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+            {adjPays.map((p) => {
+              const next = adjChanges[p.payment_id] ?? p.method;
+              const changed = next !== p.method;
+              return (
+                <div key={p.payment_id}
+                  className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-sm ${changed ? "border-amber-400 bg-amber-50 dark:bg-amber-950/30" : "bg-card"}`}>
+                  <span className="w-10 shrink-0 text-muted-foreground text-xs">
+                    {new Date(p.paid_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                  <span className="w-8 shrink-0 font-medium text-xs text-muted-foreground">{p.table_code}</span>
+                  <span className="w-20 shrink-0 font-semibold tabular-nums">{thb(p.amount)}</span>
+                  {p.tip_amount > 0 && <span className="text-xs text-muted-foreground shrink-0">+tip {thb(p.tip_amount)}</span>}
+                  <Select value={next} onValueChange={(v) => setAdjChanges({ ...adjChanges, [p.payment_id]: v as "cash" | "qr" | "card" })}>
+                    <SelectTrigger className="flex-1 h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="qr">QR Transfer</SelectItem>
+                      <SelectItem value="card">Credit card</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {changed && (
+                    <span className="text-xs text-amber-600 shrink-0">{p.method} → {next}</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Before / After summary */}
+          {adjSummary && (
+            <div className="rounded-lg border bg-muted/40 p-3 text-sm space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Before / After</p>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                {(["cash", "qr", "card"] as const).map((m) => {
+                  const bef = adjSummary.before[m] ?? 0;
+                  const aft = adjSummary.after[m] ?? 0;
+                  const diff = aft - bef;
+                  return (
+                    <div key={m} className={`rounded p-2 ${diff !== 0 ? "bg-amber-100 dark:bg-amber-900/40" : "bg-background"}`}>
+                      <p className="text-xs text-muted-foreground capitalize">{m === "qr" ? "QR Transfer" : m === "card" ? "Credit card" : "Cash"}</p>
+                      <p className="font-semibold tabular-nums">{thb(aft)}</p>
+                      {diff !== 0 && (
+                        <p className={`text-xs tabular-nums font-medium ${diff > 0 ? "text-green-600" : "text-red-500"}`}>
+                          {diff > 0 ? "+" : ""}{thb(diff)}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAdjDlg(false)}>{t("cancel")}</Button>
+            <Button onClick={applyAdj} disabled={!adjSummary?.changeCount}>
+              Apply {adjSummary?.changeCount ? `${adjSummary.changeCount} correction${adjSummary.changeCount > 1 ? "s" : ""}` : ""}
             </Button>
           </DialogFooter>
         </DialogContent>
