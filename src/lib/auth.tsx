@@ -27,18 +27,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [staff, setStaffState] = useState<ActiveStaff | null>(null);
 
   useEffect(() => {
+    let mounted = true;
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
+      if (!mounted) return;
       setSession(s);
-    });
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
       setLoading(false);
     });
+
+    const initSession = async () => {
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        if (!mounted) return;
+        setSession(data.session ?? null);
+      } catch (error) {
+        console.error("Failed to initialize auth session", error);
+        if (!mounted) return;
+        setSession(null);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    void initSession();
+
     try {
-      const raw = localStorage.getItem(STAFF_KEY);
+      const raw = typeof window !== "undefined" ? localStorage.getItem(STAFF_KEY) : null;
       if (raw) setStaffState(JSON.parse(raw));
     } catch {}
-    return () => subscription.unsubscribe();
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const setStaff = (s: ActiveStaff | null) => {
