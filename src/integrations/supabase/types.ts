@@ -333,6 +333,7 @@ export type Database = {
           id: string
           method: Database["public"]["Enums"]["payment_method"]
           reference: string | null
+          tip_amount: number
         }
         Insert: {
           amount: number
@@ -344,6 +345,7 @@ export type Database = {
           id?: string
           method: Database["public"]["Enums"]["payment_method"]
           reference?: string | null
+          tip_amount?: number
         }
         Update: {
           amount?: number
@@ -355,6 +357,7 @@ export type Database = {
           id?: string
           method?: Database["public"]["Enums"]["payment_method"]
           reference?: string | null
+          tip_amount?: number
         }
         Relationships: [
           {
