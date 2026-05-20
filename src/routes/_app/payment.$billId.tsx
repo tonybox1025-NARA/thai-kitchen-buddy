@@ -23,7 +23,7 @@ type Bill = {
   vat_amount: number; total: number; status: string;
 };
 type Item = { id: string; name_th: string; name_en: string; qty: number; unit_price: number; status: string };
-type Payment = { id: string; method: "qr" | "cash" | "card"; amount: number; cash_received: number | null; change_due: number | null };
+type Payment = { id: string; method: "qr" | "cash" | "card"; amount: number; cash_received: number | null; change_due: number | null; tip_amount: number };
 
 const DENOMS = [1000, 500, 100, 50, 20, 10, 5, 1];
 
@@ -42,6 +42,10 @@ function PaymentPage() {
   const [tableCode, setTableCode] = useState("");
   const [restName, setRestName] = useState("");
   const [settingsVatMode, setSettingsVatMode] = useState<"inclusive" | "exclusive">("inclusive");
+
+  // QR payment state
+  const [qrAmt, setQrAmt] = useState(0);
+  const [qrTip, setQrTip] = useState(0);
 
   // Cash dialog
   const [cashOpen, setCashOpen] = useState(false);
@@ -110,6 +114,9 @@ function PaymentPage() {
   };
 
   useEffect(() => { persistBill(); /* eslint-disable-next-line */ }, [discAmt, discPct, memberDisc, bill?.id, subtotal]);
+
+  // Keep QR amount in sync with remaining when discounts / payments change
+  useEffect(() => { setQrAmt(remaining); }, [remaining]);
 
   const addPayment = async (method: Payment["method"], amount: number, extras: Record<string, unknown> = {}) => {
     if (!bill || amount <= 0) return;
@@ -215,7 +222,10 @@ function PaymentPage() {
             <CardHeader><CardTitle className="text-base">Payments</CardTitle></CardHeader>
             <CardContent className="space-y-1 text-sm">
               {payments.map((p) => (
-                <Row key={p.id} label={`${p.method.toUpperCase()}${p.cash_received ? ` (rcv ${thb(p.cash_received)}, chg ${thb(p.change_due ?? 0)})` : ""}`} value={thb(p.amount)} />
+                <div key={p.id}>
+                  <Row label={`${p.method.toUpperCase()}${p.cash_received ? ` (rcv ${thb(p.cash_received)}, chg ${thb(p.change_due ?? 0)})` : ""}`} value={thb(p.amount)} />
+                  {p.tip_amount > 0 && <Row label="  ↳ Tip (cash payout)" value={thb(p.tip_amount)} muted />}
+                </div>
               ))}
               <Row label="Paid" value={thb(paid)} />
               <Row label="Remaining" value={thb(remaining)} />
@@ -255,11 +265,25 @@ function PaymentPage() {
                 </Button>
               </TabsContent>
               <TabsContent value="qr" className="pt-3 space-y-2">
-                <Input id="qr-amt" type="number" defaultValue={remaining} step="0.01" />
-                <Button className="w-full" size="lg" disabled={remaining <= 0} onClick={() => {
-                  const v = Number((document.getElementById("qr-amt") as HTMLInputElement).value);
-                  addPayment("qr", v);
-                }}>{t("qr_transfer")}</Button>
+                <div>
+                  <Label className="text-xs">{t("amount")}</Label>
+                  <Input type="number" min={0} step="0.01" value={qrAmt} onChange={(e) => setQrAmt(Math.max(0, Number(e.target.value)))} />
+                </div>
+                <div>
+                  <Label className="text-xs">Tip (optional)</Label>
+                  <Input type="number" min={0} step="0.01" value={qrTip} onChange={(e) => setQrTip(Math.max(0, Number(e.target.value)))} placeholder="0.00" />
+                  <p className="text-xs text-muted-foreground mt-0.5">Tips collected via QR are paid out to staff in cash.</p>
+                </div>
+                {qrTip > 0 && (
+                  <div className="text-sm flex justify-between bg-muted rounded px-2 py-1.5">
+                    <span>Total QR charge</span>
+                    <span className="font-semibold">{thb(qrAmt + qrTip)}</span>
+                  </div>
+                )}
+                <Button className="w-full" size="lg" disabled={remaining <= 0 || qrAmt <= 0} onClick={() => {
+                  addPayment("qr", qrAmt, { tip_amount: qrTip });
+                  setQrTip(0);
+                }}>{t("qr_transfer")}{qrTip > 0 ? ` + Tip ${thb(qrTip)}` : ""}</Button>
               </TabsContent>
               <TabsContent value="card" className="pt-3 space-y-2">
                 <Input id="card-amt" type="number" defaultValue={remaining} step="0.01" />

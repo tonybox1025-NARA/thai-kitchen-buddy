@@ -19,11 +19,13 @@ type ReportData = {
   gross: number; net: number; discount: number; member: number;
   voids: number; refunds: number; byMethod: Record<string, number>;
   openingFloat: number; bills: number;
+  tipTotal: number; // sum of tip_amount on QR payments — collected via QR, paid out in cash
 };
 
 function calcCashSummary(cashCount: Record<number, number>, r: ReportData) {
   const cashTotal = Object.entries(cashCount).reduce((s, [d, c]) => s + Number(d) * (c || 0), 0);
-  const expected = r.openingFloat + r.byMethod.cash;
+  // Tips are received via QR but paid out from the cash drawer, so subtract from expected cash.
+  const expected = r.openingFloat + r.byMethod.cash - r.tipTotal;
   return { cashTotal, expected, overShort: cashTotal - expected };
 }
 
@@ -54,7 +56,10 @@ ${row("Net sales", thb(r.net), true)}
 </table>
 <h2>Payments</h2><table>
 ${row("Cash", thb(r.byMethod.cash))}
-${row("QR Transfer", thb(r.byMethod.qr))}
+${row("QR revenue", thb(r.byMethod.qr))}
+${r.tipTotal > 0 ? row("  Tips collected (QR)", thb(r.tipTotal)) : ""}
+${r.tipTotal > 0 ? row("  Tips paid out (cash)", `- ${thb(r.tipTotal)}`) : ""}
+${r.tipTotal > 0 ? row("  Net QR sales", thb(r.byMethod.qr - r.tipTotal), true) : ""}
 ${row("Credit card", thb(r.byMethod.card))}
 </table>
 <h2>Other</h2><table>
@@ -102,8 +107,8 @@ function Reports() {
     const { data: bills } = await supabase.from("bills").select("id,total,subtotal,discount_amount,member_discount_amount").eq("shift_id", s.id).eq("status", "paid");
     const billIds = (bills ?? []).map((b) => b.id);
     const { data: pays } = billIds.length
-      ? await supabase.from("payments").select("method,amount").in("bill_id", billIds)
-      : { data: [] as { method: string; amount: number }[] };
+      ? await supabase.from("payments").select("method,amount,tip_amount").in("bill_id", billIds)
+      : { data: [] as { method: string; amount: number; tip_amount: number }[] };
     const { data: voids } = await supabase.from("voids").select("amount").eq("shift_id", s.id);
     const { data: refunds } = await supabase.from("refunds").select("amount").eq("shift_id", s.id);
     const gross = (bills ?? []).reduce((x, b) => x + Number(b.subtotal), 0);
@@ -112,11 +117,13 @@ function Reports() {
     const member = (bills ?? []).reduce((x, b) => x + Number(b.member_discount_amount), 0);
     const byMethod: Record<string, number> = { cash: 0, qr: 0, card: 0 };
     (pays ?? []).forEach((p) => { byMethod[p.method] = (byMethod[p.method] ?? 0) + Number(p.amount); });
+    const tipTotal = (pays ?? []).filter((p) => p.method === "qr").reduce((s, p) => s + Number(p.tip_amount ?? 0), 0);
     return {
       gross, net, discount, member,
       voids: (voids ?? []).reduce((x, v) => x + Number(v.amount), 0),
       refunds: (refunds ?? []).reduce((x, v) => x + Number(v.amount), 0),
       byMethod, openingFloat: Number(s.opening_float), bills: (bills ?? []).length,
+      tipTotal,
     };
   };
 
@@ -152,7 +159,7 @@ function Reports() {
   const doZ = async () => {
     if (!shift || !report) return;
     const cashTotal = Object.entries(cashCount).reduce((s, [d, c]) => s + Number(d) * (c || 0), 0);
-    const expected = report.openingFloat + report.byMethod.cash;
+    const expected = report.openingFloat + report.byMethod.cash - report.tipTotal;
     const overShort = cashTotal - expected;
     await supabase.from("shifts").update({
       closed_at: new Date().toISOString(), closed_by: staff?.id, status: "closed",
@@ -303,7 +310,12 @@ function ReportCard({ r }: { r: ReportData }) {
         <Row label="Net sales" value={thb(r.net)} bold />
         <div className="border-t pt-2 mt-2" />
         <Row label="Cash" value={thb(r.byMethod.cash)} />
-        <Row label="QR Transfer" value={thb(r.byMethod.qr)} />
+        <Row label="QR revenue" value={thb(r.byMethod.qr)} />
+        {r.tipTotal > 0 && <>
+          <Row label="  ↳ Tips collected (QR)" value={thb(r.tipTotal)} />
+          <Row label="  ↳ Tips paid out (cash)" value={`- ${thb(r.tipTotal)}`} />
+          <Row label="  ↳ Net QR sales" value={thb(r.byMethod.qr - r.tipTotal)} bold />
+        </>}
         <Row label="Credit card" value={thb(r.byMethod.card)} />
         <div className="border-t pt-2 mt-2" />
         <Row label="Voids total" value={thb(r.voids)} />
