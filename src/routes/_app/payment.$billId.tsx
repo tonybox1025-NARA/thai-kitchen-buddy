@@ -185,13 +185,7 @@ function PaymentPage() {
 
   const paidStatus = bill?.status === "paid" || bill?.status === "partial_refund";
 
-  // Within 10 minutes of payment — correction window
-  const withinTenMin = bill?.paid_at
-    ? Date.now() - new Date(bill.paid_at).getTime() < 10 * 60 * 1000
-    : false;
-  const canCorrect = !!paidStatus &&
-    (staff?.role === "admin" || staff?.role === "manager") &&
-    withinTenMin;
+  const canCorrect = !!paidStatus && (staff?.role === "admin" || staff?.role === "manager");
 
   const openCorr = () => {
     if (staff?.role === "manager") { setPendingAction("correction"); setManagerOpen(true); return; }
@@ -405,7 +399,7 @@ function PaymentPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><PencilLine className="h-4 w-4" />Edit Payment Type</DialogTitle>
           </DialogHeader>
-          <p className="text-xs text-muted-foreground">Admin / Manager only · within 10 min of payment · logged for audit</p>
+          <p className="text-xs text-muted-foreground">Admin / Manager only · logged for audit</p>
           <div className="space-y-3 pt-1">
             {payments.map((p) => {
               const next = corrChanges[p.id] ?? p.method;
