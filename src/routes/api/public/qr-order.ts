@@ -4,8 +4,15 @@ import type { Database } from "@/integrations/supabase/types";
 import { z } from "zod";
 
 function createPublicServerClient() {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_PUBLISHABLE_KEY;
+  const url =
+    process.env.SUPABASE_URL ??
+    process.env.VITE_SUPABASE_URL;
+  // Service role bypasses RLS — required for server-side order writes.
+  // Falls back to publishable key only if service role is absent (needs anon policies).
+  const key =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ??
+    process.env.SUPABASE_PUBLISHABLE_KEY ??
+    process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
   if (!url || !key) return null;
 
@@ -46,8 +53,9 @@ export const Route = createFileRoute("/api/public/qr-order")({
         if (!parsed.success) return Response.json({ error: parsed.error.flatten() }, { status: 400 });
         const { table_code, guests, items } = parsed.data;
 
-        const { data: table } = await supabase
+        const { data: table, error: tableErr } = await supabase
           .from("restaurant_tables").select("id,status,guests").eq("code", table_code).maybeSingle();
+        if (tableErr) return new Response(`DB error: ${tableErr.message}`, { status: 500 });
         if (!table) return new Response("Table not found", { status: 404 });
 
         // Validate menu items + fetch authoritative prices/names
