@@ -24,8 +24,8 @@ type ReportData = {
 
 function calcCashSummary(cashCount: Record<number, number>, r: ReportData) {
   const cashTotal = Object.entries(cashCount).reduce((s, [d, c]) => s + Number(d) * (c || 0), 0);
-  // Tips are received via QR but paid out from the cash drawer, so subtract from expected cash.
-  const expected = r.openingFloat + r.byMethod.cash - r.tipTotal;
+  // Tips are collected via QR and paid out from QR settlement — unrelated to the cash drawer.
+  const expected = r.openingFloat + r.byMethod.cash;
   return { cashTotal, expected, overShort: cashTotal - expected };
 }
 
@@ -159,7 +159,7 @@ function Reports() {
   const doZ = async () => {
     if (!shift || !report) return;
     const cashTotal = Object.entries(cashCount).reduce((s, [d, c]) => s + Number(d) * (c || 0), 0);
-    const expected = report.openingFloat + report.byMethod.cash - report.tipTotal;
+    const expected = report.openingFloat + report.byMethod.cash;
     const overShort = cashTotal - expected;
     await supabase.from("shifts").update({
       closed_at: new Date().toISOString(), closed_by: staff?.id, status: "closed",
