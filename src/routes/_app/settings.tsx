@@ -20,7 +20,7 @@ type RTable = { id: string; code: string; capacity: number };
 
 type Menu = { id: string; category_id: string | null; name_th: string; name_en: string; name_my: string; price: number; available: boolean };
 type Category = { id: string; name_th: string; name_en: string; name_my: string };
-type Settings = { restaurant_name: string; vat_mode: "inclusive" | "exclusive"; vat_rate: number; printer_counter_ip: string | null; printer_kitchen_ip: string | null };
+type Settings = { restaurant_name: string; vat_mode: "inclusive" | "exclusive"; vat_rate: number; printer_counter_ip: string | null; printer_kitchen_ip: string | null; starting_cash: number };
 type Staff = { id: string; name: string; role: "admin" | "manager" | "staff"; active: boolean };
 
 function SettingsPage() {
@@ -70,6 +70,11 @@ function GeneralTab() {
           </Select>
         </div>
         <div><Label>{t("vat_rate")}</Label><Input type="number" step="0.01" value={s.vat_rate} onChange={(e) => setS({ ...s, vat_rate: Number(e.target.value) })} /></div>
+        <div>
+          <Label>{t("starting_cash")}</Label>
+          <Input type="number" step="1" value={s.starting_cash ?? 0} onChange={(e) => setS({ ...s, starting_cash: Number(e.target.value) })} />
+          <p className="text-xs text-muted-foreground mt-1">{t("starting_cash_help")}</p>
+        </div>
         <Button onClick={save}>{t("save")}</Button>
       </CardContent>
     </Card>

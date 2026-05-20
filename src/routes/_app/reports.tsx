@@ -165,10 +165,8 @@ function Reports() {
       closed_at: new Date().toISOString(), closed_by: staff?.id, status: "closed",
       cash_count: cashCount, totals: { ...report, cashTotal, expected, overShort },
     }).eq("id", shift.id);
-    const next = new Date(); next.setDate(next.getDate() + 1);
-    await supabase.from("settings").update({ current_business_day: next.toISOString().slice(0, 10) }).eq("id", 1);
     setZDlg(false); setShift(null); setReport(null);
-    toast.success("Z report saved · day closed");
+    toast.success("Z report saved · next sale will start a new shift");
   };
 
   return (
@@ -179,7 +177,7 @@ function Reports() {
         <Card>
           <CardContent className="py-12 text-center space-y-4">
             <p className="text-muted-foreground">{t("no_open_shift")}</p>
-            <p className="text-sm text-muted-foreground">Open a shift from the Shift button above</p>
+            <p className="text-sm text-muted-foreground">A new shift starts automatically with the next sale, using the configured starting cash.</p>
           </CardContent>
         </Card>
       ) : (

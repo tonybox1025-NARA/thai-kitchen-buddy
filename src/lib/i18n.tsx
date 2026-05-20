@@ -81,6 +81,8 @@ const dict: Dict = {
   close_table: { th: "ปิดโต๊ะ", en: "Close table" },
   move_table: { th: "ย้ายโต๊ะ", en: "Move table" },
   opening_float: { th: "เงินทอนต้นกะ", en: "Opening float" },
+  starting_cash: { th: "เงินสดตั้งต้น", en: "Starting cash" },
+  starting_cash_help: { th: "ยอดนี้จะถูกใช้เป็นเงินทอนต้นกะอัตโนมัติเมื่อเปิดกะใหม่", en: "Applied automatically as opening float when a new shift starts." },
   x_report: { th: "รายงาน X (กลางกะ)", en: "X Report (mid-shift)" },
   z_report: { th: "รายงาน Z (ปิดวัน)", en: "Z Report (end of day)" },
   no_open_shift: { th: "ยังไม่มีกะที่เปิดอยู่", en: "No open shift" },

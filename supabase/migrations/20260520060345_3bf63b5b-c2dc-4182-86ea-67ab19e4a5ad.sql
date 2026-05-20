@@ -1,0 +1,1 @@
+ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS starting_cash numeric NOT NULL DEFAULT 0;

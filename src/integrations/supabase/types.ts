@@ -501,6 +501,7 @@ export type Database = {
           printer_counter_ip: string | null
           printer_kitchen_ip: string | null
           restaurant_name: string
+          starting_cash: number
           updated_at: string
           vat_mode: Database["public"]["Enums"]["vat_mode"]
           vat_rate: number
@@ -511,6 +512,7 @@ export type Database = {
           printer_counter_ip?: string | null
           printer_kitchen_ip?: string | null
           restaurant_name?: string
+          starting_cash?: number
           updated_at?: string
           vat_mode?: Database["public"]["Enums"]["vat_mode"]
           vat_rate?: number
@@ -521,6 +523,7 @@ export type Database = {
           printer_counter_ip?: string | null
           printer_kitchen_ip?: string | null
           restaurant_name?: string
+          starting_cash?: number
           updated_at?: string
           vat_mode?: Database["public"]["Enums"]["vat_mode"]
           vat_rate?: number
