@@ -259,7 +259,9 @@ export type Database = {
       }
       orders: {
         Row: {
+          cancel_reason: string | null
           closed_at: string | null
+          closed_by: string | null
           guests: number
           id: string
           opened_at: string
@@ -270,7 +272,9 @@ export type Database = {
           table_id: string | null
         }
         Insert: {
+          cancel_reason?: string | null
           closed_at?: string | null
+          closed_by?: string | null
           guests?: number
           id?: string
           opened_at?: string
@@ -281,7 +285,9 @@ export type Database = {
           table_id?: string | null
         }
         Update: {
+          cancel_reason?: string | null
           closed_at?: string | null
+          closed_by?: string | null
           guests?: number
           id?: string
           opened_at?: string

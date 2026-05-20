@@ -21,6 +21,13 @@ const VOID_PRESETS = [
   { key: "void_reason_other" as const },
 ] satisfies { key: "void_reason_changed_mind" | "void_reason_wrong_order" | "void_reason_other" }[];
 
+const CLOSE_PRESETS = [
+  { key: "customer_left", th: "ลูกค้าออกไปแล้ว", en: "Customer left" },
+  { key: "wrong_table",   th: "สั่งผิดโต๊ะ",     en: "Wrong table"    },
+  { key: "test_order",    th: "ออเดอร์ทดสอบ",    en: "Test order"     },
+  { key: "close_other",   th: "อื่นๆ",            en: "Other"          },
+];
+
 type Menu = { id: string; category_id: string | null; name_th: string; name_en: string; name_my: string; price: number; available: boolean };
 type Category = { id: string; name_th: string; name_en: string; name_my: string };
 type Item = {
@@ -49,6 +56,8 @@ function OrderPage() {
   const [tableCode, setTableCode] = useState<string>("");
   const [tableId, setTableId] = useState<string>("");
   const [closeTableOpen, setCloseTableOpen] = useState(false);
+  const [closeReason, setCloseReason] = useState("");
+  const [closePreset, setClosePreset] = useState("");
   const [moveTableOpen, setMoveTableOpen] = useState(false);
   const [availableTables, setAvailableTables] = useState<{ id: string; code: string }[]>([]);
 
@@ -195,15 +204,45 @@ function OrderPage() {
 
   const doCloseTable = async () => {
     if (!tableId) return;
-    const liveIds = items.filter((i) => i.status !== "voided").map((i) => i.id);
-    if (liveIds.length > 0) {
+    const unpaid = items.filter((i) => i.status !== "voided");
+    // If there are unpaid items, a reason must be selected
+    if (unpaid.length > 0 && !closeReason.trim()) return;
+
+    const reason = closeReason.trim() || (lang === "th" ? "ปิดโต๊ะ" : "Table closed");
+    const now = new Date().toISOString();
+
+    // Fetch shift_id so voids are attributed to this shift
+    const { data: ord } = await supabase.from("orders").select("shift_id").eq("id", orderId).single();
+    const shiftId = ord?.shift_id;
+
+    if (unpaid.length > 0) {
+      const unpaidIds = unpaid.map((i) => i.id);
       await supabase.from("order_items").update({
-        status: "voided", void_reason: "Table closed", voided_by: staff?.id, voided_at: new Date().toISOString(),
-      }).in("id", liveIds);
+        status: "voided", void_reason: reason, voided_by: staff?.id, voided_at: now,
+      }).in("id", unpaidIds);
+
+      // Insert void records — these flow into Z-report "Voids total"
+      if (shiftId) {
+        await supabase.from("voids").insert(
+          unpaid.map((i) => ({
+            order_item_id: i.id,
+            reason,
+            voided_by: staff?.id,
+            amount: i.qty * Number(i.unit_price),
+            shift_id: shiftId,
+          }))
+        );
+      }
     }
-    await supabase.from("orders").update({ status: "cancelled", closed_at: new Date().toISOString() }).eq("id", orderId);
+
+    await supabase.from("orders").update({
+      status: "cancelled", closed_at: now, cancel_reason: reason, closed_by: staff?.id,
+    }).eq("id", orderId);
     await supabase.from("restaurant_tables").update({ status: "available", guests: 0, has_qr_alert: false }).eq("id", tableId);
+
     setCloseTableOpen(false);
+    setCloseReason("");
+    setClosePreset("");
     toast.success(lang === "th" ? "ปิดโต๊ะแล้ว" : "Table closed");
     nav({ to: "/pos" });
   };
@@ -407,22 +446,69 @@ function OrderPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Close table confirmation dialog */}
-      <Dialog open={closeTableOpen} onOpenChange={setCloseTableOpen}>
+      {/* Close table dialog — reason required when there are unpaid items */}
+      <Dialog open={closeTableOpen} onOpenChange={(o) => { if (!o) { setCloseReason(""); setClosePreset(""); } setCloseTableOpen(o); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-destructive" />{t("close_table")}
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              {t("close_table")} — {tableCode}
             </DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            {lang === "th"
-              ? `ยืนยันปิดโต๊ะ ${tableCode}? รายการทั้งหมดจะถูกยกเลิกและโต๊ะจะว่าง`
-              : `Close table ${tableCode}? All items will be voided and the table freed.`}
-          </p>
+
+          {liveItems.length > 0 ? (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                {lang === "th"
+                  ? `มีรายการที่ยังไม่ชำระ ${liveItems.length} รายการ กรุณาระบุเหตุผลที่ปิดโต๊ะ`
+                  : `${liveItems.length} unpaid item${liveItems.length > 1 ? "s" : ""}. Please select a reason.`}
+              </p>
+              <div className="flex flex-col gap-2">
+                {CLOSE_PRESETS.map((p) => (
+                  <Button
+                    key={p.key}
+                    type="button"
+                    variant={closePreset === p.key ? "default" : "outline"}
+                    size="sm"
+                    className="justify-start"
+                    onClick={() => {
+                      setClosePreset(p.key);
+                      if (p.key !== "close_other") setCloseReason(lang === "th" ? p.th : p.en);
+                      else setCloseReason("");
+                    }}
+                  >
+                    {lang === "th" ? p.th : p.en}
+                  </Button>
+                ))}
+              </div>
+              {closePreset === "close_other" && (
+                <Textarea
+                  value={closeReason}
+                  onChange={(e) => setCloseReason(e.target.value)}
+                  placeholder={lang === "th" ? "ระบุเหตุผล…" : "Enter reason…"}
+                  className="mt-1"
+                />
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {lang === "th"
+                ? `ยืนยันปิดโต๊ะ ${tableCode}? โต๊ะจะว่างทันที`
+                : `Close table ${tableCode}? The table will be freed immediately.`}
+            </p>
+          )}
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCloseTableOpen(false)}>{t("cancel")}</Button>
-            <Button variant="destructive" onClick={doCloseTable}>{t("confirm")}</Button>
+            <Button variant="outline" onClick={() => { setCloseReason(""); setClosePreset(""); setCloseTableOpen(false); }}>
+              {t("cancel")}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={doCloseTable}
+              disabled={liveItems.length > 0 && !closeReason.trim()}
+            >
+              {t("confirm")}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

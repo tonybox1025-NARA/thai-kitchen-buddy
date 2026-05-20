@@ -18,7 +18,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import type { DateRange } from "react-day-picker";
-import { PencilLine, ArrowRight, CalendarIcon } from "lucide-react";
+import { PencilLine, ArrowRight, CalendarIcon, XCircle } from "lucide-react";
 
 export const Route = createFileRoute("/_app/reports")({ component: Reports });
 
@@ -30,6 +30,7 @@ type ReportData = {
   voids: number; refunds: number; byMethod: Record<string, number>;
   openingFloat: number; bills: number;
   tipTotal: number; // sum of tip_amount on QR payments; payment.amount excludes tip
+  cancelledCount: number; // number of cancelled (table-closed) orders this shift
 };
 
 type AdjPay = {
@@ -93,9 +94,10 @@ ${r.tipTotal > 0 ? row("  Net QR sales", thb(getNetQrSales(r)), true) : ""}
 ${row("Credit card", thb(r.byMethod.card))}
 </table>
 <h2>Other</h2><table>
-${row("Voids total", thb(r.voids))}
+${row("Voids &amp; Cancellations", thb(r.voids))}
 ${row("Refunds total", thb(r.refunds))}
 ${row("Bills", String(r.bills))}
+${r.cancelledCount > 0 ? row("Cancelled orders", String(r.cancelledCount)) : ""}
 </table>
 <h2>Cash count</h2><table>${denomRows}</table>
 <h2>Cash drawer</h2><table>
@@ -142,11 +144,14 @@ function Reports() {
   const buildReport = async (s: Shift): Promise<ReportData> => {
     const { data: bills } = await supabase.from("bills").select("id,total,subtotal,discount_amount,member_discount_amount").eq("shift_id", s.id).eq("status", "paid");
     const billIds = (bills ?? []).map((b) => b.id);
-    const { data: pays } = billIds.length
-      ? await supabase.from("payments").select("method,amount,tip_amount").in("bill_id", billIds)
-      : { data: [] as { method: string; amount: number; tip_amount: number }[] };
-    const { data: voids } = await supabase.from("voids").select("amount").eq("shift_id", s.id);
-    const { data: refunds } = await supabase.from("refunds").select("amount").eq("shift_id", s.id);
+    const [{ data: pays }, { data: voids }, { data: refunds }, { data: cancelledOrds }] = await Promise.all([
+      billIds.length
+        ? supabase.from("payments").select("method,amount,tip_amount").in("bill_id", billIds)
+        : Promise.resolve({ data: [] as { method: string; amount: number; tip_amount: number }[], error: null }),
+      supabase.from("voids").select("amount").eq("shift_id", s.id),
+      supabase.from("refunds").select("amount").eq("shift_id", s.id),
+      supabase.from("orders").select("id").eq("shift_id", s.id).eq("status", "cancelled"),
+    ]);
     const gross = (bills ?? []).reduce((x, b) => x + Number(b.subtotal), 0);
     const net = (bills ?? []).reduce((x, b) => x + Number(b.total), 0);
     const discount = (bills ?? []).reduce((x, b) => x + Number(b.discount_amount), 0);
@@ -160,6 +165,7 @@ function Reports() {
       refunds: (refunds ?? []).reduce((x, v) => x + Number(v.amount), 0),
       byMethod, openingFloat: Number(s.opening_float), bills: (bills ?? []).length,
       tipTotal,
+      cancelledCount: (cancelledOrds ?? []).length,
     };
   };
 
@@ -296,9 +302,12 @@ function Reports() {
         <TabsList>
           <TabsTrigger value="shift">Shift Reports</TabsTrigger>
           <TabsTrigger value="history">Bill History</TabsTrigger>
+          {(staff?.role === "admin" || staff?.role === "manager") && (
+            <TabsTrigger value="cancelled">Cancelled Orders</TabsTrigger>
+          )}
         </TabsList>
 
-        <TabsContent value="shift" className="space-y-6 mt-4">
+        <TabsContent value="shift" className="space-y-4 mt-4">
           {!shift ? (
             <Card>
               <CardContent className="py-12 text-center space-y-4">
@@ -307,23 +316,32 @@ function Reports() {
               </CardContent>
             </Card>
           ) : (
-            <Card>
-              <CardHeader>
-                <CardTitle>{t("shift")} · {t("business_day")}: {shift.business_day}</CardTitle>
-              </CardHeader>
-              <CardContent className="flex gap-3">
-                <Button onClick={runX} variant="outline" disabled={xLoading}>
-                  {xLoading ? "Loading…" : t("x_report")}
-                </Button>
-                <Button onClick={startZ} variant="destructive">{t("z_report")}</Button>
-              </CardContent>
-            </Card>
+            <>
+              <Card>
+                <CardHeader>
+                  <CardTitle>{t("shift")} · {t("business_day")}: {shift.business_day}</CardTitle>
+                </CardHeader>
+                <CardContent className="flex gap-3">
+                  <Button onClick={runX} variant="outline" disabled={xLoading}>
+                    {xLoading ? "Loading…" : t("x_report")}
+                  </Button>
+                  <Button onClick={startZ} variant="destructive">{t("z_report")}</Button>
+                </CardContent>
+              </Card>
+              <CancelledOrdersSection shiftId={shift.id} />
+            </>
           )}
         </TabsContent>
 
         <TabsContent value="history" className="mt-4">
           <BillHistoryTab />
         </TabsContent>
+
+        {(staff?.role === "admin" || staff?.role === "manager") && (
+          <TabsContent value="cancelled" className="mt-4">
+            <CancelledOrdersTab />
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* X Report dialog */}
@@ -638,6 +656,296 @@ function BillHistoryTab() {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Shared helper: load cancelled orders for a query
+// ---------------------------------------------------------------------------
+type CancelledOrderRow = {
+  id: string;
+  cancel_reason: string | null;
+  closed_at: string | null;
+  table_code: string;
+  total: number;
+  item_count: number;
+  closed_by_name: string;
+  items: { name: string; qty: number; unit_price: number }[];
+};
+
+// ---------------------------------------------------------------------------
+// Void & Cancelled Orders — current-shift inline section
+// ---------------------------------------------------------------------------
+function CancelledOrdersSection({ shiftId }: { shiftId: string }) {
+  const [orders, setOrders] = useState<CancelledOrderRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const { data: ords } = await supabase
+          .from("orders")
+          .select("id,cancel_reason,closed_at,table_id,closed_by")
+          .eq("shift_id", shiftId)
+          .eq("status", "cancelled")
+          .order("closed_at", { ascending: false });
+
+        if (!ords?.length) { setOrders([]); return; }
+
+        const tableIds = [...new Set(ords.map((o) => o.table_id).filter(Boolean))] as string[];
+        const staffIds = [...new Set(ords.map((o) => o.closed_by).filter(Boolean))] as string[];
+
+        const [{ data: tables }, { data: staffList }, { data: items }] = await Promise.all([
+          tableIds.length
+            ? supabase.from("restaurant_tables").select("id,code").in("id", tableIds)
+            : Promise.resolve({ data: [] as { id: string; code: string }[], error: null }),
+          staffIds.length
+            ? supabase.from("staff").select("id,name").in("id", staffIds)
+            : Promise.resolve({ data: [] as { id: string; name: string }[], error: null }),
+          supabase.from("order_items").select("order_id,name_th,name_en,qty,unit_price")
+            .in("order_id", ords.map((o) => o.id)),
+        ]);
+
+        const tableMap = new Map((tables ?? []).map((t) => [t.id, t.code]));
+        const staffMap = new Map((staffList ?? []).map((s) => [s.id, s.name]));
+        const totalsMap = new Map<string, number>();
+        const itemsMap = new Map<string, { name: string; qty: number; unit_price: number }[]>();
+        for (const item of items ?? []) {
+          totalsMap.set(item.order_id, (totalsMap.get(item.order_id) ?? 0) + item.qty * Number(item.unit_price));
+          const arr = itemsMap.get(item.order_id) ?? [];
+          arr.push({ name: item.name_th || item.name_en, qty: item.qty, unit_price: Number(item.unit_price) });
+          itemsMap.set(item.order_id, arr);
+        }
+
+        setOrders(ords.map((o) => ({
+          id: o.id,
+          cancel_reason: o.cancel_reason,
+          closed_at: o.closed_at,
+          table_code: o.table_id ? (tableMap.get(o.table_id) ?? "—") : "—",
+          total: totalsMap.get(o.id) ?? 0,
+          item_count: (itemsMap.get(o.id) ?? []).length,
+          closed_by_name: o.closed_by ? (staffMap.get(o.closed_by) ?? "—") : "—",
+          items: itemsMap.get(o.id) ?? [],
+        })));
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [shiftId]);
+
+  if (loading) return <p className="text-sm text-muted-foreground py-2">Loading cancelled orders…</p>;
+  if (!orders.length) return null;
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm flex items-center gap-2 text-destructive">
+          <XCircle className="h-4 w-4" />
+          Void &amp; Cancelled Orders — this shift ({orders.length})
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-1.5 pt-0">
+        {orders.map((o) => (
+          <CancelledOrderCard key={o.id} order={o} expanded={expanded === o.id} onToggle={() => setExpanded(expanded === o.id ? null : o.id)} />
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Cancelled Orders — full tab (admin / manager only) with date filter
+// ---------------------------------------------------------------------------
+function CancelledOrdersTab() {
+  const [range, setRange] = useState<HistRange>("today");
+  const [custom, setCustom] = useState<DateRange | undefined>();
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [orders, setOrders] = useState<CancelledOrderRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  const getBounds = (): [Date, Date] | null => {
+    if (range === "custom") {
+      if (!custom?.from) return null;
+      const s = new Date(custom.from); s.setHours(0, 0, 0, 0);
+      const e = new Date(custom.to ?? custom.from); e.setHours(23, 59, 59, 999);
+      return [s, e];
+    }
+    return histBounds(range);
+  };
+
+  const load = async () => {
+    const bounds = getBounds();
+    if (!bounds) return;
+    setLoading(true);
+    try {
+      const [fromDt, toDt] = bounds;
+      const { data: ords } = await supabase
+        .from("orders")
+        .select("id,cancel_reason,closed_at,table_id,closed_by")
+        .eq("status", "cancelled")
+        .gte("closed_at", fromDt.toISOString())
+        .lte("closed_at", toDt.toISOString())
+        .order("closed_at", { ascending: false })
+        .limit(500);
+
+      if (!ords?.length) { setOrders([]); setLoaded(true); return; }
+
+      const tableIds = [...new Set(ords.map((o) => o.table_id).filter(Boolean))] as string[];
+      const staffIds = [...new Set(ords.map((o) => o.closed_by).filter(Boolean))] as string[];
+
+      const [{ data: tables }, { data: staffList }, { data: items }] = await Promise.all([
+        tableIds.length
+          ? supabase.from("restaurant_tables").select("id,code").in("id", tableIds)
+          : Promise.resolve({ data: [] as { id: string; code: string }[], error: null }),
+        staffIds.length
+          ? supabase.from("staff").select("id,name").in("id", staffIds)
+          : Promise.resolve({ data: [] as { id: string; name: string }[], error: null }),
+        supabase.from("order_items").select("order_id,name_th,name_en,qty,unit_price")
+          .in("order_id", ords.map((o) => o.id)),
+      ]);
+
+      const tableMap = new Map((tables ?? []).map((t) => [t.id, t.code]));
+      const staffMap = new Map((staffList ?? []).map((s) => [s.id, s.name]));
+      const totalsMap = new Map<string, number>();
+      const itemsMap = new Map<string, { name: string; qty: number; unit_price: number }[]>();
+      for (const item of items ?? []) {
+        totalsMap.set(item.order_id, (totalsMap.get(item.order_id) ?? 0) + item.qty * Number(item.unit_price));
+        const arr = itemsMap.get(item.order_id) ?? [];
+        arr.push({ name: item.name_th || item.name_en, qty: item.qty, unit_price: Number(item.unit_price) });
+        itemsMap.set(item.order_id, arr);
+      }
+
+      setOrders(ords.map((o) => ({
+        id: o.id,
+        cancel_reason: o.cancel_reason,
+        closed_at: o.closed_at,
+        table_code: o.table_id ? (tableMap.get(o.table_id) ?? "—") : "—",
+        total: totalsMap.get(o.id) ?? 0,
+        item_count: (itemsMap.get(o.id) ?? []).length,
+        closed_by_name: o.closed_by ? (staffMap.get(o.closed_by) ?? "—") : "—",
+        items: itemsMap.get(o.id) ?? [],
+      })));
+      setLoaded(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [range]);
+  useEffect(() => { if (range === "custom" && custom?.from && custom?.to) load(); /* eslint-disable-next-line */ }, [custom]);
+
+  const customLabel = custom?.from
+    ? custom.to && custom.to.getTime() !== custom.from.getTime()
+      ? `${format(custom.from, "dd MMM")} – ${format(custom.to, "dd MMM yyyy")}`
+      : format(custom.from, "dd MMM yyyy")
+    : "Custom range";
+
+  const grandTotal = orders.reduce((s, o) => s + o.total, 0);
+
+  return (
+    <div className="space-y-4">
+      {/* Date filter */}
+      <div className="flex gap-2 flex-wrap items-center">
+        {(["today", "yesterday", "week", "month"] as const).map((r) => (
+          <Button key={r} size="sm" variant={range === r ? "default" : "outline"} onClick={() => setRange(r)}>
+            {r === "today" ? "Today" : r === "yesterday" ? "Yesterday" : r === "week" ? "This week" : "This month"}
+          </Button>
+        ))}
+        <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+          <PopoverTrigger asChild>
+            <Button size="sm" variant={range === "custom" ? "default" : "outline"}
+              className={cn(!custom?.from && "text-muted-foreground")}>
+              <CalendarIcon className="h-3.5 w-3.5 mr-1" />
+              {range === "custom" ? customLabel : "Custom range"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar mode="range" selected={custom}
+              onSelect={(r) => { setCustom(r); setRange("custom"); if (r?.from && r?.to) setPickerOpen(false); }}
+              numberOfMonths={2} initialFocus className={cn("p-3 pointer-events-auto")} />
+          </PopoverContent>
+        </Popover>
+        {loaded && (
+          <span className="text-xs text-muted-foreground ml-1">
+            {orders.length} order{orders.length !== 1 ? "s" : ""}
+            {orders.length > 0 && <> · Total <span className="font-semibold text-destructive">{thb(grandTotal)}</span></>}
+          </span>
+        )}
+      </div>
+
+      {/* Orders list */}
+      {loading && <p className="text-sm text-muted-foreground py-4 text-center">Loading…</p>}
+      {loaded && !loading && (
+        orders.length === 0 ? (
+          <Card>
+            <CardContent className="py-12 text-center text-muted-foreground text-sm">
+              No cancelled orders for this period
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-1.5">
+            {orders.map((o) => (
+              <CancelledOrderCard key={o.id} order={o} expanded={expanded === o.id} onToggle={() => setExpanded(expanded === o.id ? null : o.id)} showDate />
+            ))}
+          </div>
+        )
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Shared cancelled order card (used in both section and tab)
+// ---------------------------------------------------------------------------
+function CancelledOrderCard({ order: o, expanded, onToggle, showDate }: {
+  order: CancelledOrderRow;
+  expanded: boolean;
+  onToggle: () => void;
+  showDate?: boolean;
+}) {
+  return (
+    <Card className="hover:bg-muted/20 transition-colors cursor-pointer" onClick={onToggle}>
+      <CardContent className="py-3 space-y-2">
+        {/* Summary row */}
+        <div className="flex items-center gap-3 text-sm">
+          <div className="text-xs text-muted-foreground shrink-0 w-28 tabular-nums">
+            {o.closed_at ? (
+              <>
+                {showDate && <div>{new Date(o.closed_at).toLocaleDateString()}</div>}
+                <div>{new Date(o.closed_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
+              </>
+            ) : "—"}
+          </div>
+          <span className="font-bold shrink-0 w-10">{o.table_code}</span>
+          <span className="flex-1 min-w-0 text-xs text-muted-foreground italic truncate">{o.cancel_reason || "—"}</span>
+          <span className="text-xs text-muted-foreground shrink-0 hidden sm:block">{o.closed_by_name}</span>
+          <span className="text-xs text-muted-foreground shrink-0">{o.item_count} item{o.item_count !== 1 ? "s" : ""}</span>
+          <span className="font-bold tabular-nums shrink-0 text-destructive">{thb(o.total)}</span>
+        </div>
+        {/* Expanded items */}
+        {expanded && o.items.length > 0 && (
+          <div className="border-t pt-2 space-y-1 text-xs text-muted-foreground">
+            {o.items.map((it, i) => (
+              <div key={i} className="flex justify-between">
+                <span>{it.name} <span className="opacity-70">×{it.qty}</span></span>
+                <span className="tabular-nums">{thb(it.qty * it.unit_price)}</span>
+              </div>
+            ))}
+            <div className="flex justify-between font-semibold text-foreground border-t pt-1 mt-1">
+              <span>Total</span>
+              <span className="tabular-nums text-destructive">{thb(o.total)}</span>
+            </div>
+            <div className="text-xs mt-1">
+              Cancelled by: <span className="font-medium text-foreground">{o.closed_by_name}</span>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function DenomGrid({ cashCount, onChange }: { cashCount: Record<number, number>; onChange: (c: Record<number, number>) => void }) {
   return (
     <div className="grid grid-cols-2 gap-3">
@@ -698,9 +1006,12 @@ function ReportCard({ r }: { r: ReportData }) {
         </>}
         <Row label="Credit card" value={thb(r.byMethod.card)} />
         <div className="border-t pt-2 mt-2" />
-        <Row label="Voids total" value={thb(r.voids)} />
+        <Row label="Voids & Cancellations" value={thb(r.voids)} />
         <Row label="Refunds total" value={thb(r.refunds)} />
         <Row label="Bills" value={String(r.bills)} />
+        {r.cancelledCount > 0 && (
+          <Row label="Cancelled orders" value={String(r.cancelledCount)} />
+        )}
       </CardContent>
     </Card>
   );
