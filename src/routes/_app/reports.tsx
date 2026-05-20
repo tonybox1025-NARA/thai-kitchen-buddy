@@ -19,8 +19,16 @@ type ReportData = {
   gross: number; net: number; discount: number; member: number;
   voids: number; refunds: number; byMethod: Record<string, number>;
   openingFloat: number; bills: number;
-  tipTotal: number; // sum of tip_amount on QR payments — collected via QR, paid out in cash
+  tipTotal: number; // sum of tip_amount on QR payments; payment.amount excludes tip
 };
+
+function getQrGrossReceived(r: ReportData) {
+  return r.byMethod.qr + r.tipTotal;
+}
+
+function getNetQrSales(r: ReportData) {
+  return r.byMethod.qr;
+}
 
 function calcCashSummary(cashCount: Record<number, number>, r: ReportData) {
   const cashTotal = Object.entries(cashCount).reduce((s, [d, c]) => s + Number(d) * (c || 0), 0);
@@ -56,10 +64,10 @@ ${row("Net sales", thb(r.net), true)}
 </table>
 <h2>Payments</h2><table>
 ${row("Cash", thb(r.byMethod.cash))}
-${row("QR revenue", thb(r.byMethod.qr))}
+${row("QR revenue", thb(getQrGrossReceived(r)))}
 ${r.tipTotal > 0 ? row("  Tips collected (QR)", thb(r.tipTotal)) : ""}
 ${r.tipTotal > 0 ? row("  Tips paid out (cash)", `- ${thb(r.tipTotal)}`) : ""}
-${r.tipTotal > 0 ? row("  Net QR sales", thb(r.byMethod.qr - r.tipTotal), true) : ""}
+${r.tipTotal > 0 ? row("  Net QR sales", thb(getNetQrSales(r)), true) : ""}
 ${row("Credit card", thb(r.byMethod.card))}
 </table>
 <h2>Other</h2><table>
@@ -308,11 +316,11 @@ function ReportCard({ r }: { r: ReportData }) {
         <Row label="Net sales" value={thb(r.net)} bold />
         <div className="border-t pt-2 mt-2" />
         <Row label="Cash" value={thb(r.byMethod.cash)} />
-        <Row label="QR revenue" value={thb(r.byMethod.qr)} />
+        <Row label="QR revenue" value={thb(getQrGrossReceived(r))} />
         {r.tipTotal > 0 && <>
           <Row label="  ↳ Tips collected (QR)" value={thb(r.tipTotal)} />
           <Row label="  ↳ Tips paid out (cash)" value={`- ${thb(r.tipTotal)}`} />
-          <Row label="  ↳ Net QR sales" value={thb(r.byMethod.qr - r.tipTotal)} bold />
+          <Row label="  ↳ Net QR sales" value={thb(getNetQrSales(r))} bold />
         </>}
         <Row label="Credit card" value={thb(r.byMethod.card)} />
         <div className="border-t pt-2 mt-2" />
