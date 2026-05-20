@@ -70,9 +70,18 @@ export const Route = createFileRoute("/api/public/qr-order")({
           if (!m || !m.available) return new Response(`Item unavailable: ${it.menu_id}`, { status: 400 });
         }
 
-        // Find open shift (do not auto-open from public — staff opens shifts)
-        const { data: shift } = await supabase
+        // Auto-open a shift if none is open (uses configured starting cash)
+        let { data: shift } = await supabase
           .from("shifts").select("id").eq("status", "open").maybeSingle();
+        if (!shift) {
+          const today = new Date().toISOString().slice(0, 10);
+          const { data: cfg } = await supabase.from("settings").select("starting_cash").eq("id", 1).maybeSingle();
+          const opening = Number((cfg as { starting_cash?: number } | null)?.starting_cash ?? 0);
+          const { data: newShift } = await supabase.from("shifts")
+            .insert({ business_day: today, opening_float: opening })
+            .select("id").single();
+          shift = newShift;
+        }
 
         // Find or create an open order for this table (source=qr OR pos — reuse existing open table order)
         let { data: order } = await supabase
