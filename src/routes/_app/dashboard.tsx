@@ -63,7 +63,9 @@ function Dashboard() {
     const byMethod: Record<string, number> = { cash: 0, qr: 0, card: 0 };
     payments.forEach((p) => { byMethod[p.method] = (byMethod[p.method] ?? 0) + Number(p.amount); });
     const tipTotal = payments.filter((p) => p.method === "qr").reduce((s, p) => s + Number(p.tip_amount ?? 0), 0);
-    return { gross, net, discounts, byMethod, count: bills.length, tipTotal };
+    // qrGross = actual QR received (bill amount + tips); byMethod.qr = net QR (bill amount only)
+    const qrGross = byMethod.qr + tipTotal;
+    return { gross, net, discounts, byMethod, count: bills.length, tipTotal, qrGross };
   }, [bills, payments]);
 
   const customLabel = custom?.from
@@ -121,13 +123,13 @@ function Dashboard() {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-3 gap-4">
             <Stat title="Cash" value={thb(stats.byMethod.cash)} />
-            <Stat title="QR Transfer" value={thb(stats.byMethod.qr)} />
+            <Stat title="QR Transfer" value={thb(stats.qrGross)} />
             <Stat title="Credit card" value={thb(stats.byMethod.card)} />
           </div>
           {stats.tipTotal > 0 && (
             <div className="border-t pt-4 grid grid-cols-3 gap-4">
               <Stat title="Tips collected (QR)" value={thb(stats.tipTotal)} />
-              <Stat title="Net QR sales" value={thb(stats.byMethod.qr - stats.tipTotal)} />
+              <Stat title="Net QR sales" value={thb(stats.byMethod.qr)} />
               <div className="rounded-xl border-2 border-amber-400 bg-amber-50 dark:bg-amber-950/30 p-4">
                 <p className="text-xs uppercase tracking-wide text-amber-700 dark:text-amber-400 font-semibold">Tips — cash payout</p>
                 <p className="text-2xl font-bold mt-1 text-amber-700 dark:text-amber-300">{thb(stats.tipTotal)}</p>
