@@ -147,6 +147,7 @@ function PaymentPage() {
       payload: { kind: "receipt", bill_id: bill.id, restaurant: restName, table: tableCode, items, total, vatAmount: settingsVatMode === "exclusive" ? vatAmount : 0, vat_mode: settingsVatMode, payments: [...payments], language: lang },
     });
     toast.success(t("paid"));
+    await load(); // refresh bill.paid_at so Edit Payment Type window can open
   };
 
   const openCash = () => {
