@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { LayoutGrid, BarChart3, FileText, Settings, LogOut, UserCircle2 } from "lucide-react";
 import { installAudioUnlockListeners, unlockAudio } from "@/lib/audio-alert";
 import { useQrAlertCount } from "@/lib/qr-alert-count";
-import { ShiftStatusButton } from "@/components/ShiftStatusButton";
 
 export const Route = createFileRoute("/_app")({ component: AppLayout });
 
@@ -68,22 +67,19 @@ function AppLayout() {
       <header className="h-14 border-b bg-card flex items-center px-4 gap-4 sticky top-0 z-30">
         <div className="font-semibold text-primary">🍽️ {t("app_name")}</div>
         <nav className="flex items-center gap-1 ml-4">
-          {navItems.map((it, idx) => {
+          {navItems.map((it) => {
             const active = path.startsWith(it.to);
             const showBadge = it.to === "/pos" && qrAlertCount > 0;
             return (
-              <span key={it.to} className="flex items-center gap-1">
-                <Link to={it.to}
-                  className={`relative flex items-center gap-2 px-3 py-1.5 rounded-md text-sm ${active ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}>
-                  <it.icon className="h-4 w-4" />{it.label}
-                  {showBadge && (
-                    <span className="ml-1 inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-destructive text-destructive-foreground text-xs font-bold animate-pulse">
-                      {qrAlertCount}
-                    </span>
-                  )}
-                </Link>
-                {idx === 2 && <ShiftStatusButton />}
-              </span>
+              <Link key={it.to} to={it.to}
+                className={`relative flex items-center gap-2 px-3 py-1.5 rounded-md text-sm ${active ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}>
+                <it.icon className="h-4 w-4" />{it.label}
+                {showBadge && (
+                  <span className="ml-1 inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-destructive text-destructive-foreground text-xs font-bold animate-pulse">
+                    {qrAlertCount}
+                  </span>
+                )}
+              </Link>
             );
           })}
         </nav>
