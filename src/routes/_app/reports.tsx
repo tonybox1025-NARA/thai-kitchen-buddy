@@ -249,7 +249,7 @@ function Reports() {
     if (!changed.length) { setAdjDlg(false); return; }
     for (const p of changed) {
       await supabase.from("payments").update({ method: adjChanges[p.payment_id] }).eq("id", p.payment_id);
-      await supabase.from("payment_corrections").insert({
+      await (supabase as any).from("payment_corrections").insert({
         payment_id: p.payment_id, bill_id: p.bill_id,
         corrected_by: staff.id, old_method: p.method,
         new_method: adjChanges[p.payment_id], reason: "Z Report adjustment",

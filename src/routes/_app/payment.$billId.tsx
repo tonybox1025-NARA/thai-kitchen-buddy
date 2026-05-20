@@ -182,11 +182,13 @@ function PaymentPage() {
     window.print();
   };
 
+  const paidStatus = bill?.status === "paid" || bill?.status === "partial_refund";
+
   // Within 10 minutes of payment — correction window
   const withinTenMin = bill?.paid_at
     ? Date.now() - new Date(bill.paid_at).getTime() < 10 * 60 * 1000
     : false;
-  const canCorrect = paidStatus &&
+  const canCorrect = !!paidStatus &&
     (staff?.role === "admin" || staff?.role === "manager") &&
     withinTenMin;
 
@@ -201,7 +203,7 @@ function PaymentPage() {
     if (!changed.length) { setCorrOpen(false); return; }
     for (const p of changed) {
       await supabase.from("payments").update({ method: corrChanges[p.id] }).eq("id", p.id);
-      await supabase.from("payment_corrections").insert({
+      await (supabase as any).from("payment_corrections").insert({
         payment_id: p.id, bill_id: bill.id,
         corrected_by: staff.id, old_method: p.method, new_method: corrChanges[p.id],
         reason: corrReason || null,
@@ -213,8 +215,6 @@ function PaymentPage() {
   };
 
   if (!bill) return <div className="p-8 text-center text-muted-foreground">{t("loading")}</div>;
-  const paidStatus = bill.status === "paid" || bill.status === "partial_refund";
-
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_440px] h-[calc(100vh-3.5rem)]">
       <div className="overflow-auto p-6 space-y-4">

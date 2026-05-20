@@ -9,7 +9,7 @@ import { LayoutGrid, BarChart3, FileText, Settings, LogOut, UserCircle2 } from "
 import { installAudioUnlockListeners, unlockAudio } from "@/lib/audio-alert";
 import { useQrAlertCount } from "@/lib/qr-alert-count";
 
-export const Route = createFileRoute("/_app")({ component: AppLayout });
+export const Route = createFileRoute("/_app")({ component: AppLayout, ssr: false });
 
 function AppLayout() {
   const { loading, session, staff, setStaff, signOut, verifyPin } = useAuth();
@@ -17,7 +17,7 @@ function AppLayout() {
   const nav = useNavigate();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const [pinErr, setPinErr] = useState<string | null>(null);
-  const qrAlertCount = useQrAlertCount();
+  const qrAlertCount = useQrAlertCount(Boolean(session && staff));
 
   useEffect(() => { installAudioUnlockListeners(); }, []);
 
@@ -25,8 +25,28 @@ function AppLayout() {
     if (!loading && !session) nav({ to: "/login" });
   }, [loading, session, nav]);
 
-  if (loading || !session) {
+  useEffect(() => {
+    if (!loading && !session) {
+      setStaff(null);
+      if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+        window.location.replace("/login");
+      }
+    }
+  }, [loading, session, setStaff]);
+
+  if (loading) {
     return <div className="min-h-screen grid place-items-center text-muted-foreground">{t("loading")}</div>;
+  }
+
+  if (!session) {
+    return (
+      <div className="min-h-screen grid place-items-center gap-3 p-4 text-center text-muted-foreground">
+        <p>{t("loading")}</p>
+        <Button asChild variant="outline">
+          <Link to="/login">{t("sign_in")}</Link>
+        </Button>
+      </div>
+    );
   }
 
   // Staff PIN gate
