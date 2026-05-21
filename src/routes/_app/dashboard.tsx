@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import { thb } from "@/lib/format";
 import type { DateRange } from "react-day-picker";
 
-export const Route = createFileRoute("/_app/dashboard")({ component: Dashboard, ssr: false });
+export const Route = createFileRoute("/_app/dashboard")({ component: Dashboard });
 
 type Range = "today" | "yesterday" | "week" | "month" | "custom";
 

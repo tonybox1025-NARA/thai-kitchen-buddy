@@ -9,7 +9,7 @@ import { LayoutGrid, BarChart3, FileText, Settings, LogOut, UserCircle2 } from "
 import { installAudioUnlockListeners, unlockAudio } from "@/lib/audio-alert";
 import { useQrAlertCount } from "@/lib/qr-alert-count";
 
-export const Route = createFileRoute("/_app")({ component: AppLayout, ssr: false });
+export const Route = createFileRoute("/_app")({ component: AppLayout });
 
 function AppLayout() {
   const { loading, session, staff, setStaff, signOut, verifyPin } = useAuth();
@@ -22,17 +22,11 @@ function AppLayout() {
   useEffect(() => { installAudioUnlockListeners(); }, []);
 
   useEffect(() => {
-    if (!loading && !session) nav({ to: "/login" });
-  }, [loading, session, nav]);
-
-  useEffect(() => {
     if (!loading && !session) {
       setStaff(null);
-      if (typeof window !== "undefined" && window.location.pathname !== "/login") {
-        window.location.replace("/login");
-      }
+      nav({ to: "/login", replace: true });
     }
-  }, [loading, session, setStaff]);
+  }, [loading, session, nav, setStaff]);
 
   if (loading) {
     return <div className="min-h-screen grid place-items-center text-muted-foreground">{t("loading")}</div>;
