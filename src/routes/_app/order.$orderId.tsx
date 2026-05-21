@@ -289,7 +289,7 @@ function OrderPage() {
         items: liveItems, total: billTotal,
         vatAmount: settingsVatMode === "exclusive" ? billVatAmount : 0,
         vat_mode: settingsVatMode, payments: [], language: lang,
-      },
+      } as any,
     });
     toast.success("Bill sent to printer");
   };
