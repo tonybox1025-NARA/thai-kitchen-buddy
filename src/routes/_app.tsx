@@ -22,17 +22,11 @@ function AppLayout() {
   useEffect(() => { installAudioUnlockListeners(); }, []);
 
   useEffect(() => {
-    if (!loading && !session) nav({ to: "/login" });
-  }, [loading, session, nav]);
-
-  useEffect(() => {
     if (!loading && !session) {
       setStaff(null);
-      if (typeof window !== "undefined" && window.location.pathname !== "/login") {
-        window.location.replace("/login");
-      }
+      nav({ to: "/login", replace: true });
     }
-  }, [loading, session, setStaff]);
+  }, [loading, session, nav, setStaff]);
 
   if (loading) {
     return <div className="min-h-screen grid place-items-center text-muted-foreground">{t("loading")}</div>;
