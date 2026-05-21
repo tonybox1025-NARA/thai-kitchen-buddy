@@ -684,7 +684,7 @@ function CancelledOrdersSection({ shiftId }: { shiftId: string }) {
       try {
         const { data: ords } = await supabase
           .from("orders")
-          .select("id,cancel_reason,closed_at,table_id,closed_by")
+          .select("*")
           .eq("shift_id", shiftId)
           .eq("status", "cancelled")
           .order("closed_at", { ascending: false });

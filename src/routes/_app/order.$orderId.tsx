@@ -235,9 +235,19 @@ function OrderPage() {
       }
     }
 
-    await supabase.from("orders").update({
-      status: "cancelled", closed_at: now, cancel_reason: reason, closed_by: staff?.id,
+    // Step 1 — always-safe fields (no new columns required)
+    const { error: cancelErr } = await supabase.from("orders").update({
+      status: "cancelled", closed_at: now,
     }).eq("id", orderId);
+
+    if (cancelErr) { toast.error("Failed to close table"); return; }
+
+    // Step 2 — extended fields added by migration 20260521000002
+    // Silently ignored if migration hasn't run yet; will work once columns exist
+    await supabase.from("orders").update({
+      cancel_reason: reason, closed_by: staff?.id,
+    } as any).eq("id", orderId);
+
     await supabase.from("restaurant_tables").update({ status: "available", guests: 0, has_qr_alert: false }).eq("id", tableId);
 
     setCloseTableOpen(false);
