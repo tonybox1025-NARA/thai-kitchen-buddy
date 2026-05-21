@@ -299,6 +299,20 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "orders_closed_by_fkey"
+            columns: ["closed_by"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_closed_by_fkey"
+            columns: ["closed_by"]
+            isOneToOne: false
+            referencedRelation: "staff_public"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "orders_opened_by_fkey"
             columns: ["opened_by"]
             isOneToOne: false
