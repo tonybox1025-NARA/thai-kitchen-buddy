@@ -28,13 +28,34 @@ const CLOSE_PRESETS = [
   { key: "close_other",   th: "อื่นๆ",            en: "Other"          },
 ];
 
-type Menu = { id: string; category_id: string | null; name_th: string; name_en: string; name_my: string; price: number; available: boolean };
+type Menu = { id: string; category_id: string | null; name_th: string; name_en: string; name_my: string; price: number; available: boolean; image_url: string | null };
 type Category = { id: string; name_th: string; name_en: string; name_my: string };
 type Item = {
   id: string; menu_id: string | null; name_th: string; name_en: string; name_my: string;
   qty: number; unit_price: number; notes: string | null; modifiers: unknown;
   status: "pending" | "sent" | "served" | "voided";
 };
+
+function MenuCardImage({ src, alt }: { src: string | null; alt: string }) {
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) {
+    return (
+      <div className="w-full aspect-[4/3] bg-muted flex items-center justify-center text-5xl select-none" aria-hidden="true">
+        🍽️
+      </div>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt={alt}
+      loading="lazy"
+      decoding="async"
+      className="w-full aspect-[4/3] object-cover"
+      onError={() => setFailed(true)}
+    />
+  );
+}
 
 function OrderPage() {
   const { orderId } = Route.useParams();
@@ -320,10 +341,17 @@ function OrderPage() {
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
           {filteredMenus.map((m) => (
-            <button key={m.id} onClick={() => openMenu(m)} className="text-left p-3 rounded-xl border bg-card hover:border-primary hover:shadow-sm transition">
-              <div className="font-medium leading-tight">{pickName(m, lang)}</div>
-              <div className="text-xs text-muted-foreground mt-0.5">{lang === "th" ? m.name_en : m.name_th}</div>
-              <div className="mt-2 font-bold text-primary">{thb(m.price)}</div>
+            <button
+              key={m.id}
+              onClick={() => openMenu(m)}
+              className="text-left rounded-xl border bg-card hover:border-primary hover:shadow-md transition overflow-hidden focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              <MenuCardImage src={m.image_url} alt={pickName(m, lang)} />
+              <div className="p-3">
+                <div className="font-medium leading-tight line-clamp-2">{pickName(m, lang)}</div>
+                <div className="text-xs text-muted-foreground mt-0.5 truncate">{lang === "th" ? m.name_en : m.name_th}</div>
+                <div className="mt-2 font-bold text-primary">{thb(m.price)}</div>
+              </div>
             </button>
           ))}
         </div>
