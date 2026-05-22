@@ -51,7 +51,7 @@ function MenuCardImage({ src, alt }: { src: string | null; alt: string }) {
       alt={alt}
       loading="lazy"
       decoding="async"
-      className="w-full aspect-[4/3] object-cover"
+      className="w-full aspect-[4/3] object-contain bg-muted"
       onError={() => setFailed(true)}
     />
   );
