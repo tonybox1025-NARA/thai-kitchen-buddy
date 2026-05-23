@@ -233,7 +233,7 @@ function sendToPrinter(ip, data) {
 // ── Load printer IPs from settings ───────────────────────────────────────────
 let printerIPs = {
   counter: process.env.PRINTER_COUNTER_IP ?? "192.168.1.220",
-  kitchen: process.env.PRINTER_KITCHEN_IP ?? "",
+  kitchen: process.env.PRINTER_KITCHEN_IP ?? "192.168.1.100",
 };
 
 async function loadPrinterIPs() {
