@@ -282,13 +282,13 @@ function PopupHeroImage({ src }: { src: string }) {
   const [failed, setFailed] = useState(false);
   if (failed) return null;
   return (
-    <div className="-mx-6 -mt-6 mb-2">
+    <div className="-mx-6 -mt-6 mb-2 bg-white flex items-center justify-center rounded-t-lg" style={{ minHeight: 300 }}>
       <img
         src={src}
         alt=""
         loading="eager"
         decoding="async"
-        className="w-full h-52 object-cover rounded-t-lg"
+        className="w-full max-h-[300px] object-contain rounded-t-lg"
         onError={() => setFailed(true)}
       />
     </div>
