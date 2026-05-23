@@ -159,7 +159,16 @@ function OrderPage() {
     [allMenusSorted, activeCat],
   );
 
-  const openMenu = (m: Menu) => { setSelected(m); setQty(1); setNotes(""); };
+  const openMenu = (m: Menu) => {
+    // Detect set-menu items by name (e.g. "Lon Moh - SET A", "Lon Moh - SET B", "Lon Moh - SET C")
+    const combined = `${m.name_en} ${m.name_th}`.toLowerCase();
+    const setId = combined.includes("set a") ? "A" : combined.includes("set b") ? "B" : combined.includes("set c") ? "C" : null;
+    if (setId) {
+      const setDef = SETS.find(s => s.id === setId);
+      if (setDef) { setSelectedSet(setDef); return; }
+    }
+    setSelected(m); setQty(1); setNotes("");
+  };
 
   const addToOrder = async () => {
     if (!selected) return;
@@ -420,26 +429,6 @@ function OrderPage() {
             <Button size="sm" variant="destructive" onClick={openCloseTable}>
               <X className="h-4 w-4 mr-1" />{t("close_table")}
             </Button>
-          </div>
-        </div>
-
-        {/* Set Menu quick-add strip */}
-        <div className="px-4 py-3 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 border-b">
-          <div className="flex items-center gap-1.5 mb-2">
-            <Layers className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-            <span className="font-bold text-xs uppercase tracking-wide text-amber-700 dark:text-amber-400">{t("set_menu")}</span>
-          </div>
-          <div className="flex gap-2">
-            {SETS.map(s => (
-              <button
-                key={s.id}
-                onClick={() => setSelectedSet(s)}
-                className="flex-1 rounded-xl border-2 border-amber-200 dark:border-amber-700 bg-white dark:bg-amber-900/20 p-3 text-center hover:border-amber-500 hover:shadow-md transition-all active:scale-95"
-              >
-                <div className="font-black text-base text-amber-700 dark:text-amber-300">{s.name_en}</div>
-                <div className="text-sm font-bold text-primary mt-0.5">{thb(s.price)}</div>
-              </button>
-            ))}
           </div>
         </div>
 
