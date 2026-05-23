@@ -118,18 +118,36 @@ function OrderPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderId]);
 
-  // Build a category-sort lookup once; menus are then sorted by (cat.sort, menu.sort)
-  const catSortMap = useMemo(() => new Map(cats.map((c) => [c.id, c.sort ?? 999])), [cats]);
+  // Build a flat ordered list: iterate cats in DB order (already sorted by cat.sort),
+  // then append each category's items sorted by menu.sort.
+  // This guarantees grouping: Set Menu → … → LON-CUP, regardless of global menu.sort values.
+  const allMenusSorted = useMemo(() => {
+    const byCategory = new Map<string, Menu[]>();
+    for (const m of menus) {
+      const key = m.category_id ?? "__none__";
+      if (!byCategory.has(key)) byCategory.set(key, []);
+      byCategory.get(key)!.push(m);
+    }
+    // Sort each bucket by menu.sort
+    for (const bucket of byCategory.values()) {
+      bucket.sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
+    }
+    // Walk categories in their DB-sorted order (cats is already .order("sort"))
+    const result: Menu[] = [];
+    for (const cat of cats) {
+      const items = byCategory.get(cat.id);
+      if (items) result.push(...items);
+    }
+    // Append uncategorised items at the end
+    const none = byCategory.get("__none__");
+    if (none) result.push(...none);
+    return result;
+  }, [menus, cats]);
 
-  const filteredMenus = useMemo(() => {
-    const base = activeCat === "all"
-      ? menus
-      : menus.filter((m) => m.category_id === activeCat);
-    return [...base].sort((a, b) => {
-      const catDiff = (catSortMap.get(a.category_id ?? "") ?? 999) - (catSortMap.get(b.category_id ?? "") ?? 999);
-      return catDiff !== 0 ? catDiff : (a.sort ?? 0) - (b.sort ?? 0);
-    });
-  }, [menus, cats, catSortMap, activeCat]);
+  const filteredMenus = useMemo(
+    () => activeCat === "all" ? allMenusSorted : allMenusSorted.filter((m) => m.category_id === activeCat),
+    [allMenusSorted, activeCat],
+  );
 
   const openMenu = (m: Menu) => { setSelected(m); setQty(1); setNotes(""); };
 
