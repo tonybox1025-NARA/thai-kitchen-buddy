@@ -9,8 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Minus, Trash2, ChefHat, Receipt, ArrowLeft, AlertTriangle, ArrowLeftRight, X, Printer, Eye } from "lucide-react";
+import { Plus, Minus, Trash2, ChefHat, Receipt, ArrowLeft, AlertTriangle, ArrowLeftRight, X, Printer, Eye, Layers } from "lucide-react";
 import { ManagerPinDialog } from "@/components/ManagerPinDialog";
+import { SetMenuDialog } from "@/components/SetMenuDialog";
+import { SETS, type SetConfig } from "@/lib/set-menu";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/order/$orderId")({ component: OrderPage });
@@ -34,6 +36,7 @@ type Item = {
   id: string; menu_id: string | null; name_th: string; name_en: string; name_my: string;
   qty: number; unit_price: number; notes: string | null; modifiers: unknown;
   status: "pending" | "sent" | "served" | "voided";
+  set_config?: any;
 };
 
 function MenuCardImage({ src, alt }: { src: string | null; alt: string }) {
@@ -83,6 +86,7 @@ function OrderPage() {
   const [closePreset, setClosePreset] = useState("");
   const [moveTableOpen, setMoveTableOpen] = useState(false);
   const [availableTables, setAvailableTables] = useState<{ id: string; code: string }[]>([]);
+  const [selectedSet, setSelectedSet] = useState<typeof SETS[0] | null>(null);
 
   // Bill preview
   const [billOpen, setBillOpen] = useState(false);
@@ -168,6 +172,28 @@ function OrderPage() {
     setSelected(null);
   };
 
+  const addSetToOrder = async (config: SetConfig) => {
+    const setDef = SETS.find(s => s.id === config.set_id)!;
+    const sideNames = config.sides.map(s => s.th).join(", ");
+    const drinkNote = config.drink ? ` | เครื่องดื่ม: ${config.drink.th}` : "";
+    const riceNote = config.rice === "rice" ? "ข้าวสวย" : "โจ๊ก";
+    const kitchenNotes = `หลัก: ${config.main.th} | เครื่อง: ${sideNames}${drinkNote} | ${riceNote}`;
+    const { error } = await supabase.from("order_items").insert({
+      order_id: orderId,
+      menu_id: null,
+      name_th: setDef.name_th,
+      name_en: setDef.name_en,
+      name_my: setDef.name_en,
+      qty: 1,
+      unit_price: setDef.price,
+      notes: kitchenNotes,
+      status: "pending",
+      set_config: config as any,
+    });
+    if (error) toast.error(error.message);
+    setSelectedSet(null);
+  };
+
   const adjustQty = async (item: Item, delta: number) => {
     if (item.status !== "pending") return;
     const newQty = item.qty + delta;
@@ -185,7 +211,17 @@ function OrderPage() {
     const sentAt = new Date().toISOString();
     await supabase.from("order_items").update({ status: "sent", sent_at: sentAt }).in("id", ids);
     // Queue print jobs — kitchen (Burmese) + counter (order copy)
-    const lines = pending.map((p) => ({ name_my: p.name_my, name_en: p.name_en, name_th: p.name_th, qty: p.qty, notes: p.notes }));
+    const lines = pending.map((p) => {
+      const sc = p.set_config as SetConfig | null | undefined;
+      if (sc) {
+        const sideStr = sc.sides.map((s) => s.th).join(", ");
+        const drinkStr = sc.drink ? ` | ${sc.drink.th}` : "";
+        const riceStr = sc.rice === "rice" ? "ข้าวสวย" : "โจ๊ก";
+        const setNotes = `หลัก: ${sc.main.th} | ${sideStr}${drinkStr} | ${riceStr}`;
+        return { name_my: p.name_en, name_en: p.name_en, name_th: p.name_th, qty: p.qty, notes: setNotes };
+      }
+      return { name_my: p.name_my, name_en: p.name_en, name_th: p.name_th, qty: p.qty, notes: p.notes };
+    });
     const displayLabel = orderSource === "takeout" ? `Takeout ${orderNumber ?? ""}` : orderSource === "staff_meal" ? `Staff ${orderNumber ?? ""}` : tableCode;
     const ticketPayload = { kind: "order_ticket", table: displayLabel, lines, sent_at: sentAt };
     await supabase.from("print_jobs").insert([
@@ -387,6 +423,26 @@ function OrderPage() {
           </div>
         </div>
 
+        {/* Set Menu quick-add strip */}
+        <div className="px-4 py-3 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 border-b">
+          <div className="flex items-center gap-1.5 mb-2">
+            <Layers className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+            <span className="font-bold text-xs uppercase tracking-wide text-amber-700 dark:text-amber-400">{t("set_menu")}</span>
+          </div>
+          <div className="flex gap-2">
+            {SETS.map(s => (
+              <button
+                key={s.id}
+                onClick={() => setSelectedSet(s)}
+                className="flex-1 rounded-xl border-2 border-amber-200 dark:border-amber-700 bg-white dark:bg-amber-900/20 p-3 text-center hover:border-amber-500 hover:shadow-md transition-all active:scale-95"
+              >
+                <div className="font-black text-base text-amber-700 dark:text-amber-300">{s.name_en}</div>
+                <div className="text-sm font-bold text-primary mt-0.5">{thb(s.price)}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Category filter bar — sticks to top when scrolling */}
         <div className="sticky top-0 z-10 bg-background border-b px-4 py-2 flex gap-2 flex-wrap">
           <Button variant={activeCat === "all" ? "default" : "outline"} size="sm" onClick={() => setActiveCat("all")}>All</Button>
@@ -423,42 +479,93 @@ function OrderPage() {
         </div>
         <div className="flex-1 overflow-auto p-3 space-y-2">
           {liveItems.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">{t("empty_order")}</p>}
-          {liveItems.map((i) => (
-            <div key={i.id} className="rounded-lg border p-3">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="font-medium truncate">{pickName(i, lang)}</div>
-                  {i.notes && <div className="text-xs text-muted-foreground">📝 {i.notes}</div>}
-                  <div className="text-xs mt-1">
-                    <span className={`inline-block px-1.5 py-0.5 rounded ${i.status === "pending" ? "bg-warning/20 text-warning-foreground" : "bg-success/20 text-success-foreground"}`}>
-                      {i.status === "pending" ? t("pending") : t("sent")}
-                    </span>
+          {liveItems.map((i) => {
+            const sc = i.set_config as SetConfig | undefined | null;
+            if (sc) {
+              // SET ITEM
+              return (
+                <div key={i.id} className="rounded-lg border-2 border-amber-200 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/20 p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
+                        <Layers className="h-3.5 w-3.5 shrink-0" />
+                        {lang === "th" ? i.name_th : i.name_en}
+                      </div>
+                      <div className="mt-1.5 space-y-0.5 text-xs text-muted-foreground pl-5">
+                        <div>🍽️ {sc.main.th}{lang === "en" ? ` (${sc.main.en})` : ""}</div>
+                        {sc.sides.map((s, idx) => (
+                          <div key={idx}>🥗 {s.th}{lang === "en" ? ` (${s.en})` : ""}</div>
+                        ))}
+                        {sc.drink && (
+                          <div>🥤 {sc.drink.th}{lang === "en" ? ` (${sc.drink.en})` : ""} <span className="text-amber-600 font-semibold">FREE</span></div>
+                        )}
+                        <div>🍚 {sc.rice === "rice" ? (lang === "th" ? "ข้าวสวย" : "Steamed Rice") : (lang === "th" ? "โจ๊ก" : "Porridge")}</div>
+                      </div>
+                      <div className="text-xs mt-1.5 pl-5">
+                        <span className={`inline-block px-1.5 py-0.5 rounded ${i.status === "pending" ? "bg-warning/20 text-warning-foreground" : "bg-success/20 text-success-foreground"}`}>
+                          {i.status === "pending" ? t("pending") : t("sent")}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="font-bold text-amber-700 dark:text-amber-300">{thb(Number(i.unit_price))}</div>
+                    </div>
+                  </div>
+                  {i.status === "pending" && (
+                    <div className="flex justify-end mt-2">
+                      <Button size="sm" variant="ghost" className="text-destructive" onClick={() => requestVoid(i)}>
+                        <Trash2 className="h-3 w-3 mr-1" />VOID
+                      </Button>
+                    </div>
+                  )}
+                  {i.status === "sent" && (
+                    <div className="flex justify-end mt-2">
+                      <Button size="sm" variant="ghost" className="text-destructive" onClick={() => requestVoid(i)}>
+                        <Trash2 className="h-3 w-3 mr-1" />VOID
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              );
+            }
+            // --- regular item (original code preserved exactly) ---
+            return (
+              <div key={i.id} className="rounded-lg border p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="font-medium truncate">{pickName(i, lang)}</div>
+                    {i.notes && <div className="text-xs text-muted-foreground">📝 {i.notes}</div>}
+                    <div className="text-xs mt-1">
+                      <span className={`inline-block px-1.5 py-0.5 rounded ${i.status === "pending" ? "bg-warning/20 text-warning-foreground" : "bg-success/20 text-success-foreground"}`}>
+                        {i.status === "pending" ? t("pending") : t("sent")}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="font-semibold">{thb(i.qty * Number(i.unit_price))}</div>
+                    <div className="text-xs text-muted-foreground">{i.qty} × {thb(i.unit_price)}</div>
                   </div>
                 </div>
-                <div className="text-right shrink-0">
-                  <div className="font-semibold">{thb(i.qty * Number(i.unit_price))}</div>
-                  <div className="text-xs text-muted-foreground">{i.qty} × {thb(i.unit_price)}</div>
-                </div>
+                {i.status === "pending" && (
+                  <div className="flex items-center gap-2 mt-2">
+                    <Button size="sm" variant="outline" onClick={() => adjustQty(i, -1)}><Minus className="h-3 w-3" /></Button>
+                    <span className="text-sm font-medium w-6 text-center">{i.qty}</span>
+                    <Button size="sm" variant="outline" onClick={() => adjustQty(i, 1)}><Plus className="h-3 w-3" /></Button>
+                    <Button size="sm" variant="ghost" className="ml-auto text-destructive" onClick={() => requestVoid(i)}>
+                      <Trash2 className="h-3 w-3 mr-1" />VOID
+                    </Button>
+                  </div>
+                )}
+                {i.status === "sent" && (
+                  <div className="flex justify-end mt-2">
+                    <Button size="sm" variant="ghost" className="text-destructive" onClick={() => requestVoid(i)}>
+                      <Trash2 className="h-3 w-3 mr-1" />VOID
+                    </Button>
+                  </div>
+                )}
               </div>
-              {i.status === "pending" && (
-                <div className="flex items-center gap-2 mt-2">
-                  <Button size="sm" variant="outline" onClick={() => adjustQty(i, -1)}><Minus className="h-3 w-3" /></Button>
-                  <span className="text-sm font-medium w-6 text-center">{i.qty}</span>
-                  <Button size="sm" variant="outline" onClick={() => adjustQty(i, 1)}><Plus className="h-3 w-3" /></Button>
-                  <Button size="sm" variant="ghost" className="ml-auto text-destructive" onClick={() => requestVoid(i)}>
-                    <Trash2 className="h-3 w-3 mr-1" />VOID
-                  </Button>
-                </div>
-              )}
-              {i.status === "sent" && (
-                <div className="flex justify-end mt-2">
-                  <Button size="sm" variant="ghost" className="text-destructive" onClick={() => requestVoid(i)}>
-                    <Trash2 className="h-3 w-3 mr-1" />VOID
-                  </Button>
-                </div>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
         <div className="border-t p-4 space-y-3">
           <div className="flex justify-between text-lg font-bold">
@@ -714,6 +821,13 @@ function OrderPage() {
           <p className="text-sm text-muted-foreground mt-16 animate-pulse">Tap anywhere to close</p>
         </div>
       )}
+
+      <SetMenuDialog
+        key={selectedSet?.id}
+        setDef={selectedSet}
+        onClose={() => setSelectedSet(null)}
+        onConfirm={addSetToOrder}
+      />
     </div>
   );
 }
