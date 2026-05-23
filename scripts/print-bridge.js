@@ -101,8 +101,10 @@ function twoCol(left, right) {
   return l + r;
 }
 
-// Format Thai Baht
-function thb(n) { return `฿${Number(n).toFixed(2)}`; }
+// Format Thai Baht — ASCII only (฿ is 3 UTF-8 bytes; printer renders it as
+// garbage and the extra bytes break column-width calculations causing price
+// overflow onto the next line).
+function thb(n) { return `B${Number(n).toFixed(2)}`; }
 
 // Format date/time — Gregorian calendar, DD/MM/YYYY HH:MM
 function fmtDateTime(iso) {
