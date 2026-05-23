@@ -8,6 +8,7 @@ import { ArrowLeft } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { DashRangeBar } from "@/components/DashRangeBar";
 import { type DashRange, rangeBounds, shiftIdsFor } from "@/lib/dash-range";
+import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_app/detail-tips")({
   component: TipsDetail,
@@ -17,6 +18,7 @@ export const Route = createFileRoute("/_app/detail-tips")({
 type TipRow = { paymentId: string; billId: string; tipAmount: number; qrAmount: number; tableCode: string; paidAt: string };
 
 function TipsDetail() {
+  const { t } = useI18n();
   const { range: initialRange } = Route.useSearch();
   const [range, setRange] = useState<DashRange>(initialRange);
   const [custom, setCustom] = useState<DateRange | undefined>();
@@ -89,34 +91,36 @@ function TipsDetail() {
     <div className="p-6 space-y-5 max-w-3xl mx-auto">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <Link to="/dashboard"><Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4 mr-1" />Dashboard</Button></Link>
-          <h1 className="text-xl font-bold">Tips Collected</h1>
+          <Link to="/dashboard"><Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4 mr-1" />{t("nav_dashboard")}</Button></Link>
+          <h1 className="text-xl font-bold">{t("tips_collected")}</h1>
         </div>
         <DashRangeBar range={range} onRange={setRange} custom={custom} onCustom={setCustom} />
       </div>
 
-      {loading ? <p className="text-muted-foreground text-sm text-center py-8">Loading…</p> : (
+      {loading ? <p className="text-muted-foreground text-sm text-center py-8">{t("loading")}</p> : (
         <>
           <Card>
             <CardContent className="pt-5 flex items-center justify-between">
               <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Total tips to pay out</p>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">{t("total_tips_payout")}</p>
                 <p className="text-3xl font-black mt-1 text-amber-600 dark:text-amber-400 tabular-nums">{thb(totalTips)}</p>
-                <p className="text-xs text-muted-foreground mt-1">From {rows.length} tipped order{rows.length!==1?"s":""} — pay in cash to staff</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {rows.length} {t("tipped_order_word")}{rows.length !== 1 ? "s" : ""} — {t("pay_cash_staff")}
+                </p>
               </div>
               <div className="text-5xl">💰</div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader><CardTitle className="text-base">Tip breakdown by order</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">{t("tip_breakdown")}</CardTitle></CardHeader>
             <CardContent>
               {rows.length === 0 ? (
-                <p className="text-center text-muted-foreground py-6 text-sm">No tips in this period</p>
+                <p className="text-center text-muted-foreground py-6 text-sm">{t("no_tips_period")}</p>
               ) : (
                 <div className="space-y-1 text-sm">
                   <div className="grid grid-cols-[3rem_1fr_5rem_5rem] gap-2 text-xs uppercase tracking-wide text-muted-foreground pb-1 border-b">
-                    <span>Table</span><span>Time</span><span className="text-right">QR net</span><span className="text-right">Tip</span>
+                    <span>{t("table")}</span><span>{t("time")}</span><span className="text-right">{t("qr_net")}</span><span className="text-right">{t("tips")}</span>
                   </div>
                   {rows.map(r => (
                     <Link key={r.paymentId} to="/payment/$billId" params={{ billId: r.billId }}>
@@ -131,7 +135,7 @@ function TipsDetail() {
                     </Link>
                   ))}
                   <div className="border-t pt-2 flex justify-between font-bold text-sm mt-1">
-                    <span>Total tips</span>
+                    <span>{t("total_tips")}</span>
                     <span className="tabular-nums text-amber-600 dark:text-amber-400">{thb(totalTips)}</span>
                   </div>
                 </div>

@@ -8,6 +8,7 @@ import { ArrowLeft, XCircle, ChevronDown, ChevronRight } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { DashRangeBar } from "@/components/DashRangeBar";
 import { type DashRange, rangeBounds, shiftIdsFor } from "@/lib/dash-range";
+import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_app/detail-voids")({
   component: VoidsDetail,
@@ -26,6 +27,7 @@ type VoidItem = {
 };
 
 function VoidsDetail() {
+  const { t } = useI18n();
   const { range: initialRange } = Route.useSearch();
   const [range, setRange] = useState<DashRange>(initialRange);
   const [custom, setCustom] = useState<DateRange | undefined>();
@@ -110,7 +112,6 @@ function VoidsDetail() {
           const oiMap    = new Map((oi ?? []).map((x: any) => [x.id, x]));
           const staffMap = new Map((staffRows ?? []).map((s: any) => [s.id, s.name]));
 
-          // Get order → table mapping for these items
           const orderIds = [...new Set((oi ?? []).map((x: any) => x.order_id).filter(Boolean))] as string[];
           let tableCodeForOrder = new Map<string, string>();
           if (orderIds.length) {
@@ -147,31 +148,31 @@ function VoidsDetail() {
     })();
   }, [bounds, range, custom]);
 
-  const voidTotal  = voidItems.reduce((s, v) => s + v.amount, 0);
+  const voidTotal   = voidItems.reduce((s, v) => s + v.amount, 0);
   const cancelTotal = cancelled.reduce((s, o) => s + o.total, 0);
 
   return (
     <div className="p-6 space-y-5 max-w-4xl mx-auto">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <Link to="/dashboard"><Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4 mr-1" />Dashboard</Button></Link>
-          <h1 className="text-xl font-bold flex items-center gap-2"><XCircle className="h-5 w-5 text-destructive" />Voids &amp; Cancellations</h1>
+          <Link to="/dashboard"><Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4 mr-1" />{t("nav_dashboard")}</Button></Link>
+          <h1 className="text-xl font-bold flex items-center gap-2"><XCircle className="h-5 w-5 text-destructive" />{t("voids_cancellations")}</h1>
         </div>
         <DashRangeBar range={range} onRange={setRange} custom={custom} onCustom={setCustom} />
       </div>
 
-      {loading ? <p className="text-muted-foreground text-sm text-center py-8">Loading…</p> : (
+      {loading ? <p className="text-muted-foreground text-sm text-center py-8">{t("loading")}</p> : (
         <>
           <div className="grid grid-cols-2 gap-4">
             <Card>
               <CardContent className="pt-5">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Cancelled orders ({cancelled.length})</p>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">{t("cancelled_orders")} ({cancelled.length})</p>
                 <p className="text-2xl font-bold mt-1 text-destructive tabular-nums">- {thb(cancelTotal)}</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="pt-5">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Voided items ({voidItems.length})</p>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">{t("voided_items")} ({voidItems.length})</p>
                 <p className="text-2xl font-bold mt-1 text-destructive tabular-nums">- {thb(voidTotal)}</p>
               </CardContent>
             </Card>
@@ -181,12 +182,12 @@ function VoidsDetail() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2 text-destructive">
-                <XCircle className="h-4 w-4" />Cancelled Orders ({cancelled.length})
+                <XCircle className="h-4 w-4" />{t("cancelled_orders")} ({cancelled.length})
               </CardTitle>
             </CardHeader>
             <CardContent>
               {cancelled.length === 0 ? (
-                <p className="text-center text-muted-foreground py-4 text-sm">No cancelled orders</p>
+                <p className="text-center text-muted-foreground py-4 text-sm">{t("no_cancelled")}</p>
               ) : (
                 <div className="space-y-1.5">
                   {cancelled.map(o => (
@@ -216,7 +217,7 @@ function VoidsDetail() {
                             </div>
                           ))}
                           <div className="border-t pt-1 flex justify-between font-semibold text-foreground">
-                            <span>Cancelled by: {o.closedByName}</span>
+                            <span>{t("cancelled_by")}: {o.closedByName}</span>
                             <span className="tabular-nums text-destructive">- {thb(o.total)}</span>
                           </div>
                         </div>
@@ -231,15 +232,15 @@ function VoidsDetail() {
           {/* Individual void items */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Individual Voided Items ({voidItems.length})</CardTitle>
+              <CardTitle className="text-base">{t("voided_items")} ({voidItems.length})</CardTitle>
             </CardHeader>
             <CardContent>
               {voidItems.length === 0 ? (
-                <p className="text-center text-muted-foreground py-4 text-sm">No voided items</p>
+                <p className="text-center text-muted-foreground py-4 text-sm">{t("no_voided")}</p>
               ) : (
                 <div className="space-y-1 text-sm">
                   <div className="grid grid-cols-[3rem_1fr_1fr_5rem] gap-2 text-xs uppercase tracking-wide text-muted-foreground pb-1 border-b">
-                    <span>Table</span><span>Item</span><span>Reason / Staff</span><span className="text-right">Amount</span>
+                    <span>{t("table")}</span><span>{t("item_col")}</span><span>{t("reason_staff")}</span><span className="text-right">{t("amount")}</span>
                   </div>
                   {voidItems.map(v => (
                     <div key={v.id} className="grid grid-cols-[3rem_1fr_1fr_5rem] gap-2 items-start py-1 border-b last:border-0">

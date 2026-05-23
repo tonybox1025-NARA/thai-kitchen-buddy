@@ -8,6 +8,7 @@ import { ArrowLeft, Tag } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { DashRangeBar } from "@/components/DashRangeBar";
 import { type DashRange, rangeBounds, shiftIdsFor } from "@/lib/dash-range";
+import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_app/detail-discounts")({
   component: DiscountsDetail,
@@ -16,7 +17,7 @@ export const Route = createFileRoute("/_app/detail-discounts")({
 
 type DiscRow = {
   type: "percent" | "fixed" | "free_item" | "member";
-  label: string;        // e.g. "10%" / "฿50" / "Free: Pad Thai" / "Member"
+  label: string;
   amount: number;
   staffName: string;
   tableCode: string;
@@ -24,19 +25,28 @@ type DiscRow = {
   appliedAt: string;
 };
 
-const TYPE_META: Record<string, { label: string; cls: string }> = {
-  percent:   { label: "% Off",       cls: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" },
-  fixed:     { label: "Fixed ฿",     cls: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300" },
-  free_item: { label: "Free Item",   cls: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" },
-  member:    { label: "Member",      cls: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300" },
+const TYPE_CLS: Record<string, string> = {
+  percent:   "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+  fixed:     "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
+  free_item: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
+  member:    "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
 };
 
 function DiscountsDetail() {
+  const { t } = useI18n();
   const { range: initialRange } = Route.useSearch();
   const [range, setRange] = useState<DashRange>(initialRange);
   const [custom, setCustom] = useState<DateRange | undefined>();
   const [rows, setRows] = useState<DiscRow[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // Translated type labels — defined inside component so they react to lang changes
+  const typeLabel: Record<string, string> = {
+    percent:   t("disc_pct"),
+    fixed:     t("disc_fixed"),
+    free_item: t("disc_free_item"),
+    member:    t("disc_member"),
+  };
 
   const bounds = useMemo<[Date, Date]>(() => {
     if (range === "custom" && custom?.from) {
@@ -55,7 +65,6 @@ function DiscountsDetail() {
         const shiftIds = await shiftIdsFor(range, bounds);
         if (!shiftIds.length) { setRows([]); return; }
 
-        // Get paid bills for these shifts
         const { data: bills } = await supabase.from("bills")
           .select("id,order_id,member_discount_amount,paid_at")
           .eq("status","paid").in("shift_id", shiftIds);
@@ -64,7 +73,6 @@ function DiscountsDetail() {
         const billIds  = bills.map(b => b.id);
         const orderIds = [...new Set(bills.map(b => b.order_id).filter(Boolean))] as string[];
 
-        // Run queries in parallel
         const [{ data: discounts }, { data: orders }, { data: staffRows }] = await Promise.all([
           (supabase as any).from("bill_discounts")
             .select("bill_id,type,percent_value,fixed_value,free_item_name,amount,applied_by,applied_at")
@@ -78,7 +86,6 @@ function DiscountsDetail() {
           ? await supabase.from("restaurant_tables").select("id,code").in("id", tableIds)
           : { data: [] as { id: string; code: string }[] };
 
-        // Build lookup maps
         const staffMap  = new Map((staffRows ?? []).map((s: any) => [s.id, s.name]));
         const tblMap    = new Map((tables  ?? []).map((t: any) => [t.id, t.code]));
         const orderMap  = new Map((orders  ?? []).map((o: any) => [o.id, o]));
@@ -95,12 +102,11 @@ function DiscountsDetail() {
 
         const result: DiscRow[] = [];
 
-        // Structured discounts from bill_discounts
         for (const d of (discounts as any[] ?? [])) {
           let label = "";
           if (d.type === "percent")   label = `${d.percent_value}%`;
           else if (d.type === "fixed") label = thb(d.fixed_value ?? 0);
-          else label = d.free_item_name ?? "Free item";
+          else label = d.free_item_name ?? t("disc_free_item");
           result.push({
             type: d.type, label, amount: Number(d.amount),
             staffName: d.applied_by ? (staffMap.get(d.applied_by) ?? "—") : "—",
@@ -110,11 +116,10 @@ function DiscountsDetail() {
           });
         }
 
-        // Member discounts from bills
         for (const b of bills) {
           if (Number(b.member_discount_amount) > 0) {
             result.push({
-              type: "member", label: "Member", amount: Number(b.member_discount_amount),
+              type: "member", label: t("disc_member"), amount: Number(b.member_discount_amount),
               staffName: "—",
               tableCode: getTableCode(b.id),
               billId: b.id,
@@ -130,22 +135,22 @@ function DiscountsDetail() {
   }, [bounds, range, custom]);
 
   const totals = useMemo(() => {
-    const t = { percent: 0, fixed: 0, free_item: 0, member: 0, grand: 0 };
-    rows.forEach(r => { t[r.type] += r.amount; t.grand += r.amount; });
-    return t;
+    const tot = { percent: 0, fixed: 0, free_item: 0, member: 0, grand: 0 };
+    rows.forEach(r => { tot[r.type] += r.amount; tot.grand += r.amount; });
+    return tot;
   }, [rows]);
 
   return (
     <div className="p-6 space-y-5 max-w-4xl mx-auto">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <Link to="/dashboard"><Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4 mr-1" />Dashboard</Button></Link>
-          <h1 className="text-xl font-bold">Discounts</h1>
+          <Link to="/dashboard"><Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4 mr-1" />{t("nav_dashboard")}</Button></Link>
+          <h1 className="text-xl font-bold">{t("discount")}</h1>
         </div>
         <DashRangeBar range={range} onRange={setRange} custom={custom} onCustom={setCustom} />
       </div>
 
-      {loading ? <p className="text-muted-foreground text-sm text-center py-8">Loading…</p> : (
+      {loading ? <p className="text-muted-foreground text-sm text-center py-8">{t("loading")}</p> : (
         <>
           {/* Summary */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -153,7 +158,7 @@ function DiscountsDetail() {
               totals[type] > 0 && (
                 <Card key={type}>
                   <CardContent className="pt-5">
-                    <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${TYPE_META[type].cls}`}>{TYPE_META[type].label}</span>
+                    <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${TYPE_CLS[type]}`}>{typeLabel[type]}</span>
                     <p className="text-xl font-bold mt-2 tabular-nums">- {thb(totals[type])}</p>
                   </CardContent>
                 </Card>
@@ -162,16 +167,16 @@ function DiscountsDetail() {
           </div>
           {totals.grand > 0 && (
             <div className="text-right text-sm text-muted-foreground">
-              Grand total: <span className="font-bold text-foreground tabular-nums">- {thb(totals.grand)}</span> across {rows.length} discount{rows.length!==1?"s":""}
+              {t("grand_total")}: <span className="font-bold text-foreground tabular-nums">- {thb(totals.grand)}</span> ({rows.length})
             </div>
           )}
 
           {/* Detail rows */}
           <Card>
-            <CardHeader><CardTitle className="text-base">All discounts ({rows.length})</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">{t("all_discounts")} ({rows.length})</CardTitle></CardHeader>
             <CardContent>
               {rows.length === 0 ? (
-                <p className="text-center text-muted-foreground py-6 text-sm">No discounts applied in this period</p>
+                <p className="text-center text-muted-foreground py-6 text-sm">{t("no_discounts_period")}</p>
               ) : (
                 <div className="space-y-1.5">
                   {rows.map((r, i) => (
@@ -183,7 +188,7 @@ function DiscountsDetail() {
                         </div>
                         <span className="w-12 font-bold shrink-0">{r.tableCode}</span>
                         <div className="flex-1 flex items-center gap-2 min-w-0">
-                          <span className={`text-xs px-1.5 py-0.5 rounded font-semibold shrink-0 ${TYPE_META[r.type].cls}`}>{TYPE_META[r.type].label}</span>
+                          <span className={`text-xs px-1.5 py-0.5 rounded font-semibold shrink-0 ${TYPE_CLS[r.type]}`}>{typeLabel[r.type]}</span>
                           <span className="text-muted-foreground truncate">{r.label}</span>
                         </div>
                         <span className="text-xs text-muted-foreground shrink-0 hidden sm:block">{r.staffName}</span>

@@ -7,10 +7,12 @@ import type { DateRange } from "react-day-picker";
 import { DashRangeBar } from "@/components/DashRangeBar";
 import { type DashRange, rangeBounds, shiftIdsFor } from "@/lib/dash-range";
 import { ArrowRight } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_app/dashboard")({ component: Dashboard });
 
 function Dashboard() {
+  const { t } = useI18n();
   const [range, setRange] = useState<DashRange>("today");
   const [custom, setCustom] = useState<DateRange | undefined>();
   const [bills, setBills]     = useState<{ id: string; total: number; subtotal: number; discount_amount: number; member_discount_amount: number }[]>([]);
@@ -65,27 +67,31 @@ function Dashboard() {
   // Encode range into query string for detail pages
   const rangeQ = range === "custom" ? "" : `?range=${range}`;
 
+  const cancelledSub = cancelledCt > 0
+    ? `${cancelledCt} ${t("cancelled_orders")}`
+    : undefined;
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <h1 className="text-2xl font-bold">{t("nav_dashboard")}</h1>
         <DashRangeBar range={range} onRange={setRange} custom={custom} onCustom={setCustom} />
       </div>
 
       {/* Top summary boxes */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatLink title="Gross Sales" value={thb(stats.gross)} to={`/detail-gross${rangeQ}`} />
-        <StatLink title="Net Sales"   value={thb(stats.net)}   />
-        <StatLink title="Discounts"   value={thb(stats.discounts)} to={`/detail-discounts${rangeQ}`} />
-        <StatLink title="Bills"       value={String(stats.count)} />
+        <StatLink title={t("gross_sales")} value={thb(stats.gross)} to={`/detail-gross${rangeQ}`} />
+        <StatLink title={t("net_sales")}   value={thb(stats.net)}   />
+        <StatLink title={t("discount")}    value={thb(stats.discounts)} to={`/detail-discounts${rangeQ}`} />
+        <StatLink title={t("bills")}       value={String(stats.count)} />
       </div>
 
       {/* Voids & Cancellations */}
       {(voidsTotal > 0 || cancelledCt > 0) && (
         <StatLink
-          title="Voids & Cancellations"
+          title={t("voids_cancellations")}
           value={thb(voidsTotal)}
-          sub={`${cancelledCt} cancelled order${cancelledCt !== 1 ? "s" : ""}`}
+          sub={cancelledSub}
           to={`/detail-voids${rangeQ}`}
           className="md:col-span-2"
         />
@@ -93,21 +99,21 @@ function Dashboard() {
 
       {/* Payment methods */}
       <Card>
-        <CardHeader><CardTitle>By payment method</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{t("by_method")}</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-3 gap-4">
-            <StatCard title="Cash"        value={thb(stats.byMethod.cash)} />
-            <StatLink title="QR Transfer" value={thb(stats.qrGross)} to={`/detail-qr${rangeQ}`} />
-            <StatCard title="Credit card" value={thb(stats.byMethod.card)} />
+            <StatCard title={t("cash")}        value={thb(stats.byMethod.cash)} />
+            <StatLink title={t("qr_transfer")} value={thb(stats.qrGross)} to={`/detail-qr${rangeQ}`} />
+            <StatCard title={t("card")}        value={thb(stats.byMethod.card)} />
           </div>
           {stats.tipTotal > 0 && (
             <div className="border-t pt-4 grid grid-cols-3 gap-4">
-              <StatLink title="Tips collected (QR)" value={thb(stats.tipTotal)} to={`/detail-tips${rangeQ}`} />
-              <StatLink title="Net QR Sales"        value={thb(stats.byMethod.qr)} to={`/detail-qr${rangeQ}`} />
+              <StatLink title={t("tips_collected")} value={thb(stats.tipTotal)} to={`/detail-tips${rangeQ}`} />
+              <StatLink title={t("net_qr_sales")}   value={thb(stats.byMethod.qr)} to={`/detail-qr${rangeQ}`} />
               <div className="rounded-xl border-2 border-amber-400 bg-amber-50 dark:bg-amber-950/30 p-4">
-                <p className="text-xs uppercase tracking-wide text-amber-700 dark:text-amber-400 font-semibold">Tips — cash payout</p>
+                <p className="text-xs uppercase tracking-wide text-amber-700 dark:text-amber-400 font-semibold">{t("tips_cash_payout")}</p>
                 <p className="text-2xl font-bold mt-1 text-amber-700 dark:text-amber-300">{thb(stats.tipTotal)}</p>
-                <p className="text-xs text-amber-600 dark:text-amber-500 mt-1">Pay this to staff in cash</p>
+                <p className="text-xs text-amber-600 dark:text-amber-500 mt-1">{t("tips_payout_hint")}</p>
               </div>
             </div>
           )}

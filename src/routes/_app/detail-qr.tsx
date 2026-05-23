@@ -8,6 +8,7 @@ import { ArrowLeft, QrCode } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { DashRangeBar } from "@/components/DashRangeBar";
 import { type DashRange, rangeBounds, shiftIdsFor } from "@/lib/dash-range";
+import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_app/detail-qr")({
   component: QrSalesDetail,
@@ -17,6 +18,7 @@ export const Route = createFileRoute("/_app/detail-qr")({
 type QrRow = { paymentId: string; billId: string; amount: number; tipAmount: number; tableCode: string; paidAt: string };
 
 function QrSalesDetail() {
+  const { t } = useI18n();
   const { range: initialRange } = Route.useSearch();
   const [range, setRange] = useState<DashRange>(initialRange);
   const [custom, setCustom] = useState<DateRange | undefined>();
@@ -81,42 +83,42 @@ function QrSalesDetail() {
     })();
   }, [bounds, range, custom]);
 
-  const totalNet  = rows.reduce((s, r) => s + r.amount, 0);
-  const totalTips = rows.reduce((s, r) => s + r.tipAmount, 0);
+  const totalNet   = rows.reduce((s, r) => s + r.amount, 0);
+  const totalTips  = rows.reduce((s, r) => s + r.tipAmount, 0);
   const totalGross = totalNet + totalTips;
 
   return (
     <div className="p-6 space-y-5 max-w-3xl mx-auto">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <Link to="/dashboard"><Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4 mr-1" />Dashboard</Button></Link>
-          <h1 className="text-xl font-bold flex items-center gap-2"><QrCode className="h-5 w-5" />QR Transactions</h1>
+          <Link to="/dashboard"><Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4 mr-1" />{t("nav_dashboard")}</Button></Link>
+          <h1 className="text-xl font-bold flex items-center gap-2"><QrCode className="h-5 w-5" />{t("qr_transactions")}</h1>
         </div>
         <DashRangeBar range={range} onRange={setRange} custom={custom} onCustom={setCustom} />
       </div>
 
-      {loading ? <p className="text-muted-foreground text-sm text-center py-8">Loading…</p> : (
+      {loading ? <p className="text-muted-foreground text-sm text-center py-8">{t("loading")}</p> : (
         <>
           <div className="grid grid-cols-3 gap-4">
-            {[["QR received", totalGross], ["Net QR sales", totalNet], ["Tips", totalTips]].map(([l, v]) => (
-              <Card key={l as string}>
+            {([[t("qr_received"), totalGross], [t("net_qr_sales"), totalNet], [t("tips"), totalTips]] as [string, number][]).map(([l, v]) => (
+              <Card key={l}>
                 <CardContent className="pt-5">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">{l as string}</p>
-                  <p className="text-2xl font-bold mt-1 tabular-nums">{thb(v as number)}</p>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">{l}</p>
+                  <p className="text-2xl font-bold mt-1 tabular-nums">{thb(v)}</p>
                 </CardContent>
               </Card>
             ))}
           </div>
 
           <Card>
-            <CardHeader><CardTitle className="text-base">All QR payments ({rows.length})</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">{t("all_qr_payments")} ({rows.length})</CardTitle></CardHeader>
             <CardContent>
               {rows.length === 0 ? (
-                <p className="text-center text-muted-foreground py-6 text-sm">No QR payments in this period</p>
+                <p className="text-center text-muted-foreground py-6 text-sm">{t("no_qr_period")}</p>
               ) : (
                 <div className="space-y-1 text-sm">
                   <div className="grid grid-cols-[3rem_1fr_5rem_5rem] gap-2 text-xs uppercase tracking-wide text-muted-foreground pb-1 border-b">
-                    <span>Table</span><span>Time</span><span className="text-right">Net</span><span className="text-right">+Tip</span>
+                    <span>{t("table")}</span><span>{t("time")}</span><span className="text-right">{t("net")}</span><span className="text-right">+{t("tips")}</span>
                   </div>
                   {rows.map(r => (
                     <Link key={r.paymentId} to="/payment/$billId" params={{ billId: r.billId }}>

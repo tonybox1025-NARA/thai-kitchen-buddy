@@ -8,6 +8,7 @@ import { ArrowLeft } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { DashRangeBar } from "@/components/DashRangeBar";
 import { type DashRange, rangeBounds, shiftIdsFor } from "@/lib/dash-range";
+import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_app/detail-gross")({
   component: GrossSalesDetail,
@@ -20,6 +21,7 @@ type BillRow = {
 };
 
 function GrossSalesDetail() {
+  const { t } = useI18n();
   const { range: initialRange } = Route.useSearch();
   const [range, setRange] = useState<DashRange>(initialRange);
   const [custom, setCustom] = useState<DateRange | undefined>();
@@ -107,21 +109,21 @@ function GrossSalesDetail() {
     <div className="p-6 space-y-5 max-w-5xl mx-auto">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <Link to="/dashboard"><Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4 mr-1" />Dashboard</Button></Link>
-          <h1 className="text-xl font-bold">Gross Sales</h1>
+          <Link to="/dashboard"><Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4 mr-1" />{t("nav_dashboard")}</Button></Link>
+          <h1 className="text-xl font-bold">{t("gross_sales")}</h1>
         </div>
         <DashRangeBar range={range} onRange={setRange} custom={custom} onCustom={setCustom} />
       </div>
 
-      {loading ? <p className="text-muted-foreground text-sm text-center py-8">Loading…</p> : (
+      {loading ? <p className="text-muted-foreground text-sm text-center py-8">{t("loading")}</p> : (
         <>
           {/* Summary */}
           <div className="grid grid-cols-3 gap-4">
-            {[["Gross", gross], ["Net", net], ["Discounts", discounts]].map(([l, v]) => (
-              <Card key={l as string}>
+            {([[t("gross"), gross], [t("net"), net], [t("discount"), discounts]] as [string, number][]).map(([l, v]) => (
+              <Card key={l}>
                 <CardContent className="pt-5">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">{l as string}</p>
-                  <p className="text-2xl font-bold mt-1">{thb(v as number)}</p>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">{l}</p>
+                  <p className="text-2xl font-bold mt-1">{thb(v)}</p>
                 </CardContent>
               </Card>
             ))}
@@ -130,7 +132,7 @@ function GrossSalesDetail() {
           {/* By hour */}
           {byHour.length > 0 && (
             <Card>
-              <CardHeader><CardTitle className="text-base">Sales by hour</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-base">{t("sales_by_hour")}</CardTitle></CardHeader>
               <CardContent>
                 <div className="space-y-1.5">
                   {byHour.map(([h, d]) => {
@@ -143,7 +145,7 @@ function GrossSalesDetail() {
                           <div className="h-2 bg-primary rounded-full" style={{ width: `${pct}%` }} />
                         </div>
                         <span className="w-16 shrink-0 text-right tabular-nums">{thb(d.total)}</span>
-                        <span className="w-12 shrink-0 text-right text-muted-foreground">{d.count} bill{d.count>1?"s":""}</span>
+                        <span className="w-16 shrink-0 text-right text-muted-foreground">{d.count} {t("bill_word")}{d.count > 1 ? "s" : ""}</span>
                       </div>
                     );
                   })}
@@ -155,11 +157,11 @@ function GrossSalesDetail() {
           {/* By table */}
           {byTable.length > 0 && (
             <Card>
-              <CardHeader><CardTitle className="text-base">Sales by table / order</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-base">{t("sales_by_table")}</CardTitle></CardHeader>
               <CardContent>
                 <div className="space-y-1 text-sm">
                   <div className="grid grid-cols-[3rem_1fr_5rem_4rem] gap-2 text-xs uppercase tracking-wide text-muted-foreground pb-1 border-b">
-                    <span>Table</span><span></span><span className="text-right">Total</span><span className="text-right">Bills</span>
+                    <span>{t("table")}</span><span></span><span className="text-right">{t("total")}</span><span className="text-right">{t("bills")}</span>
                   </div>
                   {byTable.map(([code, d]) => (
                     <div key={code} className="grid grid-cols-[3rem_1fr_5rem_4rem] gap-2 items-center py-0.5">
@@ -178,14 +180,14 @@ function GrossSalesDetail() {
 
           {/* By order (all bills) */}
           <Card>
-            <CardHeader><CardTitle className="text-base">All orders ({bills.length})</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">{t("all_orders")} ({bills.length})</CardTitle></CardHeader>
             <CardContent>
               {bills.length === 0 ? (
-                <p className="text-center text-muted-foreground py-6 text-sm">No paid bills for this period</p>
+                <p className="text-center text-muted-foreground py-6 text-sm">{t("no_bills_period")}</p>
               ) : (
                 <div className="space-y-1 text-sm">
                   <div className="grid grid-cols-[3rem_1fr_1fr_5rem] gap-2 text-xs uppercase tracking-wide text-muted-foreground pb-1 border-b">
-                    <span>Table</span><span>Time</span><span>Discount</span><span className="text-right">Total</span>
+                    <span>{t("table")}</span><span>{t("time")}</span><span>{t("discount")}</span><span className="text-right">{t("total")}</span>
                   </div>
                   {bills.map(b => (
                     <Link key={b.id} to="/payment/$billId" params={{ billId: b.id }}>

@@ -7,6 +7,7 @@ import { CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import type { DashRange } from "@/lib/dash-range";
+import { useI18n } from "@/lib/i18n";
 
 type Props = {
   range: DashRange;
@@ -16,19 +17,27 @@ type Props = {
 };
 
 export function DashRangeBar({ range, onRange, custom, onCustom }: Props) {
+  const { t } = useI18n();
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const customLabel = custom?.from
     ? custom.to && custom.to.getTime() !== custom.from.getTime()
       ? `${format(custom.from, "dd MMM")} – ${format(custom.to, "dd MMM yyyy")}`
       : format(custom.from, "dd MMM yyyy")
-    : "Custom range";
+    : t("custom_range");
+
+  const rangeLabel: Record<string, string> = {
+    today:     t("today"),
+    yesterday: t("yesterday"),
+    week:      t("this_week"),
+    month:     t("this_month"),
+  };
 
   return (
     <div className="flex gap-2 flex-wrap">
       {(["today","yesterday","week","month"] as const).map((r) => (
         <Button key={r} size="sm" variant={range === r ? "default" : "outline"} onClick={() => onRange(r)}>
-          {r === "today" ? "Today" : r === "yesterday" ? "Yesterday" : r === "week" ? "This week" : "This month"}
+          {rangeLabel[r]}
         </Button>
       ))}
       <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
@@ -36,7 +45,7 @@ export function DashRangeBar({ range, onRange, custom, onCustom }: Props) {
           <Button size="sm" variant={range === "custom" ? "default" : "outline"}
             className={cn(!custom?.from && "text-muted-foreground")}>
             <CalendarIcon className="h-3.5 w-3.5 mr-1" />
-            {range === "custom" ? customLabel : "Custom range"}
+            {range === "custom" ? customLabel : t("custom_range")}
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="end">
