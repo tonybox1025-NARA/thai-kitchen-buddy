@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { ArrowLeft, Banknote, QrCode, CreditCard, Printer, RotateCcw, PencilLine, Eye, Tag, X, Percent, DollarSign, Gift } from "lucide-react";
+import { ArrowLeft, Banknote, QrCode, CreditCard, Printer, RotateCcw, PencilLine, Eye, Tag, X, Percent, DollarSign, Gift, Scissors, Check } from "lucide-react";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -90,6 +90,9 @@ function PaymentPage() {
   const [corrOpen, setCorrOpen] = useState(false);
   const [corrChanges, setCorrChanges] = useState<Record<string, "qr" | "cash" | "card">>({});
   const [corrReason, setCorrReason] = useState("");
+
+  // Split bill
+  const [splitOpen, setSplitOpen] = useState(false);
 
   // Discount dialog
   const [discDlgOpen, setDiscDlgOpen] = useState(false);
@@ -459,6 +462,16 @@ function PaymentPage() {
               <Input type="number" min={0} value={memberDisc} onChange={(e) => setMemberDisc(Math.max(0, Number(e.target.value)))} />
             </div>
 
+            {/* Split Bill */}
+            <Button
+              variant="outline"
+              className="w-full mb-4 border-dashed gap-2 text-sm"
+              onClick={() => setSplitOpen(true)}
+              disabled={remaining <= 0}
+            >
+              <Scissors className="h-4 w-4" />{t("split_bill")}
+            </Button>
+
             {/* ── Payment methods ── */}
             <h3 className="font-semibold mb-2 text-sm">{t("pay")}</h3>
             <Tabs defaultValue="cash">
@@ -685,6 +698,19 @@ function PaymentPage() {
         </DialogContent>
       </Dialog>
 
+      {/* ── Split Bill dialog ───────────────────────────────────────────────── */}
+      <SplitBillDialog
+        open={splitOpen}
+        onClose={() => setSplitOpen(false)}
+        items={items}
+        billTotal={total}
+        remaining={remaining}
+        lang={lang}
+        t={t}
+        onAddPayment={addPayment}
+        paidStatus={paidStatus}
+      />
+
       <ManagerPinDialog open={managerOpen} onOpenChange={setManagerOpen} onApproved={() => {
         if (pendingAction === "refund") doRefund();
         if (pendingAction === "correction") { setCorrChanges({}); setCorrReason(""); setCorrOpen(true); }
@@ -765,6 +791,416 @@ function PaymentPage() {
         </div>
       )}
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Split Bill Dialog
+// ─────────────────────────────────────────────────────────────────────────────
+type SplitStep = "choose" | "even_setup" | "even_pay" | "item_assign" | "item_pay";
+type PayMethod = "cash" | "qr" | "card";
+
+function SplitBillDialog({
+  open, onClose, items, billTotal, remaining, lang, t, onAddPayment, paidStatus,
+}: {
+  open: boolean; onClose: () => void;
+  items: Item[]; billTotal: number; remaining: number;
+  lang: "th" | "en"; t: (k: string) => string;
+  onAddPayment: (m: PayMethod, amount: number, extras?: Record<string, unknown>) => Promise<void>;
+  paidStatus: boolean;
+}) {
+  const [step, setStep] = useState<SplitStep>("choose");
+  const [ways, setWays] = useState(2);
+  // capturedAmount = remaining snapshotted when split starts (so per-share math stays stable)
+  const [capturedAmount, setCapturedAmount] = useState(0);
+  const [paidCount, setPaidCount] = useState(0);         // even split: seats paid so far
+  const [personCount, setPersonCount] = useState(2);     // item split: how many people
+  const [assignments, setAssignments] = useState<Record<string, number>>({}); // item.id → 0-based person
+  const [paidPersons, setPaidPersons] = useState<Set<number>>(new Set());
+
+  // Payment sub-form state
+  const [payMethod, setPayMethod] = useState<PayMethod>("cash");
+  const [cashReceived, setCashReceived] = useState(0);
+  const [qrTip, setQrTip] = useState(0);
+  const [processing, setProcessing] = useState(false);
+
+  // Reset on open
+  useEffect(() => {
+    if (open) {
+      setStep("choose"); setWays(2); setCapturedAmount(0);
+      setPaidCount(0); setPersonCount(2);
+      setAssignments({}); setPaidPersons(new Set());
+      setPayMethod("cash"); setCashReceived(0); setQrTip(0); setProcessing(false);
+    }
+  }, [open]);
+
+  // Reset cash fields when moving between seats/persons
+  useEffect(() => { setCashReceived(0); setQrTip(0); }, [paidCount, paidPersons]);
+
+  // ── Even split helpers ──
+  const baseShare = capturedAmount > 0 ? Math.floor(capturedAmount / ways * 100) / 100 : 0;
+  const evenShareFor = (idx: number) =>
+    idx === ways - 1 ? Math.round((capturedAmount - baseShare * (ways - 1)) * 100) / 100 : baseShare;
+  const currentEvenShare = paidCount === ways - 1 ? remaining : evenShareFor(paidCount);
+
+  // ── Item split helpers ──
+  const subtotalItems = items.reduce((s, i) => s + i.qty * Number(i.unit_price), 0);
+  const personItems = (pIdx: number) => items.filter((i) => assignments[i.id] === pIdx);
+  const personRaw = (pIdx: number) => personItems(pIdx).reduce((s, i) => s + i.qty * Number(i.unit_price), 0);
+  // Display share (proportional to bill total, based on captured amount)
+  const personDisplayShare = (pIdx: number) => {
+    if (subtotalItems === 0) return 0;
+    return Math.round((personRaw(pIdx) / subtotalItems) * capturedAmount * 100) / 100;
+  };
+  const allAssigned = items.every((i) => assignments[i.id] !== undefined);
+  const unpaidPersons = Array.from({ length: personCount }, (_, i) => i).filter((i) => !paidPersons.has(i));
+  const currentPersonIdx = unpaidPersons[0] ?? 0;
+  const isLastPerson = unpaidPersons.length === 1;
+  const currentItemShare = isLastPerson ? remaining : personDisplayShare(currentPersonIdx);
+
+  // ── Current amount to pay ──
+  const currentAmount = step === "even_pay" ? currentEvenShare : step === "item_pay" ? currentItemShare : 0;
+  const cashChange = Math.max(0, cashReceived - currentAmount);
+
+  const handlePay = async () => {
+    if (processing || currentAmount <= 0) return;
+    setProcessing(true);
+    try {
+      if (payMethod === "cash") {
+        if (cashReceived < currentAmount) { toast.error(lang === "th" ? "เงินไม่พอ" : "Not enough cash"); return; }
+        await onAddPayment("cash", currentAmount, { cash_received: cashReceived, change_due: cashChange });
+      } else if (payMethod === "qr") {
+        await onAddPayment("qr", currentAmount, { tip_amount: qrTip });
+        setQrTip(0);
+      } else {
+        await onAddPayment("card", currentAmount);
+      }
+      if (step === "even_pay") {
+        setPaidCount((c) => c + 1);
+      } else {
+        setPaidPersons((prev) => new Set([...prev, currentPersonIdx]));
+      }
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const allDone = paidStatus || remaining <= 0;
+  const payDisabled = processing
+    || currentAmount <= 0
+    || (payMethod === "cash" && (cashReceived <= 0 || cashReceived < currentAmount));
+
+  const personLabel = (i: number) => `${t("split_person")} ${i + 1}`;
+  const ofN = (n: number) => lang === "th" ? `จาก ${n}` : `of ${n}`;
+
+  // ── Quick cash buttons ──
+  const quickCash = (amt: number) => [50, 100, 200, 500, 1000].filter((d) => d >= amt).slice(0, 4);
+
+  // ── Progress bar shared component ──
+  const ProgressBar = ({ total: n, done }: { total: number; done: number }) => (
+    <div className="flex gap-1.5 mb-1">
+      {Array.from({ length: n }, (_, i) => (
+        <div key={i} className={`flex-1 h-2 rounded-full transition-colors ${i < done ? "bg-green-500" : i === done ? "bg-primary" : "bg-muted"}`} />
+      ))}
+    </div>
+  );
+
+  // ── Payment sub-form ──
+  const PayForm = ({ amount }: { amount: number }) => (
+    <div className="space-y-3">
+      <div className="flex gap-2">
+        {(["cash", "qr", "card"] as const).map((m) => (
+          <button key={m} onClick={() => setPayMethod(m)}
+            className={`flex-1 py-2 rounded-lg border text-sm font-medium transition-colors ${payMethod === m ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted/60"}`}>
+            {m === "cash" ? t("cash") : m === "qr" ? "QR" : t("card")}
+          </button>
+        ))}
+      </div>
+
+      {payMethod === "cash" && (
+        <div className="space-y-2">
+          <Label className="text-xs">{t("cash_received")}</Label>
+          <Input type="number" min={amount} step={1}
+            value={cashReceived || ""}
+            onChange={(e) => setCashReceived(Math.max(0, Number(e.target.value)))}
+            placeholder={String(Math.ceil(amount))}
+            className="text-lg font-bold text-center" />
+          {cashReceived > 0 && (
+            <div className="flex justify-between text-sm bg-muted rounded px-3 py-2">
+              <span>{t("change")}</span>
+              <span className="font-bold tabular-nums">{thb(cashChange)}</span>
+            </div>
+          )}
+          <div className="flex gap-1.5 flex-wrap">
+            {quickCash(amount).map((d) => (
+              <button key={d} onClick={() => setCashReceived(d)}
+                className={`px-3 py-1 rounded border text-sm font-medium transition-colors ${cashReceived === d ? "bg-primary text-primary-foreground border-primary" : "hover:bg-accent"}`}>
+                ฿{d}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {payMethod === "qr" && (
+        <div className="space-y-2">
+          <div className="flex justify-between text-sm bg-muted rounded px-3 py-2">
+            <span>{t("amount")}</span><span className="font-bold tabular-nums">{thb(amount)}</span>
+          </div>
+          <div>
+            <Label className="text-xs">{lang === "th" ? "ทิป (ถ้ามี)" : "Tip (optional)"}</Label>
+            <Input type="number" min={0} step={1} value={qrTip || ""} onChange={(e) => setQrTip(Math.max(0, Number(e.target.value)))} placeholder="0" />
+          </div>
+          {qrTip > 0 && (
+            <div className="flex justify-between text-sm bg-muted rounded px-3 py-2">
+              <span>{lang === "th" ? "รวมทั้งหมด QR" : "Total QR charge"}</span>
+              <span className="font-bold tabular-nums">{thb(amount + qrTip)}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {payMethod === "card" && (
+        <div className="flex justify-between text-sm bg-muted rounded px-3 py-2">
+          <span>{t("amount")}</span><span className="font-bold tabular-nums">{thb(amount)}</span>
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md max-h-[88vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Scissors className="h-4 w-4" />
+            {t("split_bill")} · <span className="text-primary tabular-nums">{thb(billTotal)}</span>
+          </DialogTitle>
+        </DialogHeader>
+
+        {/* ── All done ── */}
+        {allDone && (
+          <div className="text-center py-6 space-y-3">
+            <div className="text-5xl">✅</div>
+            <p className="text-xl font-bold">{t("split_all_paid")}</p>
+            <Button className="w-full" onClick={onClose}>{t("back")}</Button>
+          </div>
+        )}
+
+        {/* ── Choose mode ── */}
+        {!allDone && step === "choose" && (
+          <div className="space-y-3 py-1">
+            <button
+              className="w-full rounded-xl border-2 hover:border-primary/60 bg-card p-4 text-left transition-colors hover:bg-primary/5"
+              onClick={() => { setCapturedAmount(remaining); setStep("even_setup"); }}
+            >
+              <div className="font-semibold text-base">{t("split_evenly")}</div>
+              <div className="text-sm text-muted-foreground mt-0.5">
+                {lang === "th" ? "แบ่งยอดเท่าๆ กันทุกคน" : "Divide the total equally between guests"}
+              </div>
+            </button>
+            <button
+              className="w-full rounded-xl border-2 hover:border-primary/60 bg-card p-4 text-left transition-colors hover:bg-primary/5"
+              onClick={() => { setCapturedAmount(remaining); setStep("item_assign"); }}
+            >
+              <div className="font-semibold text-base">{t("split_by_item")}</div>
+              <div className="text-sm text-muted-foreground mt-0.5">
+                {lang === "th" ? "มอบหมายแต่ละรายการให้แต่ละคน แล้วชำระแยก" : "Assign each item to a person and pay separately"}
+              </div>
+            </button>
+          </div>
+        )}
+
+        {/* ── Even: setup ── */}
+        {!allDone && step === "even_setup" && (
+          <div className="space-y-5 py-1">
+            <div>
+              <p className="text-sm font-medium mb-3">{t("split_ways")}</p>
+              <div className="flex gap-2">
+                {[2, 3, 4, 5, 6].map((n) => (
+                  <button key={n} onClick={() => setWays(n)}
+                    className={`flex-1 py-3 rounded-xl border-2 text-xl font-bold transition-colors ${ways === n ? "border-primary bg-primary/10 text-primary" : "border-muted hover:border-primary/40"}`}>
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-xl border bg-muted/30 p-4 space-y-2">
+              {Array.from({ length: ways }, (_, i) => {
+                const sh = i === ways - 1
+                  ? Math.round((remaining - Math.floor(remaining / ways * 100) / 100 * (ways - 1)) * 100) / 100
+                  : Math.floor(remaining / ways * 100) / 100;
+                return (
+                  <div key={i} className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">{personLabel(i)}</span>
+                    <span className="font-bold tabular-nums">{thb(sh)}</span>
+                  </div>
+                );
+              })}
+              <div className="border-t pt-2 flex justify-between text-sm font-bold">
+                <span>{t("total")}</span><span className="tabular-nums">{thb(remaining)}</span>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setStep("choose")}>{t("cancel")}</Button>
+              <Button onClick={() => { setPaidCount(0); setStep("even_pay"); }}>
+                {lang === "th" ? "ถัดไป →" : "Continue →"}
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
+
+        {/* ── Even: pay each seat ── */}
+        {!allDone && step === "even_pay" && (
+          <div className="space-y-4 py-1">
+            <ProgressBar total={ways} done={paidCount} />
+
+            <div className="rounded-xl border bg-card p-4 space-y-4">
+              <div className="flex items-baseline justify-between">
+                <span className="font-semibold">{personLabel(paidCount)} <span className="text-muted-foreground text-sm font-normal">{ofN(ways)}</span></span>
+                <span className="text-2xl font-black text-primary tabular-nums">{thb(currentEvenShare)}</span>
+              </div>
+              <PayForm amount={currentEvenShare} />
+            </div>
+
+            {/* Seat overview */}
+            <div className="rounded-xl bg-muted/30 p-3 space-y-1.5 text-sm">
+              {Array.from({ length: ways }, (_, i) => (
+                <div key={i} className={`flex justify-between ${i === paidCount ? "font-semibold text-primary" : i < paidCount ? "text-muted-foreground" : "text-muted-foreground/60"}`}>
+                  <span className="flex items-center gap-1.5">
+                    {i < paidCount && <Check className="h-3 w-3 text-green-500" />}
+                    {personLabel(i)}
+                    {i === paidCount && <span className="text-xs opacity-70">← {t("split_paying")}</span>}
+                  </span>
+                  <span className="tabular-nums">{thb(evenShareFor(i))}</span>
+                </div>
+              ))}
+            </div>
+
+            <Button className="w-full" size="lg" disabled={payDisabled} onClick={handlePay}>
+              {processing ? "…" : `${t("pay")} · ${thb(currentEvenShare)}${payMethod === "qr" && qrTip > 0 ? ` + Tip ${thb(qrTip)}` : ""}`}
+            </Button>
+          </div>
+        )}
+
+        {/* ── Item: assign ── */}
+        {!allDone && step === "item_assign" && (
+          <div className="space-y-4 py-1">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium">{t("split_assign_items")}</p>
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-muted-foreground mr-1">{lang === "th" ? "คน:" : "People:"}</span>
+                {[2, 3, 4, 5, 6].map((n) => (
+                  <button key={n} onClick={() => setPersonCount(n)}
+                    className={`h-7 w-7 rounded-lg border text-xs font-bold transition-colors ${personCount === n ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted/60"}`}>
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Per-person totals preview */}
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {Array.from({ length: personCount }, (_, pIdx) => (
+                <div key={pIdx} className={`shrink-0 rounded-xl border px-3 py-2 text-center min-w-[72px] ${personRaw(pIdx) > 0 ? "border-primary/40 bg-primary/5" : "bg-muted/30"}`}>
+                  <div className="text-xs font-semibold text-muted-foreground">{lang === "th" ? `คน ${pIdx + 1}` : `P${pIdx + 1}`}</div>
+                  <div className="text-sm font-bold tabular-nums text-primary">{thb(personRaw(pIdx))}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Item assignment list */}
+            <div className="space-y-1.5 max-h-56 overflow-y-auto pr-0.5">
+              {items.map((i) => {
+                const asgn = assignments[i.id];
+                return (
+                  <div key={i.id}
+                    className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${asgn === undefined ? "border-orange-300 bg-orange-50 dark:bg-orange-950/20" : "bg-card border-border"}`}>
+                    <div className="flex-1 min-w-0">
+                      <div className="truncate font-medium">{lang === "th" ? i.name_th : i.name_en}</div>
+                      <div className="text-xs text-muted-foreground tabular-nums">
+                        {i.qty > 1 ? `×${i.qty} · ` : ""}{thb(i.qty * Number(i.unit_price))}
+                      </div>
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                      {Array.from({ length: personCount }, (_, pIdx) => (
+                        <button key={pIdx} onClick={() => setAssignments({ ...assignments, [i.id]: pIdx })}
+                          className={`h-7 w-7 rounded-lg border text-xs font-bold transition-colors ${asgn === pIdx ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted/60"}`}>
+                          P{pIdx + 1}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {!allAssigned && (
+              <p className="text-xs text-orange-600 dark:text-orange-400">
+                ⚠ {lang === "th" ? "กรุณามอบหมายทุกรายการก่อนดำเนินการต่อ" : "Please assign all items before continuing"}
+              </p>
+            )}
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setStep("choose")}>{t("cancel")}</Button>
+              <Button disabled={!allAssigned} onClick={() => { setPaidPersons(new Set()); setStep("item_pay"); }}>
+                {lang === "th" ? "ถัดไป →" : "Continue →"}
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
+
+        {/* ── Item: pay each person ── */}
+        {!allDone && step === "item_pay" && (
+          <div className="space-y-4 py-1">
+            <ProgressBar total={personCount} done={paidPersons.size} />
+
+            <div className="rounded-xl border bg-card p-4 space-y-4">
+              <div className="flex items-baseline justify-between">
+                <span className="font-semibold">
+                  {personLabel(currentPersonIdx)} <span className="text-muted-foreground text-sm font-normal">{ofN(personCount)}</span>
+                </span>
+                <span className="text-2xl font-black text-primary tabular-nums">{thb(currentItemShare)}</span>
+              </div>
+
+              {/* Their items */}
+              <div className="rounded-lg bg-muted/30 p-2.5 space-y-1">
+                {personItems(currentPersonIdx).map((i) => (
+                  <div key={i.id} className="flex justify-between text-xs text-muted-foreground">
+                    <span>{lang === "th" ? i.name_th : i.name_en}{i.qty > 1 ? ` ×${i.qty}` : ""}</span>
+                    <span className="tabular-nums">{thb(i.qty * Number(i.unit_price))}</span>
+                  </div>
+                ))}
+              </div>
+
+              <PayForm amount={currentItemShare} />
+            </div>
+
+            {/* Person overview */}
+            <div className="rounded-xl bg-muted/30 p-3 space-y-1.5 text-sm">
+              {Array.from({ length: personCount }, (_, i) => (
+                <div key={i} className={`flex justify-between ${i === currentPersonIdx ? "font-semibold text-primary" : paidPersons.has(i) ? "text-muted-foreground" : "text-muted-foreground/60"}`}>
+                  <span className="flex items-center gap-1.5">
+                    {paidPersons.has(i) && <Check className="h-3 w-3 text-green-500" />}
+                    {personLabel(i)}
+                    {i === currentPersonIdx && <span className="text-xs opacity-70">← {t("split_paying")}</span>}
+                  </span>
+                  <span className="tabular-nums">{thb(personDisplayShare(i))}</span>
+                </div>
+              ))}
+              <div className="border-t pt-2 flex justify-between font-semibold">
+                <span>{lang === "th" ? "คงเหลือ" : "Remaining"}</span>
+                <span className="tabular-nums text-primary">{thb(remaining)}</span>
+              </div>
+            </div>
+
+            <Button className="w-full" size="lg" disabled={payDisabled} onClick={handlePay}>
+              {processing ? "…" : `${t("pay")} · ${thb(currentItemShare)}${payMethod === "qr" && qrTip > 0 ? ` + Tip ${thb(qrTip)}` : ""}`}
+            </Button>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 

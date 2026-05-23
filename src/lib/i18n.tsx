@@ -202,6 +202,15 @@ const dict: Dict = {
   set_includes:     { th: "รวมข้าวสวยหรือโจ๊ก",       en: "Includes rice or porridge" },
   set_select_1:     { th: "เลือก 1",                 en: "Select 1"          },
   set_select_2:     { th: "เลือก 2",                 en: "Select 2"          },
+  // split bill
+  split_bill:         { th: "แยกบิล",                    en: "Split Bill"                      },
+  split_evenly:       { th: "แบ่งเท่ากัน",                en: "Split Evenly"                    },
+  split_by_item:      { th: "แยกตามรายการ",               en: "Split by Item"                   },
+  split_ways:         { th: "แบ่งกี่ทาง",                 en: "Split ways"                      },
+  split_person:       { th: "คนที่",                      en: "Person"                          },
+  split_all_paid:     { th: "ชำระครบแล้ว!",               en: "All shares paid!"                },
+  split_assign_items: { th: "มอบหมายรายการให้แต่ละคน",     en: "Assign Items"                    },
+  split_paying:       { th: "กำลังชำระ",                  en: "paying"                          },
   // item sales tab
   item_sales:        { th: "ยอดขายรายเมนู",              en: "Item Sales"                      },
   total_items_sold:  { th: "จำนวนที่ขายได้ทั้งหมด",        en: "Total Items Sold"                },
