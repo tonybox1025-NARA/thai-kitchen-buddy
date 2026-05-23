@@ -104,12 +104,15 @@ function twoCol(left, right) {
 // Format Thai Baht
 function thb(n) { return `฿${Number(n).toFixed(2)}`; }
 
-// Format date/time
+// Format date/time — Gregorian calendar, DD/MM/YYYY HH:MM
 function fmtDateTime(iso) {
   const d = new Date(iso);
-  const date = d.toLocaleDateString("th-TH", { day: "2-digit", month: "2-digit", year: "2-digit" });
-  const time = d.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
-  return `${date} ${time}`;
+  const dd   = String(d.getDate()).padStart(2, "0");
+  const mm   = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = d.getFullYear();           // always Gregorian (e.g. 2026)
+  const hh   = String(d.getHours()).padStart(2, "0");
+  const min  = String(d.getMinutes()).padStart(2, "0");
+  return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
 }
 
 // ── Receipt formatter (counter printer) ──────────────────────────────────────
@@ -141,10 +144,10 @@ function buildReceipt(p) {
 
   // Totals
   const subtotal = p.items?.reduce((s, i) => s + Number(i.unit_price) * Number(i.qty), 0) ?? p.total;
-  parts.push(twoCol("Subtotal / ยอดรวม", thb(subtotal)), lf());
+  parts.push(twoCol("Subtotal", thb(subtotal)), lf());
 
   if (p.discountAmount > 0) {
-    parts.push(twoCol("Discount / ส่วนลด", "-" + thb(p.discountAmount)), lf());
+    parts.push(twoCol("Discount", "-" + thb(p.discountAmount)), lf());
   }
   if (p.memberDiscountAmount > 0) {
     parts.push(twoCol("Member discount", "-" + thb(p.memberDiscountAmount)), lf());
@@ -159,25 +162,25 @@ function buildReceipt(p) {
   parts.push(
     CMD.BOLD_ON,
     line("="), lf(),
-    twoCol("TOTAL / ยอดสุทธิ", thb(p.total)), lf(),
+    twoCol("TOTAL", thb(p.total)), lf(),
     line("="), lf(),
     CMD.BOLD_OFF,
   );
 
   // Payments
   for (const pay of p.payments ?? []) {
-    const label = pay.method === "cash" ? "Cash / เงินสด"
-                : pay.method === "qr"   ? "QR Transfer / โอน"
-                :                        "Card / บัตร";
+    const label = pay.method === "cash" ? "Cash"
+                : pay.method === "qr"   ? "QR Transfer"
+                :                        "Credit Card";
     parts.push(twoCol(label, thb(pay.amount)), lf());
-    if (pay.cash_received) parts.push(twoCol("  Received / รับมา", thb(pay.cash_received)), lf());
-    if (pay.change_due)    parts.push(twoCol("  Change / เงินทอน", thb(pay.change_due)),    lf());
+    if (pay.cash_received) parts.push(twoCol("  Received", thb(pay.cash_received)), lf());
+    if (pay.change_due)    parts.push(twoCol("  Change",   thb(pay.change_due)),    lf());
   }
 
   parts.push(
     line(), lf(2),
     CMD.ALIGN_CENTER,
-    CMD.BOLD_ON, "ขอบคุณ / Thank you", lf(),
+    CMD.BOLD_ON, "Thank you!", lf(),
     CMD.BOLD_OFF,
     lf(3),
     CMD.CUT,
@@ -188,7 +191,8 @@ function buildReceipt(p) {
 
 // ── Kitchen ticket formatter (kitchen printer) ────────────────────────────────
 function buildKitchen(p) {
-  const time = new Date(p.sent_at ?? Date.now()).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const _kd  = new Date(p.sent_at ?? Date.now());
+  const time = `${String(_kd.getHours()).padStart(2,"0")}:${String(_kd.getMinutes()).padStart(2,"0")}:${String(_kd.getSeconds()).padStart(2,"0")}`;
   const parts = [
     CMD.INIT,
     CMD.ALIGN_CENTER,
