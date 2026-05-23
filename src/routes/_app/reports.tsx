@@ -1050,18 +1050,20 @@ function ReportCard({ r }: { r: ReportData }) {
     <Card>
       <CardContent className="py-4 space-y-1 text-sm">
         <Row label="Gross sales" value={thb(r.gross)} />
-        <Row label="Discount" value={`- ${thb(r.discount)}`} />
-        {r.discount > 0 && (r.discountByType.percent > 0 || r.discountByType.fixed > 0 || r.discountByType.free_item > 0) && (
-          <div className="pl-3 space-y-0.5 text-xs text-muted-foreground">
-            {r.discountByType.percent > 0   && <Row label="  ↳ % Off"          value={`- ${thb(r.discountByType.percent)}`}   />}
-            {r.discountByType.fixed > 0     && <Row label="  ↳ Fixed amount"   value={`- ${thb(r.discountByType.fixed)}`}     />}
-            {r.discountByType.free_item > 0 && <Row label="  ↳ Free items"     value={`- ${thb(r.discountByType.free_item)}`} />}
-            {r.discountByStaff.map((s) => (
-              <Row key={s.staffName} label={`  ↳ ${s.staffName} (×${s.count})`} value={`- ${thb(s.amount)}`} />
-            ))}
-          </div>
+        {/* Discount breakdown — simplified: by type + member, then grand total */}
+        {(r.discount > 0 || r.member > 0) ? (
+          <>
+            <div className="space-y-0.5 text-xs text-muted-foreground pl-1">
+              {r.discountByType.percent > 0   && <Row label="  % Discount"      value={`- ${thb(r.discountByType.percent)}`}   />}
+              {r.discountByType.fixed > 0     && <Row label="  Fixed Amount"    value={`- ${thb(r.discountByType.fixed)}`}     />}
+              {r.discountByType.free_item > 0 && <Row label="  Free Item"       value={`- ${thb(r.discountByType.free_item)}`} />}
+              {r.member > 0                   && <Row label="  Member Discount" value={`- ${thb(r.member)}`}                  />}
+            </div>
+            <Row label="Total discounts" value={`- ${thb(r.discount + r.member)}`} bold />
+          </>
+        ) : (
+          <Row label="Discounts" value={thb(0)} />
         )}
-        <Row label="Member discount" value={`- ${thb(r.member)}`} />
         <Row label="Net sales" value={thb(r.net)} bold />
         <div className="border-t pt-2 mt-2" />
         <Row label="Cash" value={thb(r.byMethod.cash)} />

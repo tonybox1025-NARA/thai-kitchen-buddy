@@ -16,6 +16,11 @@ import { Route as MenuTableCodeRouteImport } from './routes/menu.$tableCode'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppReportsRouteImport } from './routes/_app/reports'
 import { Route as AppPosRouteImport } from './routes/_app/pos'
+import { Route as AppDetailVoidsRouteImport } from './routes/_app/detail-voids'
+import { Route as AppDetailTipsRouteImport } from './routes/_app/detail-tips'
+import { Route as AppDetailQrRouteImport } from './routes/_app/detail-qr'
+import { Route as AppDetailGrossRouteImport } from './routes/_app/detail-gross'
+import { Route as AppDetailDiscountsRouteImport } from './routes/_app/detail-discounts'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
 import { Route as ApiPublicQrOrderRouteImport } from './routes/api/public/qr-order'
 import { Route as AppPaymentBillIdRouteImport } from './routes/_app/payment.$billId'
@@ -56,6 +61,31 @@ const AppPosRoute = AppPosRouteImport.update({
   path: '/pos',
   getParentRoute: () => AppRoute,
 } as any)
+const AppDetailVoidsRoute = AppDetailVoidsRouteImport.update({
+  id: '/detail-voids',
+  path: '/detail-voids',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDetailTipsRoute = AppDetailTipsRouteImport.update({
+  id: '/detail-tips',
+  path: '/detail-tips',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDetailQrRoute = AppDetailQrRouteImport.update({
+  id: '/detail-qr',
+  path: '/detail-qr',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDetailGrossRoute = AppDetailGrossRouteImport.update({
+  id: '/detail-gross',
+  path: '/detail-gross',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDetailDiscountsRoute = AppDetailDiscountsRouteImport.update({
+  id: '/detail-discounts',
+  path: '/detail-discounts',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppDashboardRoute = AppDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -87,6 +117,11 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/dashboard': typeof AppDashboardRoute
+  '/detail-discounts': typeof AppDetailDiscountsRoute
+  '/detail-gross': typeof AppDetailGrossRoute
+  '/detail-qr': typeof AppDetailQrRoute
+  '/detail-tips': typeof AppDetailTipsRoute
+  '/detail-voids': typeof AppDetailVoidsRoute
   '/pos': typeof AppPosRoute
   '/reports': typeof AppReportsRoute
   '/settings': typeof AppSettingsRoute
@@ -100,6 +135,11 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/dashboard': typeof AppDashboardRoute
+  '/detail-discounts': typeof AppDetailDiscountsRoute
+  '/detail-gross': typeof AppDetailGrossRoute
+  '/detail-qr': typeof AppDetailQrRoute
+  '/detail-tips': typeof AppDetailTipsRoute
+  '/detail-voids': typeof AppDetailVoidsRoute
   '/pos': typeof AppPosRoute
   '/reports': typeof AppReportsRoute
   '/settings': typeof AppSettingsRoute
@@ -115,6 +155,11 @@ export interface FileRoutesById {
   '/_app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
   '/_app/dashboard': typeof AppDashboardRoute
+  '/_app/detail-discounts': typeof AppDetailDiscountsRoute
+  '/_app/detail-gross': typeof AppDetailGrossRoute
+  '/_app/detail-qr': typeof AppDetailQrRoute
+  '/_app/detail-tips': typeof AppDetailTipsRoute
+  '/_app/detail-voids': typeof AppDetailVoidsRoute
   '/_app/pos': typeof AppPosRoute
   '/_app/reports': typeof AppReportsRoute
   '/_app/settings': typeof AppSettingsRoute
@@ -130,6 +175,11 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/dashboard'
+    | '/detail-discounts'
+    | '/detail-gross'
+    | '/detail-qr'
+    | '/detail-tips'
+    | '/detail-voids'
     | '/pos'
     | '/reports'
     | '/settings'
@@ -143,6 +193,11 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/dashboard'
+    | '/detail-discounts'
+    | '/detail-gross'
+    | '/detail-qr'
+    | '/detail-tips'
+    | '/detail-voids'
     | '/pos'
     | '/reports'
     | '/settings'
@@ -157,6 +212,11 @@ export interface FileRouteTypes {
     | '/_app'
     | '/login'
     | '/_app/dashboard'
+    | '/_app/detail-discounts'
+    | '/_app/detail-gross'
+    | '/_app/detail-qr'
+    | '/_app/detail-tips'
+    | '/_app/detail-voids'
     | '/_app/pos'
     | '/_app/reports'
     | '/_app/settings'
@@ -227,6 +287,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppPosRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/detail-voids': {
+      id: '/_app/detail-voids'
+      path: '/detail-voids'
+      fullPath: '/detail-voids'
+      preLoaderRoute: typeof AppDetailVoidsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/detail-tips': {
+      id: '/_app/detail-tips'
+      path: '/detail-tips'
+      fullPath: '/detail-tips'
+      preLoaderRoute: typeof AppDetailTipsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/detail-qr': {
+      id: '/_app/detail-qr'
+      path: '/detail-qr'
+      fullPath: '/detail-qr'
+      preLoaderRoute: typeof AppDetailQrRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/detail-gross': {
+      id: '/_app/detail-gross'
+      path: '/detail-gross'
+      fullPath: '/detail-gross'
+      preLoaderRoute: typeof AppDetailGrossRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/detail-discounts': {
+      id: '/_app/detail-discounts'
+      path: '/detail-discounts'
+      fullPath: '/detail-discounts'
+      preLoaderRoute: typeof AppDetailDiscountsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/dashboard': {
       id: '/_app/dashboard'
       path: '/dashboard'
@@ -267,6 +362,11 @@ declare module '@tanstack/react-router' {
 
 interface AppRouteChildren {
   AppDashboardRoute: typeof AppDashboardRoute
+  AppDetailDiscountsRoute: typeof AppDetailDiscountsRoute
+  AppDetailGrossRoute: typeof AppDetailGrossRoute
+  AppDetailQrRoute: typeof AppDetailQrRoute
+  AppDetailTipsRoute: typeof AppDetailTipsRoute
+  AppDetailVoidsRoute: typeof AppDetailVoidsRoute
   AppPosRoute: typeof AppPosRoute
   AppReportsRoute: typeof AppReportsRoute
   AppSettingsRoute: typeof AppSettingsRoute
@@ -276,6 +376,11 @@ interface AppRouteChildren {
 
 const AppRouteChildren: AppRouteChildren = {
   AppDashboardRoute: AppDashboardRoute,
+  AppDetailDiscountsRoute: AppDetailDiscountsRoute,
+  AppDetailGrossRoute: AppDetailGrossRoute,
+  AppDetailQrRoute: AppDetailQrRoute,
+  AppDetailTipsRoute: AppDetailTipsRoute,
+  AppDetailVoidsRoute: AppDetailVoidsRoute,
   AppPosRoute: AppPosRoute,
   AppReportsRoute: AppReportsRoute,
   AppSettingsRoute: AppSettingsRoute,
@@ -296,3 +401,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
