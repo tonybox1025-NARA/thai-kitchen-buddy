@@ -774,7 +774,7 @@ export type Database = {
       app_role: "admin" | "manager" | "staff"
       bill_status: "open" | "paid" | "refunded" | "partial_refund"
       order_item_status: "pending" | "sent" | "served" | "voided"
-      order_source: "pos" | "qr"
+      order_source: "pos" | "qr" | "takeout" | "staff_meal"
       order_status: "open" | "closed" | "cancelled"
       payment_method: "qr" | "cash" | "card"
       print_status: "pending" | "printed" | "failed"
@@ -912,7 +912,7 @@ export const Constants = {
       app_role: ["admin", "manager", "staff"],
       bill_status: ["open", "paid", "refunded", "partial_refund"],
       order_item_status: ["pending", "sent", "served", "voided"],
-      order_source: ["pos", "qr"],
+      order_source: ["pos", "qr", "takeout", "staff_meal"],
       order_status: ["open", "closed", "cancelled"],
       payment_method: ["qr", "cash", "card"],
       print_status: ["pending", "printed", "failed"],

@@ -76,6 +76,8 @@ function OrderPage() {
   const [managerAction, setManagerAction] = useState<"void" | "close_table" | "move_table" | null>(null);
   const [tableCode, setTableCode] = useState<string>("");
   const [tableId, setTableId] = useState<string>("");
+  const [orderSource, setOrderSource] = useState<string>("pos");
+  const [orderNumber, setOrderNumber] = useState<string | null>(null);
   const [closeTableOpen, setCloseTableOpen] = useState(false);
   const [closeReason, setCloseReason] = useState("");
   const [closePreset, setClosePreset] = useState("");
@@ -94,13 +96,17 @@ function OrderPage() {
       supabase.from("menus").select("*").eq("available", true).order("sort"),
       supabase.from("categories").select("*").order("sort"),
       supabase.from("order_items").select("*").eq("order_id", orderId).order("created_at"),
-      supabase.from("orders").select("table_id").eq("id", orderId).single(),
+      supabase.from("orders").select("table_id,source,order_number").eq("id", orderId).single(),
       supabase.from("settings").select("vat_mode,vat_rate,restaurant_name").eq("id", 1).single(),
     ]);
     if (m) setMenus(m as Menu[]);
     if (c) setCats(c as Category[]);
     if (it) setItems(it as Item[]);
     if (s) { setSettingsVatMode((s.vat_mode as "inclusive" | "exclusive") || "inclusive"); setSettingsVatRate(Number(s.vat_rate) || 7); setRestaurantName(s.restaurant_name); }
+    if (ord) {
+      setOrderSource((ord as any).source ?? "pos");
+      setOrderNumber((ord as any).order_number ?? null);
+    }
     if (ord?.table_id) {
       setTableId(ord.table_id);
       const { data: tbl } = await supabase.from("restaurant_tables").select("code").eq("id", ord.table_id).single();
@@ -180,7 +186,8 @@ function OrderPage() {
     await supabase.from("order_items").update({ status: "sent", sent_at: sentAt }).in("id", ids);
     // Queue print jobs — kitchen (Burmese) + counter (order copy)
     const lines = pending.map((p) => ({ name_my: p.name_my, name_en: p.name_en, name_th: p.name_th, qty: p.qty, notes: p.notes }));
-    const ticketPayload = { kind: "order_ticket", table: tableCode, lines, sent_at: sentAt };
+    const displayLabel = orderSource === "takeout" ? `Takeout ${orderNumber ?? ""}` : orderSource === "staff_meal" ? `Staff ${orderNumber ?? ""}` : tableCode;
+    const ticketPayload = { kind: "order_ticket", table: displayLabel, lines, sent_at: sentAt };
     await supabase.from("print_jobs").insert([
       { printer: "kitchen", payload: { ...ticketPayload, language: "my" } },
       { printer: "counter", payload: { ...ticketPayload, language: "th" } },
@@ -253,7 +260,9 @@ function OrderPage() {
   };
 
   const doCloseTable = async () => {
-    if (!tableId) return;
+    // For table orders, tableId is required; for takeout/staff meal it can be absent
+    const isTableOrder = orderSource === "pos" || orderSource === "qr";
+    if (isTableOrder && !tableId) return;
     const unpaid = items.filter((i) => i.status !== "voided");
     // If there are unpaid items, a reason must be selected
     if (unpaid.length > 0 && !closeReason.trim()) return;
@@ -298,7 +307,9 @@ function OrderPage() {
       cancel_reason: reason, closed_by: staff?.id,
     } as any).eq("id", orderId);
 
-    await supabase.from("restaurant_tables").update({ status: "available", guests: 0, has_qr_alert: false }).eq("id", tableId);
+    if (tableId) {
+      await supabase.from("restaurant_tables").update({ status: "available", guests: 0, has_qr_alert: false }).eq("id", tableId);
+    }
 
     setCloseTableOpen(false);
     setCloseReason("");
@@ -351,11 +362,25 @@ function OrderPage() {
         {/* Page header — scrolls away */}
         <div className="flex items-center gap-3 px-4 pt-4 pb-2 flex-wrap">
           <Link to="/pos"><Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4 mr-1" />{t("back")}</Button></Link>
-          <h1 className="text-xl font-bold">{t("table")} {tableCode}</h1>
+          {orderSource === "takeout" ? (
+            <h1 className="text-xl font-bold flex items-center gap-2">
+              <span className="text-blue-600 dark:text-blue-400">Takeout</span>
+              {orderNumber && <span className="text-base font-mono bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded">{orderNumber}</span>}
+            </h1>
+          ) : orderSource === "staff_meal" ? (
+            <h1 className="text-xl font-bold flex items-center gap-2">
+              <span className="text-purple-600 dark:text-purple-400">Staff Meal</span>
+              {orderNumber && <span className="text-base font-mono bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded">{orderNumber}</span>}
+            </h1>
+          ) : (
+            <h1 className="text-xl font-bold">{t("table")} {tableCode}</h1>
+          )}
           <div className="ml-auto flex gap-2">
-            <Button size="sm" variant="outline" onClick={openMoveTable}>
-              <ArrowLeftRight className="h-4 w-4 mr-1" />{t("move_table")}
-            </Button>
+            {(orderSource === "pos" || orderSource === "qr") && (
+              <Button size="sm" variant="outline" onClick={openMoveTable}>
+                <ArrowLeftRight className="h-4 w-4 mr-1" />{t("move_table")}
+              </Button>
+            )}
             <Button size="sm" variant="destructive" onClick={openCloseTable}>
               <X className="h-4 w-4 mr-1" />{t("close_table")}
             </Button>
@@ -625,7 +650,10 @@ function OrderPage() {
           <DialogHeader>
             <DialogTitle className="text-center">{restaurantName || "Restaurant"}</DialogTitle>
           </DialogHeader>
-          <p className="text-center text-sm text-muted-foreground -mt-2">{t("table")} {tableCode} · {new Date().toLocaleString(lang === "th" ? "th-TH" : "en-US")}</p>
+          <p className="text-center text-sm text-muted-foreground -mt-2">
+            {orderSource === "takeout" ? `Takeout · ${orderNumber ?? ""}` : orderSource === "staff_meal" ? `Staff Meal · ${orderNumber ?? ""}` : `${t("table")} ${tableCode}`}
+            {" · "}{new Date().toLocaleString(lang === "th" ? "th-TH" : "en-US")}
+          </p>
           <div className="space-y-1 max-h-56 overflow-y-auto text-sm border rounded-lg p-3 bg-muted/30">
             {liveItems.map((i) => (
               <div key={i.id} className="flex justify-between">
@@ -665,7 +693,9 @@ function OrderPage() {
           onClick={() => setCustomerViewOpen(false)}
         >
           <p className="text-base text-muted-foreground">{restaurantName}</p>
-          <p className="text-3xl font-bold mt-1 mb-8">{t("table")} {tableCode}</p>
+          <p className="text-3xl font-bold mt-1 mb-8">
+            {orderSource === "takeout" ? `Takeout · ${orderNumber ?? ""}` : orderSource === "staff_meal" ? `Staff Meal · ${orderNumber ?? ""}` : `${t("table")} ${tableCode}`}
+          </p>
           <div className="w-full max-w-xs space-y-2 mb-8">
             {liveItems.map((i) => (
               <div key={i.id} className="flex justify-between text-lg">

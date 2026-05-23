@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Bell, Users, X } from "lucide-react";
+import { Bell, Users, X, ShoppingBag, UtensilsCrossed, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { playAlertBeep } from "@/lib/audio-alert";
 
@@ -19,6 +19,12 @@ type RTable = {
   guests: number; pos_x: number; pos_y: number; has_qr_alert: boolean;
 };
 
+type SpecialOrder = {
+  id: string;
+  order_number: string | null;
+  source: "takeout" | "staff_meal";
+};
+
 function PosPage() {
   const { t } = useI18n();
   const { staff } = useAuth();
@@ -27,24 +33,36 @@ function PosPage() {
   const [openTable, setOpenTable] = useState<RTable | null>(null);
   const [guests, setGuests] = useState(2);
   const [banner, setBanner] = useState<{ tableCode: string; key: number } | null>(null);
+  const [specialOrders, setSpecialOrders] = useState<SpecialOrder[]>([]);
 
   const load = async () => {
     const { data } = await supabase.from("restaurant_tables").select("*").order("code");
     if (data) setTables(data as RTable[]);
   };
 
+  const loadSpecialOrders = async () => {
+    const { data } = await supabase
+      .from("orders")
+      .select("id,order_number,source")
+      .in("source", ["takeout", "staff_meal"])
+      .eq("status", "open")
+      .order("created_at");
+    if (data) setSpecialOrders(data as SpecialOrder[]);
+  };
+
   useEffect(() => {
     load();
+    loadSpecialOrders();
     const ch = supabase
       .channel("tables-rt")
       .on("postgres_changes", { event: "*", schema: "public", table: "restaurant_tables" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => loadSpecialOrders())
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "orders", filter: "source=eq.qr" }, async (payload) => {
         toast.success(t("qr_alert"));
         playAlertBeep();
         const tableId = (payload.new as { table_id?: string } | null)?.table_id;
         if (tableId) {
           await supabase.from("restaurant_tables").update({ has_qr_alert: true }).eq("id", tableId);
-          // Look up the table code for the banner
           const { data: tbl } = await supabase.from("restaurant_tables").select("code").eq("id", tableId).maybeSingle();
           setBanner({ tableCode: tbl?.code ?? "?", key: Date.now() });
         }
@@ -65,7 +83,6 @@ function PosPage() {
       setOpenTable(tbl);
       setGuests(2);
     } else {
-      // find open order for this table
       const { data: order } = await supabase
         .from("orders").select("id").eq("table_id", tbl.id).eq("status", "open").maybeSingle();
       if (order) {
@@ -79,7 +96,6 @@ function PosPage() {
 
   const startTable = async () => {
     if (!openTable || !staff) return;
-    // Open shift if needed — uses configured starting cash as opening float
     let { data: shift } = await supabase.from("shifts").select("id").eq("status", "open").maybeSingle();
     if (!shift) {
       const today = new Date().toISOString().slice(0, 10);
@@ -97,10 +113,44 @@ function PosPage() {
     nav({ to: "/order/$orderId", params: { orderId: order.id } });
   };
 
+  const createSpecialOrder = async (source: "takeout" | "staff_meal") => {
+    if (!staff) return;
+    // Ensure shift is open
+    let { data: shift } = await supabase.from("shifts").select("id").eq("status", "open").maybeSingle();
+    if (!shift) {
+      const today = new Date().toISOString().slice(0, 10);
+      const { data: cfg } = await supabase.from("settings").select("starting_cash").eq("id", 1).maybeSingle();
+      const opening = Number((cfg as { starting_cash?: number } | null)?.starting_cash ?? 0);
+      const { data: newShift } = await supabase.from("shifts").insert({ business_day: today, opened_by: staff.id, opening_float: opening }).select("id").single();
+      shift = newShift;
+    }
+    // Count all existing orders of this source to determine next number
+    const { count } = await supabase
+      .from("orders")
+      .select("id", { count: "exact", head: true })
+      .eq("source", source);
+    const nextNum = (count ?? 0) + 1;
+    const prefix = source === "takeout" ? "TO" : "ST";
+    const orderNumber = `${prefix}-${String(nextNum).padStart(3, "0")}`;
+
+    const { data: order, error } = await (supabase.from("orders") as any).insert({
+      opened_by: staff.id,
+      shift_id: shift?.id,
+      source,
+      order_number: orderNumber,
+    }).select("id").single();
+
+    if (error || !order) { toast.error(error?.message || "Failed to create order"); return; }
+    nav({ to: "/order/$orderId", params: { orderId: order.id } });
+  };
+
   const colorFor = (s: RTable["status"]) =>
     s === "available" ? "bg-table-available text-white"
     : s === "bill_requested" ? "bg-table-bill text-white"
     : "bg-table-occupied text-white";
+
+  const takeoutOrders = specialOrders.filter((o) => o.source === "takeout");
+  const staffOrders = specialOrders.filter((o) => o.source === "staff_meal");
 
   return (
     <div className="p-6">
@@ -123,7 +173,85 @@ function PosPage() {
           </button>
         </div>
       )}
-      <div className="flex items-center justify-between mb-6">
+
+      {/* Special Orders Section */}
+      <div className="mb-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {/* Takeout */}
+        <div className="rounded-xl border-2 border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800 p-3">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <ShoppingBag className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <span className="font-semibold text-blue-700 dark:text-blue-300 text-sm">Takeout</span>
+              {takeoutOrders.length > 0 && (
+                <span className="text-xs bg-blue-200 dark:bg-blue-800 text-blue-700 dark:text-blue-300 rounded-full px-1.5 py-0.5 font-medium">
+                  {takeoutOrders.length} open
+                </span>
+              )}
+            </div>
+            <Button
+              size="sm"
+              className="bg-blue-600 hover:bg-blue-700 text-white h-8 px-3 text-xs"
+              onClick={() => createSpecialOrder("takeout")}
+            >
+              <Plus className="h-3.5 w-3.5 mr-1" />New
+            </Button>
+          </div>
+          {takeoutOrders.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {takeoutOrders.map((o) => (
+                <button
+                  key={o.id}
+                  onClick={() => nav({ to: "/order/$orderId", params: { orderId: o.id } })}
+                  className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow-sm transition-colors"
+                >
+                  {o.order_number ?? "TO-?"}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-blue-500 dark:text-blue-400 opacity-70">No open takeout orders</p>
+          )}
+        </div>
+
+        {/* Staff Meal */}
+        <div className="rounded-xl border-2 border-purple-200 bg-purple-50 dark:bg-purple-950/30 dark:border-purple-800 p-3">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <UtensilsCrossed className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+              <span className="font-semibold text-purple-700 dark:text-purple-300 text-sm">Staff Meal</span>
+              {staffOrders.length > 0 && (
+                <span className="text-xs bg-purple-200 dark:bg-purple-800 text-purple-700 dark:text-purple-300 rounded-full px-1.5 py-0.5 font-medium">
+                  {staffOrders.length} open
+                </span>
+              )}
+            </div>
+            <Button
+              size="sm"
+              className="bg-purple-600 hover:bg-purple-700 text-white h-8 px-3 text-xs"
+              onClick={() => createSpecialOrder("staff_meal")}
+            >
+              <Plus className="h-3.5 w-3.5 mr-1" />New
+            </Button>
+          </div>
+          {staffOrders.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {staffOrders.map((o) => (
+                <button
+                  key={o.id}
+                  onClick={() => nav({ to: "/order/$orderId", params: { orderId: o.id } })}
+                  className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold shadow-sm transition-colors"
+                >
+                  {o.order_number ?? "ST-?"}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-purple-500 dark:text-purple-400 opacity-70">No open staff meal orders</p>
+          )}
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold">{t("nav_pos")}</h1>
         <div className="flex items-center gap-3 text-sm">
           <Legend color="bg-table-available" label={t("available")} />

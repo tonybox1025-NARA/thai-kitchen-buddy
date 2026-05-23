@@ -31,6 +31,8 @@ type ReportData = {
   openingFloat: number; bills: number;
   tipTotal: number; // sum of tip_amount on QR payments; payment.amount excludes tip
   cancelledCount: number; // number of cancelled (table-closed) orders this shift
+  takeoutTotal: number; // net sales from takeout orders
+  staffMealTotal: number; // net sales from staff meal orders
 };
 
 type AdjPay = {
@@ -98,6 +100,8 @@ ${row("Voids &amp; Cancellations", thb(r.voids))}
 ${row("Refunds total", thb(r.refunds))}
 ${row("Bills", String(r.bills))}
 ${r.cancelledCount > 0 ? row("Cancelled orders", String(r.cancelledCount)) : ""}
+${r.takeoutTotal > 0 ? row("Takeout sales", thb(r.takeoutTotal)) : ""}
+${r.staffMealTotal > 0 ? row("Staff meal cost", thb(r.staffMealTotal)) : ""}
 </table>
 <h2>Cash count</h2><table>${denomRows}</table>
 <h2>Cash drawer</h2><table>
@@ -142,15 +146,19 @@ function Reports() {
   }, []);
 
   const buildReport = async (s: Shift): Promise<ReportData> => {
-    const { data: bills } = await supabase.from("bills").select("id,total,subtotal,discount_amount,member_discount_amount").eq("shift_id", s.id).eq("status", "paid");
+    const { data: bills } = await supabase.from("bills").select("id,total,subtotal,discount_amount,member_discount_amount,order_id").eq("shift_id", s.id).eq("status", "paid");
     const billIds = (bills ?? []).map((b) => b.id);
-    const [{ data: pays }, { data: voids }, { data: refunds }, { data: cancelledOrds }] = await Promise.all([
+    const orderIds = (bills ?? []).map((b) => (b as any).order_id).filter(Boolean) as string[];
+    const [{ data: pays }, { data: voids }, { data: refunds }, { data: cancelledOrds }, { data: orderSources }] = await Promise.all([
       billIds.length
         ? supabase.from("payments").select("method,amount,tip_amount").in("bill_id", billIds)
         : Promise.resolve({ data: [] as { method: string; amount: number; tip_amount: number }[], error: null }),
       supabase.from("voids").select("amount").eq("shift_id", s.id),
       supabase.from("refunds").select("amount").eq("shift_id", s.id),
       supabase.from("orders").select("id").eq("shift_id", s.id).eq("status", "cancelled"),
+      orderIds.length
+        ? supabase.from("orders").select("id,source").in("id", orderIds)
+        : Promise.resolve({ data: [] as { id: string; source: string }[], error: null }),
     ]);
     const gross = (bills ?? []).reduce((x, b) => x + Number(b.subtotal), 0);
     const net = (bills ?? []).reduce((x, b) => x + Number(b.total), 0);
@@ -159,6 +167,16 @@ function Reports() {
     const byMethod: Record<string, number> = { cash: 0, qr: 0, card: 0 };
     (pays ?? []).forEach((p) => { byMethod[p.method] = (byMethod[p.method] ?? 0) + Number(p.amount); });
     const tipTotal = (pays ?? []).filter((p) => p.method === "qr").reduce((s, p) => s + Number(p.tip_amount ?? 0), 0);
+
+    // Compute takeout and staff meal totals from bills + order source
+    const sourceMap = new Map((orderSources ?? []).map((o) => [o.id, o.source]));
+    let takeoutTotal = 0, staffMealTotal = 0;
+    for (const b of bills ?? []) {
+      const src = sourceMap.get((b as any).order_id ?? "");
+      if (src === "takeout") takeoutTotal += Number(b.total);
+      else if (src === "staff_meal") staffMealTotal += Number(b.total);
+    }
+
     return {
       gross, net, discount, member,
       voids: (voids ?? []).reduce((x, v) => x + Number(v.amount), 0),
@@ -166,6 +184,8 @@ function Reports() {
       byMethod, openingFloat: Number(s.opening_float), bills: (bills ?? []).length,
       tipTotal,
       cancelledCount: (cancelledOrds ?? []).length,
+      takeoutTotal,
+      staffMealTotal,
     };
   };
 
@@ -1011,6 +1031,13 @@ function ReportCard({ r }: { r: ReportData }) {
         <Row label="Bills" value={String(r.bills)} />
         {r.cancelledCount > 0 && (
           <Row label="Cancelled orders" value={String(r.cancelledCount)} />
+        )}
+        {(r.takeoutTotal > 0 || r.staffMealTotal > 0) && (
+          <>
+            <div className="border-t pt-2 mt-2" />
+            {r.takeoutTotal > 0 && <Row label="  ↳ Takeout sales" value={thb(r.takeoutTotal)} />}
+            {r.staffMealTotal > 0 && <Row label="  ↳ Staff meal cost" value={thb(r.staffMealTotal)} />}
+          </>
         )}
       </CardContent>
     </Card>
