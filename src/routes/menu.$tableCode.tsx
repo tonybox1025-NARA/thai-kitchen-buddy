@@ -277,6 +277,23 @@ function PlaceholderImg() {
     </div>
   );
 }
+// ── Large hero image shown at the top of the add-item popup ──────────────────
+function PopupHeroImage({ src }: { src: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return null;
+  return (
+    <div className="-mx-6 -mt-6 mb-2">
+      <img
+        src={src}
+        alt=""
+        loading="eager"
+        decoding="async"
+        className="w-full h-52 object-cover rounded-t-lg"
+        onError={() => setFailed(true)}
+      />
+    </div>
+  );
+}
 
 // ── Main component ────────────────────────────────────────────────────────────
 function CustomerMenu() {
@@ -556,7 +573,8 @@ function CustomerMenu() {
 
       {/* ── Add item dialog (regular items only) ── */}
       <Dialog open={!!adding} onOpenChange={(o) => !o && setAdding(null)}>
-        <DialogContent>
+        <DialogContent className="overflow-hidden">
+          {adding?.image_url && <PopupHeroImage src={adding.image_url} />}
           <DialogHeader>
             <DialogTitle className="leading-snug">{adding ? name(adding) : ""}</DialogTitle>
             {adding && <p className="text-sm text-muted-foreground mt-0.5">{sub(adding)}</p>}
