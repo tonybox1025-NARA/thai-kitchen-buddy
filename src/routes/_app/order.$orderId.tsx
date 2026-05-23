@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n, pickName } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth";
@@ -28,8 +28,8 @@ const CLOSE_PRESETS = [
   { key: "close_other",   th: "อื่นๆ",            en: "Other"          },
 ];
 
-type Menu = { id: string; category_id: string | null; name_th: string; name_en: string; name_my: string; price: number; available: boolean; image_url: string | null };
-type Category = { id: string; name_th: string; name_en: string; name_my: string };
+type Menu = { id: string; category_id: string | null; name_th: string; name_en: string; name_my: string; price: number; available: boolean; image_url: string | null; sort: number };
+type Category = { id: string; name_th: string; name_en: string; name_my: string; sort: number };
 type Item = {
   id: string; menu_id: string | null; name_th: string; name_en: string; name_my: string;
   qty: number; unit_price: number; notes: string | null; modifiers: unknown;
@@ -118,7 +118,18 @@ function OrderPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderId]);
 
-  const filteredMenus = activeCat === "all" ? menus : menus.filter((m) => m.category_id === activeCat);
+  // Build a category-sort lookup once; menus are then sorted by (cat.sort, menu.sort)
+  const catSortMap = useMemo(() => new Map(cats.map((c) => [c.id, c.sort ?? 999])), [cats]);
+
+  const filteredMenus = useMemo(() => {
+    const base = activeCat === "all"
+      ? menus
+      : menus.filter((m) => m.category_id === activeCat);
+    return [...base].sort((a, b) => {
+      const catDiff = (catSortMap.get(a.category_id ?? "") ?? 999) - (catSortMap.get(b.category_id ?? "") ?? 999);
+      return catDiff !== 0 ? catDiff : (a.sort ?? 0) - (b.sort ?? 0);
+    });
+  }, [menus, cats, catSortMap, activeCat]);
 
   const openMenu = (m: Menu) => { setSelected(m); setQty(1); setNotes(""); };
 
