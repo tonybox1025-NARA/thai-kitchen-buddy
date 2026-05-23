@@ -347,8 +347,9 @@ function OrderPage() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_420px] h-[calc(100vh-3.5rem)]">
       {/* Menu */}
-      <div className="overflow-auto p-4">
-        <div className="flex items-center gap-3 mb-4 flex-wrap">
+      <div className="overflow-auto flex flex-col">
+        {/* Page header — scrolls away */}
+        <div className="flex items-center gap-3 px-4 pt-4 pb-2 flex-wrap">
           <Link to="/pos"><Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4 mr-1" />{t("back")}</Button></Link>
           <h1 className="text-xl font-bold">{t("table")} {tableCode}</h1>
           <div className="ml-auto flex gap-2">
@@ -360,7 +361,9 @@ function OrderPage() {
             </Button>
           </div>
         </div>
-        <div className="flex gap-2 mb-4 flex-wrap">
+
+        {/* Category filter bar — sticks to top when scrolling */}
+        <div className="sticky top-0 z-10 bg-background border-b px-4 py-2 flex gap-2 flex-wrap">
           <Button variant={activeCat === "all" ? "default" : "outline"} size="sm" onClick={() => setActiveCat("all")}>All</Button>
           {cats.map((c) => (
             <Button key={c.id} variant={activeCat === c.id ? "default" : "outline"} size="sm" onClick={() => setActiveCat(c.id)}>
@@ -368,7 +371,9 @@ function OrderPage() {
             </Button>
           ))}
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+
+        {/* Menu grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 p-4">
           {filteredMenus.map((m) => (
             <button
               key={m.id}
