@@ -33,7 +33,8 @@ const Schema = z.object({
       z.object({
         menu_id: z.string().uuid(),
         qty: z.number().int().min(1).max(50),
-        notes: z.string().max(200).optional().nullable(),
+        notes: z.string().max(500).optional().nullable(),
+        set_config: z.record(z.any()).optional().nullable(),
       })
     )
     .min(1)
@@ -101,6 +102,10 @@ export const Route = createFileRoute("/api/public/qr-order")({
         const sentAt = new Date().toISOString();
         const rows = items.map((it) => {
           const m = menuMap.get(it.menu_id)!;
+          const sc = it.set_config as { main?: { th: string }; sides?: { th: string }[]; drink?: { th: string }; rice?: string } | null | undefined;
+          const notes = sc
+            ? `หลัก: ${sc.main?.th ?? "—"} | ${(sc.sides ?? []).map((s) => s.th).join(", ")}${sc.drink ? ` | ${sc.drink.th}` : ""} | ${sc.rice === "porridge" ? "โจ๊ก" : "ข้าวสวย"}`
+            : it.notes ?? null;
           return {
             order_id: order!.id,
             menu_id: it.menu_id,
@@ -109,9 +114,10 @@ export const Route = createFileRoute("/api/public/qr-order")({
             name_my: m.name_my,
             qty: it.qty,
             unit_price: m.price,
-            notes: it.notes ?? null,
+            notes,
             status: "sent" as const,
             sent_at: sentAt,
+            set_config: it.set_config ?? null,
           };
         });
         const { error: itemsErr } = await supabase.from("order_items").insert(rows);

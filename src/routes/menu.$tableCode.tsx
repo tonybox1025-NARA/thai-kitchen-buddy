@@ -5,8 +5,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { ShoppingCart, Plus, Minus, Check, Languages } from "lucide-react";
+import { ShoppingCart, Plus, Minus, Check, Languages, Layers } from "lucide-react";
 import { toast } from "sonner";
+import { SETS, SET_C_DRINKS, type SetDef, type SetConfig, type SetItem } from "@/lib/set-menu";
 
 export const Route = createFileRoute("/menu/$tableCode")({
   component: CustomerMenu,
@@ -18,15 +19,205 @@ export const Route = createFileRoute("/menu/$tableCode")({
   }),
 });
 
-type Menu = { id: string; category_id: string | null; name_th: string; name_en: string; price: number; image_url: string | null };
-type Category = { id: string; name_th: string; name_en: string };
-type CartItem = { menu_id: string; name_th: string; name_en: string; price: number; qty: number; notes?: string };
+type Menu = { id: string; category_id: string | null; name_th: string; name_en: string; price: number; image_url: string | null; sort: number };
+type Category = { id: string; name_th: string; name_en: string; sort: number };
+type CartItem = { menu_id: string; name_th: string; name_en: string; price: number; qty: number; notes?: string; set_config?: SetConfig };
 type Lang = "th" | "en";
 
 const T = {
-  th: { menu: "เมนู", table: "โต๊ะ", cart: "ตะกร้า", add: "เพิ่ม", submit: "ส่งออเดอร์", qty: "จำนวน", notes: "หมายเหตุ", empty: "ยังไม่มีรายการ", total: "รวม", confirm: "ยืนยันสั่ง", cancel: "ยกเลิก", thanks: "ขอบคุณค่ะ! ออเดอร์ของคุณกำลังรอพนักงานยืนยัน", order_more: "สั่งเพิ่ม", all: "ทั้งหมด" },
-  en: { menu: "Menu", table: "Table", cart: "Cart", add: "Add", submit: "Submit order", qty: "Qty", notes: "Notes", empty: "Cart is empty", total: "Total", confirm: "Place order", cancel: "Cancel", thanks: "Thank you! Your order is waiting for staff confirmation.", order_more: "Order more", all: "All" },
+  th: {
+    menu: "เมนู", table: "โต๊ะ", cart: "ตะกร้า", add: "เพิ่ม", submit: "ส่งออเดอร์",
+    qty: "จำนวน", notes: "หมายเหตุ", empty: "ยังไม่มีรายการ", total: "รวม",
+    confirm: "ยืนยันสั่ง", cancel: "ยกเลิก",
+    thanks: "ขอบคุณค่ะ! ออเดอร์ของคุณกำลังรอพนักงานยืนยัน",
+    order_more: "สั่งเพิ่ม", all: "ทั้งหมด",
+    // set menu
+    set_main: "อาหารหลัก", set_sides: "เครื่องเคียง", set_free_drink: "เครื่องดื่มฟรี 🥤",
+    set_rice: "ข้าว", set_steamed: "ข้าวสวย 🍚", set_porridge: "โจ๊ก 🥣",
+    set_summary: "สรุปรายการ", set_includes: "รวมข้าวสวยหรือโจ๊ก",
+    set_select1: "เลือก 1", set_select2: "เลือก 2", set_free: "ฟรี",
+  },
+  en: {
+    menu: "Menu", table: "Table", cart: "Cart", add: "Add", submit: "Submit order",
+    qty: "Qty", notes: "Notes", empty: "Cart is empty", total: "Total",
+    confirm: "Place order", cancel: "Cancel",
+    thanks: "Thank you! Your order is waiting for staff confirmation.",
+    order_more: "Order more", all: "All",
+    // set menu
+    set_main: "Main Dish", set_sides: "Side Dishes", set_free_drink: "Free Drink 🥤",
+    set_rice: "Rice", set_steamed: "Steamed Rice 🍚", set_porridge: "Porridge 🥣",
+    set_summary: "Summary", set_includes: "Includes rice or porridge",
+    set_select1: "Select 1", set_select2: "Select 2", set_free: "FREE",
+  },
 };
+
+// ── Inline set-menu dialog (no useI18n — QR page has no I18nProvider) ─────────
+function QrSetDialog({ setDef, lang, tr, onClose, onConfirm }: {
+  setDef: SetDef; lang: Lang; tr: typeof T["th"]; onClose: () => void;
+  onConfirm: (config: SetConfig) => void;
+}) {
+  const [main, setMain] = useState<SetItem | null>(null);
+  const [sides, setSides] = useState<SetItem[]>([]);
+  const [drink, setDrink] = useState<SetItem | null>(null);
+  const [rice, setRice] = useState<"rice" | "porridge">("rice");
+
+  const toggleSide = (item: SetItem) => {
+    setSides((prev) => {
+      const exists = prev.some((s) => s.th === item.th);
+      if (exists) return prev.filter((s) => s.th !== item.th);
+      if (prev.length >= 2) return prev;
+      return [...prev, item];
+    });
+  };
+
+  const isReady = !!main && sides.length === 2 && (!setDef.hasDrink || !!drink);
+
+  const handleConfirm = () => {
+    if (!isReady) return;
+    onConfirm({ set_id: setDef.id, main: main!, sides: sides as [SetItem, SetItem], drink: drink ?? undefined, rice });
+  };
+
+  const pick = (item: SetItem) => lang === "th" ? item.th : item.en;
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-xl flex items-center gap-2">
+            <Layers className="h-5 w-5 text-amber-600" />
+            {lang === "th" ? setDef.name_th : setDef.name_en}
+            <span className="text-primary font-bold">฿{setDef.price}</span>
+          </DialogTitle>
+          <p className="text-sm text-muted-foreground">{tr.set_includes}</p>
+        </DialogHeader>
+
+        <div className="space-y-5">
+          {/* Main dish — radio */}
+          <section>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-semibold text-sm uppercase tracking-wide">{tr.set_main}</h3>
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${main ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"}`}>
+                {main ? `✓ 1/1` : tr.set_select1}
+              </span>
+            </div>
+            <div className="grid grid-cols-1 gap-1.5">
+              {setDef.mains.map((item) => (
+                <button
+                  key={item.th}
+                  onClick={() => setMain(item)}
+                  className={`flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-sm text-left transition-colors
+                    ${main?.th === item.th ? "border-primary bg-primary/10 font-medium" : "hover:bg-muted/50"}`}
+                >
+                  <span className={`h-4 w-4 rounded-full border-2 shrink-0 flex items-center justify-center
+                    ${main?.th === item.th ? "border-primary bg-primary" : "border-muted-foreground"}`}>
+                    {main?.th === item.th && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+                  </span>
+                  <span className="flex-1">{item.th}</span>
+                  {lang === "en" && <span className="text-muted-foreground text-xs">{item.en}</span>}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          {/* Side dishes — checkboxes (max 2) */}
+          <section>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-semibold text-sm uppercase tracking-wide">{tr.set_sides}</h3>
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sides.length === 2 ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"}`}>
+                {sides.length === 2 ? `✓ 2/2` : `${sides.length}/2`}
+              </span>
+            </div>
+            <div className="grid grid-cols-1 gap-1.5">
+              {setDef.sides.map((item) => {
+                const selected = sides.some((s) => s.th === item.th);
+                const disabled = !selected && sides.length >= 2;
+                return (
+                  <button
+                    key={item.th}
+                    onClick={() => toggleSide(item)}
+                    disabled={disabled}
+                    className={`flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-sm text-left transition-colors
+                      ${selected ? "border-primary bg-primary/10 font-medium" : disabled ? "opacity-40 cursor-not-allowed" : "hover:bg-muted/50"}`}
+                  >
+                    <span className={`h-4 w-4 rounded border-2 shrink-0 flex items-center justify-center
+                      ${selected ? "border-primary bg-primary" : "border-muted-foreground"}`}>
+                      {selected && <Check className="h-2.5 w-2.5 text-white" />}
+                    </span>
+                    <span className="flex-1">{item.th}</span>
+                    {lang === "en" && <span className="text-muted-foreground text-xs">{item.en}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+          {/* Drink — SET C only */}
+          {setDef.hasDrink && (
+            <section>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="font-semibold text-sm uppercase tracking-wide text-amber-600 dark:text-amber-400">{tr.set_free_drink}</h3>
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${drink ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"}`}>
+                  {drink ? `✓ 1/1` : tr.set_select1}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {SET_C_DRINKS.map((item) => (
+                  <button
+                    key={item.th}
+                    onClick={() => setDrink(item)}
+                    className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm text-left transition-colors
+                      ${drink?.th === item.th ? "border-amber-500 bg-amber-50 dark:bg-amber-950/30 font-medium" : "hover:bg-muted/50"}`}
+                  >
+                    <span className={`h-4 w-4 rounded-full border-2 shrink-0 flex items-center justify-center
+                      ${drink?.th === item.th ? "border-amber-500 bg-amber-500" : "border-muted-foreground"}`}>
+                      {drink?.th === item.th && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+                    </span>
+                    <span>{pick(item)}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Rice / porridge */}
+          <section>
+            <h3 className="font-semibold text-sm uppercase tracking-wide mb-2">{tr.set_rice}</h3>
+            <div className="flex gap-2">
+              {(["rice", "porridge"] as const).map((opt) => (
+                <button
+                  key={opt}
+                  onClick={() => setRice(opt)}
+                  className={`flex-1 py-2.5 rounded-lg border text-sm font-medium transition-colors
+                    ${rice === opt ? "border-primary bg-primary/10 text-primary" : "hover:bg-muted/50"}`}
+                >
+                  {opt === "rice" ? tr.set_steamed : tr.set_porridge}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          {/* Live summary */}
+          {(main || sides.length > 0) && (
+            <section className="bg-muted/30 rounded-lg p-3 text-sm space-y-1">
+              <p className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-1">{tr.set_summary}</p>
+              {main && <p>🍽️ {main.th}{lang === "en" ? ` (${main.en})` : ""}</p>}
+              {sides.map((s) => <p key={s.th}>🥗 {s.th}{lang === "en" ? ` (${s.en})` : ""}</p>)}
+              {drink && <p>🥤 {drink.th} <span className="text-amber-600 font-semibold">{tr.set_free}</span></p>}
+              <p>🍚 {rice === "rice" ? tr.set_steamed : tr.set_porridge}</p>
+            </section>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" className="flex-1" onClick={onClose}>{tr.cancel}</Button>
+          <Button className="flex-1" onClick={handleConfirm} disabled={!isReady}>
+            {tr.add} · ฿{setDef.price}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 // ── Skeleton shown while menu data loads ──────────────────────────────────────
 function MenuSkeleton() {
@@ -102,6 +293,9 @@ function CustomerMenu() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // Set menu state
+  const [selectedSetDef, setSelectedSetDef] = useState<SetDef | null>(null);
+  const [setMenuOrigin, setSetMenuOrigin] = useState<Menu | null>(null);
   const catBarRef = useRef<HTMLDivElement>(null);
   const tr = T[lang];
 
@@ -117,20 +311,76 @@ function CustomerMenu() {
     return () => ac.abort();
   }, [tableCode]);
 
+  // ── Same category-walk sort as the POS order screen ──────────────────────
+  const allMenusSorted = useMemo(() => {
+    if (!data) return [];
+    const byCategory = new Map<string, Menu[]>();
+    for (const m of data.menus) {
+      const key = m.category_id ?? "__none__";
+      if (!byCategory.has(key)) byCategory.set(key, []);
+      byCategory.get(key)!.push(m);
+    }
+    // Sort each category's items by menu.sort
+    for (const bucket of byCategory.values()) {
+      bucket.sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
+    }
+    // Walk categories in their sorted order (data.categories already sorted by sort)
+    const result: Menu[] = [];
+    for (const cat of data.categories) {
+      const items = byCategory.get(cat.id);
+      if (items) result.push(...items);
+    }
+    const none = byCategory.get("__none__");
+    if (none) result.push(...none);
+    return result;
+  }, [data]);
+
   const filtered = useMemo(() => {
     if (!data) return [];
-    return activeCat === "all" ? data.menus : data.menus.filter((m) => m.category_id === activeCat);
-  }, [data, activeCat]);
+    return activeCat === "all"
+      ? allMenusSorted
+      : allMenusSorted.filter((m) => m.category_id === activeCat);
+  }, [allMenusSorted, activeCat, data]);
 
   const cartTotal = useMemo(() => cart.reduce((s, c) => s + c.qty * c.price, 0), [cart]);
   const cartCount = useMemo(() => cart.reduce((s, c) => s + c.qty, 0), [cart]);
 
-  const openAdd = (m: Menu) => { setAdding(m); setAddQty(1); setAddNotes(""); };
+  const openAdd = (m: Menu) => {
+    // Detect set-menu items by name (e.g. "Lon Moh - SET A", "SET B", etc.)
+    const combined = `${m.name_en} ${m.name_th}`.toLowerCase();
+    const setId = combined.includes("set a") ? "A" : combined.includes("set b") ? "B" : combined.includes("set c") ? "C" : null;
+    if (setId) {
+      const setDef = SETS.find((s) => s.id === setId);
+      if (setDef) { setSelectedSetDef(setDef); setSetMenuOrigin(m); return; }
+    }
+    setAdding(m); setAddQty(1); setAddNotes("");
+  };
+
   const addToCart = () => {
     if (!adding) return;
     setCart((prev) => [...prev, { menu_id: adding.id, name_th: adding.name_th, name_en: adding.name_en, price: adding.price, qty: addQty, notes: addNotes || undefined }]);
     setAdding(null);
   };
+
+  const addSetToCart = (config: SetConfig) => {
+    if (!setMenuOrigin) return;
+    const sideStr = config.sides.map((s) => s.th).join(", ");
+    const drinkStr = config.drink ? ` | ${config.drink.th}` : "";
+    const riceStr = config.rice === "rice" ? "ข้าวสวย" : "โจ๊ก";
+    const kitchenNotes = `หลัก: ${config.main.th} | ${sideStr}${drinkStr} | ${riceStr}`;
+    setCart((prev) => [...prev, {
+      menu_id: setMenuOrigin.id,
+      name_th: setMenuOrigin.name_th,
+      name_en: setMenuOrigin.name_en,
+      price: setMenuOrigin.price,
+      qty: 1,
+      notes: kitchenNotes,
+      set_config: config,
+    }]);
+    setSelectedSetDef(null);
+    setSetMenuOrigin(null);
+  };
+
   const updateQty = (idx: number, delta: number) => {
     setCart((prev) => prev.flatMap((c, i) => {
       if (i !== idx) return [c];
@@ -148,7 +398,12 @@ function CustomerMenu() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           table_code: tableCode,
-          items: cart.map((c) => ({ menu_id: c.menu_id, qty: c.qty, notes: c.notes ?? null })),
+          items: cart.map((c) => ({
+            menu_id: c.menu_id,
+            qty: c.qty,
+            notes: c.notes ?? null,
+            set_config: c.set_config ?? null,
+          })),
         }),
       });
       if (!res.ok) throw new Error(await res.text());
@@ -251,20 +506,40 @@ function CustomerMenu() {
           <SheetHeader><SheetTitle>{tr.cart}</SheetTitle></SheetHeader>
           <div className="space-y-2 mt-3">
             {cart.length === 0 && <p className="text-sm text-muted-foreground text-center py-6">{tr.empty}</p>}
-            {cart.map((c, i) => (
-              <div key={i} className="flex items-start gap-2 border rounded-lg p-3">
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium">{name(c)}</div>
-                  {c.notes && <div className="text-xs text-muted-foreground">📝 {c.notes}</div>}
-                  <div className="text-xs text-muted-foreground mt-0.5">฿{c.price.toFixed(0)} × {c.qty}</div>
+            {cart.map((c, i) => {
+              const sc = c.set_config;
+              return (
+                <div key={i} className={`flex items-start gap-2 border rounded-lg p-3 ${sc ? "border-amber-200 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/20" : ""}`}>
+                  <div className="flex-1 min-w-0">
+                    {sc ? (
+                      <>
+                        <div className="font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
+                          <Layers className="h-3.5 w-3.5 shrink-0" />{name(c)}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1 space-y-0.5 pl-5">
+                          <div>🍽️ {sc.main.th}</div>
+                          {sc.sides.map((s, si) => <div key={si}>🥗 {s.th}</div>)}
+                          {sc.drink && <div>🥤 {sc.drink.th} <span className="text-amber-600 font-semibold">{tr.set_free}</span></div>}
+                          <div>🍚 {sc.rice === "rice" ? tr.set_steamed : tr.set_porridge}</div>
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-0.5 pl-5">฿{c.price.toFixed(0)}</div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="font-medium">{name(c)}</div>
+                        {c.notes && <div className="text-xs text-muted-foreground">📝 {c.notes}</div>}
+                        <div className="text-xs text-muted-foreground mt-0.5">฿{c.price.toFixed(0)} × {c.qty}</div>
+                      </>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => updateQty(i, -1)}><Minus className="h-3.5 w-3.5" /></Button>
+                    {!sc && <span className="w-6 text-center font-medium tabular-nums">{c.qty}</span>}
+                    {!sc && <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => updateQty(i, 1)}><Plus className="h-3.5 w-3.5" /></Button>}
+                  </div>
                 </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => updateQty(i, -1)}><Minus className="h-3.5 w-3.5" /></Button>
-                  <span className="w-6 text-center font-medium tabular-nums">{c.qty}</span>
-                  <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => updateQty(i, 1)}><Plus className="h-3.5 w-3.5" /></Button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
           {cart.length > 0 && (
             <div className="mt-4 space-y-3 sticky bottom-0 bg-background pt-3 border-t">
@@ -279,7 +554,7 @@ function CustomerMenu() {
         </SheetContent>
       </Sheet>
 
-      {/* ── Add item dialog ── */}
+      {/* ── Add item dialog (regular items only) ── */}
       <Dialog open={!!adding} onOpenChange={(o) => !o && setAdding(null)}>
         <DialogContent>
           <DialogHeader>
@@ -319,17 +594,42 @@ function CustomerMenu() {
         </DialogContent>
       </Dialog>
 
+      {/* ── Set menu dialog ── */}
+      {selectedSetDef && (
+        <QrSetDialog
+          key={selectedSetDef.id}
+          setDef={selectedSetDef}
+          lang={lang}
+          tr={tr}
+          onClose={() => { setSelectedSetDef(null); setSetMenuOrigin(null); }}
+          onConfirm={addSetToCart}
+        />
+      )}
+
       {/* ── Confirm order dialog ── */}
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>{tr.confirm}</DialogTitle></DialogHeader>
-          <div className="space-y-1 text-sm">
-            {cart.map((c, i) => (
-              <div key={i} className="flex justify-between">
-                <span>{name(c)} × {c.qty}</span>
-                <span>฿{(c.price * c.qty).toFixed(0)}</span>
-              </div>
-            ))}
+          <div className="space-y-1 text-sm max-h-60 overflow-y-auto">
+            {cart.map((c, i) => {
+              const sc = c.set_config;
+              return (
+                <div key={i} className="flex justify-between gap-2">
+                  <span className="min-w-0">
+                    {sc && <Layers className="inline h-3.5 w-3.5 mr-1 text-amber-600" />}
+                    {name(c)} × {c.qty}
+                    {sc && (
+                      <span className="block text-xs text-muted-foreground pl-5">
+                        {sc.main.th} · {sc.sides.map(s => s.th).join(", ")}
+                        {sc.drink ? ` · ${sc.drink.th}` : ""}
+                        {" · "}{sc.rice === "rice" ? "ข้าวสวย" : "โจ๊ก"}
+                      </span>
+                    )}
+                  </span>
+                  <span className="shrink-0">฿{(c.price * c.qty).toFixed(0)}</span>
+                </div>
+              );
+            })}
           </div>
           <div className="flex justify-between font-bold text-lg border-t pt-2">
             <span>{tr.total}</span><span>฿{cartTotal.toFixed(0)}</span>
