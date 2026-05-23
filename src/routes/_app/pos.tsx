@@ -83,13 +83,23 @@ function PosPage() {
       setOpenTable(tbl);
       setGuests(2);
     } else {
-      const { data: order } = await supabase
-        .from("orders").select("id").eq("table_id", tbl.id).eq("status", "open").maybeSingle();
+      // Use limit(1) + data?.[0] instead of maybeSingle() so that duplicate
+      // open orders (e.g. from a previous crashed session) don't return null.
+      const { data: orders } = await supabase
+        .from("orders")
+        .select("id")
+        .eq("table_id", tbl.id)
+        .eq("status", "open")
+        .order("created_at", { ascending: false })
+        .limit(1);
+      const order = orders?.[0] ?? null;
       if (order) {
         if (tbl.has_qr_alert) await supabase.from("restaurant_tables").update({ has_qr_alert: false }).eq("id", tbl.id);
         nav({ to: "/order/$orderId", params: { orderId: order.id } });
       } else {
-        toast.error("No open order found");
+        // Stale table status — reset it so the table becomes tappable again
+        await supabase.from("restaurant_tables").update({ status: "available", guests: 0 }).eq("id", tbl.id);
+        toast.error(t("no_open_order"));
       }
     }
   };
@@ -184,7 +194,7 @@ function PosPage() {
               <span className="font-semibold text-blue-700 dark:text-blue-300 text-sm">{t("takeout")}</span>
               {takeoutOrders.length > 0 && (
                 <span className="text-xs bg-blue-200 dark:bg-blue-800 text-blue-700 dark:text-blue-300 rounded-full px-1.5 py-0.5 font-medium">
-                  {takeoutOrders.length} open
+                  {takeoutOrders.length}
                 </span>
               )}
             </div>
@@ -221,7 +231,7 @@ function PosPage() {
               <span className="font-semibold text-purple-700 dark:text-purple-300 text-sm">{t("staff_meal")}</span>
               {staffOrders.length > 0 && (
                 <span className="text-xs bg-purple-200 dark:bg-purple-800 text-purple-700 dark:text-purple-300 rounded-full px-1.5 py-0.5 font-medium">
-                  {staffOrders.length} open
+                  {staffOrders.length}
                 </span>
               )}
             </div>
@@ -277,7 +287,7 @@ function PosPage() {
               </>
             )}
             <div className="text-xl font-bold leading-none">{tbl.code}</div>
-            <div className="text-[10px] opacity-90">{tbl.capacity} seats</div>
+            <div className="text-[10px] opacity-90">{tbl.capacity}</div>
             {tbl.status !== "available" && (
               <div className="flex items-center gap-0.5 text-xs mt-0.5">
                 <Users className="h-3 w-3" /> {tbl.guests}
