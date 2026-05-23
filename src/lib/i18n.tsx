@@ -190,7 +190,7 @@ const dict: Dict = {
   cancelled_by:        { th: "ยกเลิกโดย",                 en: "Cancelled by"                   },
   reason_staff:        { th: "เหตุผล / พนักงาน",           en: "Reason / Staff"                 },
   item_col:            { th: "รายการ",                    en: "Item"                           },
-  no_open_order:       { th: "ไม่พบออเดอร์ที่เปิดอยู่",  en: "No open order found — table reset" },
+  no_open_order:       { th: "ไม่พบออเดอร์ที่เปิดอยู่",  en: "No open order found for this table" },
   // misc
   loading: { th: "กำลังโหลด…", en: "Loading…" },
   qr_alert: { th: "ออเดอร์ QR ใหม่!", en: "New QR order!" },

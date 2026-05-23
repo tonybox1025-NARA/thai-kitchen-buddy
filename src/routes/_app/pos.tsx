@@ -85,20 +85,23 @@ function PosPage() {
     } else {
       // Use limit(1) + data?.[0] instead of maybeSingle() so that duplicate
       // open orders (e.g. from a previous crashed session) don't return null.
-      const { data: orders } = await supabase
+      // IMPORTANT: orders table uses "opened_at", not "created_at".
+      const { data: orders, error: orderErr } = await supabase
         .from("orders")
         .select("id")
         .eq("table_id", tbl.id)
         .eq("status", "open")
-        .order("created_at", { ascending: false })
+        .order("opened_at", { ascending: false })
         .limit(1);
+      if (orderErr) {
+        toast.error(orderErr.message);
+        return;
+      }
       const order = orders?.[0] ?? null;
       if (order) {
         if (tbl.has_qr_alert) await supabase.from("restaurant_tables").update({ has_qr_alert: false }).eq("id", tbl.id);
         nav({ to: "/order/$orderId", params: { orderId: order.id } });
       } else {
-        // Stale table status — reset it so the table becomes tappable again
-        await supabase.from("restaurant_tables").update({ status: "available", guests: 0 }).eq("id", tbl.id);
         toast.error(t("no_open_order"));
       }
     }
