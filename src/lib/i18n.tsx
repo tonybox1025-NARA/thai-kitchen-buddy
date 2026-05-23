@@ -127,6 +127,12 @@ const dict: Dict = {
   role_admin: { th: "เจ้าของ", en: "Admin" },
   role_manager: { th: "ผู้จัดการ", en: "Manager" },
   role_staff: { th: "พนักงาน", en: "Staff" },
+  // special order types
+  takeout: { th: "เทคอะเวย์", en: "Takeout" },
+  staff_meal: { th: "อาหารพนักงาน", en: "Staff Meal" },
+  new_order_btn: { th: "ใหม่", en: "New" },
+  no_takeout_orders: { th: "ไม่มีออเดอร์เทคอะเวย์", en: "No open takeout orders" },
+  no_staff_meal_orders: { th: "ไม่มีออเดอร์อาหารพนักงาน", en: "No open staff meal orders" },
   // misc
   loading: { th: "กำลังโหลด…", en: "Loading…" },
   qr_alert: { th: "ออเดอร์ QR ใหม่!", en: "New QR order!" },

@@ -181,7 +181,7 @@ function PosPage() {
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <ShoppingBag className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-              <span className="font-semibold text-blue-700 dark:text-blue-300 text-sm">Takeout</span>
+              <span className="font-semibold text-blue-700 dark:text-blue-300 text-sm">{t("takeout")}</span>
               {takeoutOrders.length > 0 && (
                 <span className="text-xs bg-blue-200 dark:bg-blue-800 text-blue-700 dark:text-blue-300 rounded-full px-1.5 py-0.5 font-medium">
                   {takeoutOrders.length} open
@@ -193,7 +193,7 @@ function PosPage() {
               className="bg-blue-600 hover:bg-blue-700 text-white h-8 px-3 text-xs"
               onClick={() => createSpecialOrder("takeout")}
             >
-              <Plus className="h-3.5 w-3.5 mr-1" />New
+              <Plus className="h-3.5 w-3.5 mr-1" />{t("new_order_btn")}
             </Button>
           </div>
           {takeoutOrders.length > 0 ? (
@@ -209,7 +209,7 @@ function PosPage() {
               ))}
             </div>
           ) : (
-            <p className="text-xs text-blue-500 dark:text-blue-400 opacity-70">No open takeout orders</p>
+            <p className="text-xs text-blue-500 dark:text-blue-400 opacity-70">{t("no_takeout_orders")}</p>
           )}
         </div>
 
@@ -218,7 +218,7 @@ function PosPage() {
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <UtensilsCrossed className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-              <span className="font-semibold text-purple-700 dark:text-purple-300 text-sm">Staff Meal</span>
+              <span className="font-semibold text-purple-700 dark:text-purple-300 text-sm">{t("staff_meal")}</span>
               {staffOrders.length > 0 && (
                 <span className="text-xs bg-purple-200 dark:bg-purple-800 text-purple-700 dark:text-purple-300 rounded-full px-1.5 py-0.5 font-medium">
                   {staffOrders.length} open
@@ -230,7 +230,7 @@ function PosPage() {
               className="bg-purple-600 hover:bg-purple-700 text-white h-8 px-3 text-xs"
               onClick={() => createSpecialOrder("staff_meal")}
             >
-              <Plus className="h-3.5 w-3.5 mr-1" />New
+              <Plus className="h-3.5 w-3.5 mr-1" />{t("new_order_btn")}
             </Button>
           </div>
           {staffOrders.length > 0 ? (
@@ -246,7 +246,7 @@ function PosPage() {
               ))}
             </div>
           ) : (
-            <p className="text-xs text-purple-500 dark:text-purple-400 opacity-70">No open staff meal orders</p>
+            <p className="text-xs text-purple-500 dark:text-purple-400 opacity-70">{t("no_staff_meal_orders")}</p>
           )}
         </div>
       </div>

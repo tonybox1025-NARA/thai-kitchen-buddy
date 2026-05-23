@@ -364,12 +364,12 @@ function OrderPage() {
           <Link to="/pos"><Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4 mr-1" />{t("back")}</Button></Link>
           {orderSource === "takeout" ? (
             <h1 className="text-xl font-bold flex items-center gap-2">
-              <span className="text-blue-600 dark:text-blue-400">Takeout</span>
+              <span className="text-blue-600 dark:text-blue-400">{t("takeout")}</span>
               {orderNumber && <span className="text-base font-mono bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded">{orderNumber}</span>}
             </h1>
           ) : orderSource === "staff_meal" ? (
             <h1 className="text-xl font-bold flex items-center gap-2">
-              <span className="text-purple-600 dark:text-purple-400">Staff Meal</span>
+              <span className="text-purple-600 dark:text-purple-400">{t("staff_meal")}</span>
               {orderNumber && <span className="text-base font-mono bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded">{orderNumber}</span>}
             </h1>
           ) : (
@@ -651,7 +651,7 @@ function OrderPage() {
             <DialogTitle className="text-center">{restaurantName || "Restaurant"}</DialogTitle>
           </DialogHeader>
           <p className="text-center text-sm text-muted-foreground -mt-2">
-            {orderSource === "takeout" ? `Takeout · ${orderNumber ?? ""}` : orderSource === "staff_meal" ? `Staff Meal · ${orderNumber ?? ""}` : `${t("table")} ${tableCode}`}
+            {orderSource === "takeout" ? `${t("takeout")} · ${orderNumber ?? ""}` : orderSource === "staff_meal" ? `${t("staff_meal")} · ${orderNumber ?? ""}` : `${t("table")} ${tableCode}`}
             {" · "}{new Date().toLocaleString(lang === "th" ? "th-TH" : "en-US")}
           </p>
           <div className="space-y-1 max-h-56 overflow-y-auto text-sm border rounded-lg p-3 bg-muted/30">
@@ -694,7 +694,7 @@ function OrderPage() {
         >
           <p className="text-base text-muted-foreground">{restaurantName}</p>
           <p className="text-3xl font-bold mt-1 mb-8">
-            {orderSource === "takeout" ? `Takeout · ${orderNumber ?? ""}` : orderSource === "staff_meal" ? `Staff Meal · ${orderNumber ?? ""}` : `${t("table")} ${tableCode}`}
+            {orderSource === "takeout" ? `${t("takeout")} · ${orderNumber ?? ""}` : orderSource === "staff_meal" ? `${t("staff_meal")} · ${orderNumber ?? ""}` : `${t("table")} ${tableCode}`}
           </p>
           <div className="w-full max-w-xs space-y-2 mb-8">
             {liveItems.map((i) => (
