@@ -33,6 +33,8 @@ type ReportData = {
   cancelledCount: number; // number of cancelled (table-closed) orders this shift
   takeoutTotal: number; // net sales from takeout orders
   staffMealTotal: number; // net sales from staff meal orders
+  discountByType: { percent: number; fixed: number; free_item: number }; // discount amount per type
+  discountByStaff: { staffName: string; amount: number; count: number }[]; // who gave how much
 };
 
 type AdjPay = {
@@ -103,6 +105,14 @@ ${r.cancelledCount > 0 ? row("Cancelled orders", String(r.cancelledCount)) : ""}
 ${r.takeoutTotal > 0 ? row("Takeout sales", thb(r.takeoutTotal)) : ""}
 ${r.staffMealTotal > 0 ? row("Staff meal cost", thb(r.staffMealTotal)) : ""}
 </table>
+${r.discount > 0 ? `<h2>Discount breakdown</h2><table>
+${row("Total discounts", `- ${thb(r.discount)}`)}
+${r.discountByType.percent > 0 ? row("  % Off", `- ${thb(r.discountByType.percent)}`) : ""}
+${r.discountByType.fixed > 0 ? row("  Fixed amount", `- ${thb(r.discountByType.fixed)}`) : ""}
+${r.discountByType.free_item > 0 ? row("  Free items", `- ${thb(r.discountByType.free_item)}`) : ""}
+${r.discountByStaff.map((s) => row(`  ${s.staffName} (×${s.count})`, `- ${thb(s.amount)}`)).join("")}
+</table>` : "<table>"}
+</table>
 <h2>Cash count</h2><table>${denomRows}</table>
 <h2>Cash drawer</h2><table>
 ${row("Opening float", thb(r.openingFloat))}
@@ -149,7 +159,7 @@ function Reports() {
     const { data: bills } = await supabase.from("bills").select("id,total,subtotal,discount_amount,member_discount_amount,order_id").eq("shift_id", s.id).eq("status", "paid");
     const billIds = (bills ?? []).map((b) => b.id);
     const orderIds = (bills ?? []).map((b) => (b as any).order_id).filter(Boolean) as string[];
-    const [{ data: pays }, { data: voids }, { data: refunds }, { data: cancelledOrds }, { data: orderSources }] = await Promise.all([
+    const [{ data: pays }, { data: voids }, { data: refunds }, { data: cancelledOrds }, { data: orderSources }, { data: billDiscs }] = await Promise.all([
       billIds.length
         ? supabase.from("payments").select("method,amount,tip_amount").in("bill_id", billIds)
         : Promise.resolve({ data: [] as { method: string; amount: number; tip_amount: number }[], error: null }),
@@ -159,6 +169,9 @@ function Reports() {
       orderIds.length
         ? supabase.from("orders").select("id,source").in("id", orderIds)
         : Promise.resolve({ data: [] as { id: string; source: string }[], error: null }),
+      billIds.length
+        ? (supabase as any).from("bill_discounts").select("type,amount,applied_by").in("bill_id", billIds)
+        : Promise.resolve({ data: [] as { type: string; amount: number; applied_by: string | null }[], error: null }),
     ]);
     const gross = (bills ?? []).reduce((x, b) => x + Number(b.subtotal), 0);
     const net = (bills ?? []).reduce((x, b) => x + Number(b.total), 0);
@@ -177,6 +190,28 @@ function Reports() {
       else if (src === "staff_meal") staffMealTotal += Number(b.total);
     }
 
+    // Aggregate discount breakdown by type and by staff
+    const discRows = (billDiscs as any[] | null) ?? [];
+    const discApplierIds = [...new Set(discRows.map((d) => d.applied_by).filter(Boolean))] as string[];
+    const { data: discStaffList } = discApplierIds.length
+      ? await supabase.from("staff").select("id,name").in("id", discApplierIds)
+      : { data: [] as { id: string; name: string }[] };
+    const discStaffMap = new Map((discStaffList ?? []).map((s) => [s.id, s.name]));
+
+    const discountByType = { percent: 0, fixed: 0, free_item: 0 };
+    const discountByStaffMap = new Map<string, { staffName: string; amount: number; count: number }>();
+    for (const d of discRows) {
+      discountByType[d.type as keyof typeof discountByType] =
+        (discountByType[d.type as keyof typeof discountByType] ?? 0) + Number(d.amount);
+      const key = d.applied_by ?? "__unknown__";
+      const name = d.applied_by ? (discStaffMap.get(d.applied_by) ?? "—") : "—";
+      if (!discountByStaffMap.has(key)) discountByStaffMap.set(key, { staffName: name, amount: 0, count: 0 });
+      const entry = discountByStaffMap.get(key)!;
+      entry.amount += Number(d.amount);
+      entry.count += 1;
+    }
+    const discountByStaff = [...discountByStaffMap.values()].sort((a, b) => b.amount - a.amount);
+
     return {
       gross, net, discount, member,
       voids: (voids ?? []).reduce((x, v) => x + Number(v.amount), 0),
@@ -186,6 +221,8 @@ function Reports() {
       cancelledCount: (cancelledOrds ?? []).length,
       takeoutTotal,
       staffMealTotal,
+      discountByType,
+      discountByStaff,
     };
   };
 
@@ -1014,6 +1051,16 @@ function ReportCard({ r }: { r: ReportData }) {
       <CardContent className="py-4 space-y-1 text-sm">
         <Row label="Gross sales" value={thb(r.gross)} />
         <Row label="Discount" value={`- ${thb(r.discount)}`} />
+        {r.discount > 0 && (r.discountByType.percent > 0 || r.discountByType.fixed > 0 || r.discountByType.free_item > 0) && (
+          <div className="pl-3 space-y-0.5 text-xs text-muted-foreground">
+            {r.discountByType.percent > 0   && <Row label="  ↳ % Off"          value={`- ${thb(r.discountByType.percent)}`}   />}
+            {r.discountByType.fixed > 0     && <Row label="  ↳ Fixed amount"   value={`- ${thb(r.discountByType.fixed)}`}     />}
+            {r.discountByType.free_item > 0 && <Row label="  ↳ Free items"     value={`- ${thb(r.discountByType.free_item)}`} />}
+            {r.discountByStaff.map((s) => (
+              <Row key={s.staffName} label={`  ↳ ${s.staffName} (×${s.count})`} value={`- ${thb(s.amount)}`} />
+            ))}
+          </div>
+        )}
         <Row label="Member discount" value={`- ${thb(r.member)}`} />
         <Row label="Net sales" value={thb(r.net)} bold />
         <div className="border-t pt-2 mt-2" />

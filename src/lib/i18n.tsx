@@ -127,6 +127,18 @@ const dict: Dict = {
   role_admin: { th: "เจ้าของ", en: "Admin" },
   role_manager: { th: "ผู้จัดการ", en: "Manager" },
   role_staff: { th: "พนักงาน", en: "Staff" },
+  // discount / coupon
+  apply_discount:     { th: "ใส่ส่วนลด",      en: "Apply Discount"  },
+  change_discount:    { th: "เปลี่ยนส่วนลด",   en: "Change"          },
+  remove_discount:    { th: "ยกเลิกส่วนลด",    en: "Remove discount" },
+  disc_pct:           { th: "ลด %",            en: "% Off"           },
+  disc_fixed:         { th: "ลดเป็นเงิน",      en: "Fixed ฿"         },
+  disc_free_item:     { th: "แถมฟรี",           en: "Free Item"       },
+  disc_select_item:   { th: "เลือกรายการที่แถมฟรี", en: "Select item to make free" },
+  disc_saves:         { th: "ลดไป",             en: "Saves"           },
+  disc_applied_by:    { th: "ใส่โดย",           en: "Applied by"      },
+  disc_by_type:       { th: "แยกตามประเภทส่วนลด", en: "Discount breakdown" },
+  disc_by_staff:      { th: "แยกตามพนักงาน",   en: "By staff"        },
   // special order types
   takeout: { th: "เทคอะเวย์", en: "Takeout" },
   staff_meal: { th: "อาหารพนักงาน", en: "Staff Meal" },

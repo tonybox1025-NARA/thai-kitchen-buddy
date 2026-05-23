@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { ArrowLeft, Banknote, QrCode, CreditCard, Printer, RotateCcw, PencilLine, Eye } from "lucide-react";
+import { ArrowLeft, Banknote, QrCode, CreditCard, Printer, RotateCcw, PencilLine, Eye, Tag, X, Percent, DollarSign, Gift } from "lucide-react";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -26,7 +26,31 @@ type Bill = {
 type Item = { id: string; name_th: string; name_en: string; qty: number; unit_price: number; status: string };
 type Payment = { id: string; method: "qr" | "cash" | "card"; amount: number; cash_received: number | null; change_due: number | null; tip_amount: number };
 
+type BillDiscount = {
+  id: string;
+  bill_id: string;
+  type: "percent" | "fixed" | "free_item";
+  percent_value: number | null;
+  fixed_value: number | null;
+  free_item_id: string | null;
+  free_item_name: string | null;
+  amount: number;
+  applied_by: string | null;
+  applied_by_name: string | null;
+  applied_at: string;
+};
+
 const DENOMS = [1000, 500, 100, 50, 20, 10, 5, 1];
+
+/** Compute VAT and final total from after-discount subtotal */
+function computeTotals(afterDisc: number, vatMode: "inclusive" | "exclusive", vatRate: number) {
+  const rate = vatRate / 100;
+  if (vatMode === "exclusive") {
+    const vatAmount = afterDisc * rate;
+    return { vatAmount, total: afterDisc + vatAmount };
+  }
+  return { vatAmount: afterDisc - afterDisc / (1 + rate), total: afterDisc };
+}
 
 function PaymentPage() {
   const { billId } = Route.useParams();
@@ -37,8 +61,7 @@ function PaymentPage() {
   const [bill, setBill] = useState<Bill | null>(null);
   const [items, setItems] = useState<Item[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
-  const [discAmt, setDiscAmt] = useState(0);
-  const [discPct, setDiscPct] = useState(0);
+  const [appliedDiscount, setAppliedDiscount] = useState<BillDiscount | null>(null);
   const [memberDisc, setMemberDisc] = useState(0);
   const [tableCode, setTableCode] = useState("");
   const [restName, setRestName] = useState("");
@@ -63,10 +86,17 @@ function PaymentPage() {
   // Customer-facing view
   const [customerViewOpen, setCustomerViewOpen] = useState(false);
 
-  // Payment type correction (Scenario 1: quick fix within 10 min)
+  // Payment type correction
   const [corrOpen, setCorrOpen] = useState(false);
   const [corrChanges, setCorrChanges] = useState<Record<string, "qr" | "cash" | "card">>({});
   const [corrReason, setCorrReason] = useState("");
+
+  // Discount dialog
+  const [discDlgOpen, setDiscDlgOpen] = useState(false);
+  const [discDlgTab, setDiscDlgTab] = useState<"percent" | "fixed" | "free_item">("percent");
+  const [discPctInput, setDiscPctInput] = useState(0);
+  const [discFixedInput, setDiscFixedInput] = useState(0);
+  const [discFreeItemId, setDiscFreeItemId] = useState<string>("");
 
   const load = async () => {
     const [{ data: b }, { data: ps }, { data: s }] = await Promise.all([
@@ -76,14 +106,35 @@ function PaymentPage() {
     ]);
     if (b) {
       setBill(b as Bill);
-      setDiscAmt(Number(b.discount_amount));
       setMemberDisc(Number(b.member_discount_amount));
+
       const { data: it } = await supabase.from("order_items").select("*").eq("order_id", b.order_id).neq("status", "voided");
       if (it) setItems(it as Item[]);
+
       const { data: ord } = await supabase.from("orders").select("table_id").eq("id", b.order_id).single();
       if (ord?.table_id) {
         const { data: tbl } = await supabase.from("restaurant_tables").select("code").eq("id", ord.table_id).single();
         if (tbl) setTableCode(tbl.code);
+      }
+
+      // Load applied discount (at most one per bill)
+      const { data: discRows } = await (supabase as any)
+        .from("bill_discounts")
+        .select("*")
+        .eq("bill_id", b.id)
+        .order("applied_at", { ascending: false })
+        .limit(1);
+
+      const discRow = (discRows as any[])?.[0] ?? null;
+      if (discRow) {
+        let staffName: string | null = null;
+        if (discRow.applied_by) {
+          const { data: applier } = await supabase.from("staff").select("name").eq("id", discRow.applied_by).maybeSingle();
+          staffName = applier?.name ?? null;
+        }
+        setAppliedDiscount({ ...discRow, applied_by_name: staffName });
+      } else {
+        setAppliedDiscount(null);
       }
     }
     if (ps) setPayments(ps as Payment[]);
@@ -92,48 +143,127 @@ function PaymentPage() {
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [billId]);
 
+  // ── Derived totals ──────────────────────────────────────────────────────────
   const subtotal = items.reduce((s, i) => s + i.qty * Number(i.unit_price), 0);
-  const pctAmt = (subtotal * discPct) / 100;
-  const totalDisc = discAmt + pctAmt;
+  const totalDisc = appliedDiscount?.amount ?? 0;
   const afterDisc = Math.max(0, subtotal - totalDisc - memberDisc);
-
-  let vatAmount = 0;
-  let total = afterDisc;
-  if (bill) {
-    const rate = Number(bill.vat_rate) / 100;
-    if (settingsVatMode === "exclusive") {
-      vatAmount = afterDisc * rate;
-      total = afterDisc + vatAmount;
-    } else {
-      vatAmount = afterDisc - afterDisc / (1 + rate);
-      total = afterDisc;
-    }
-  }
+  const { vatAmount, total } = bill
+    ? computeTotals(afterDisc, settingsVatMode, Number(bill.vat_rate))
+    : { vatAmount: 0, total: afterDisc };
 
   const paid = payments.reduce((s, p) => s + Number(p.amount), 0);
   const remaining = Math.max(0, total - paid);
 
-  // Persist updates to bill
+  // Persist member discount + VAT + total to bill (discount_amount owned by applyDiscount/removeDiscount)
   const persistBill = async () => {
     if (!bill) return;
     await supabase.from("bills").update({
-      subtotal, discount_amount: totalDisc, member_discount_amount: memberDisc,
-      vat_amount: vatAmount, total,
+      subtotal,
+      member_discount_amount: memberDisc,
+      vat_amount: vatAmount,
+      total,
     }).eq("id", bill.id);
   };
 
-  useEffect(() => { persistBill(); /* eslint-disable-next-line */ }, [discAmt, discPct, memberDisc, bill?.id, subtotal]);
+  useEffect(() => { persistBill(); /* eslint-disable-next-line */ }, [memberDisc, bill?.id, subtotal]);
 
-  // Keep QR amount in sync with remaining when discounts / payments change
+  // Sync QR field with remaining balance
   useEffect(() => { setQrAmt(remaining); }, [remaining]);
 
+  // ── Discount helpers ────────────────────────────────────────────────────────
+
+  // Live preview amount for the dialog
+  const discPreviewAmt = (() => {
+    if (discDlgTab === "percent") return Math.round(((subtotal * discPctInput) / 100) * 100) / 100;
+    if (discDlgTab === "fixed") return Math.min(discFixedInput, subtotal);
+    const fi = items.find((i) => i.id === discFreeItemId);
+    return fi ? fi.qty * Number(fi.unit_price) : 0;
+  })();
+
+  const applyDiscount = async () => {
+    if (!bill || !staff) return;
+    let amount = 0;
+    const extras: Record<string, unknown> = {};
+
+    if (discDlgTab === "percent") {
+      if (discPctInput <= 0 || discPctInput > 100) { toast.error(lang === "th" ? "ใส่ % ที่ถูกต้อง" : "Enter a valid %"); return; }
+      amount = Math.round(((subtotal * discPctInput) / 100) * 100) / 100;
+      extras.percent_value = discPctInput;
+    } else if (discDlgTab === "fixed") {
+      if (discFixedInput <= 0) { toast.error(lang === "th" ? "ใส่จำนวนเงิน" : "Enter an amount"); return; }
+      amount = Math.min(discFixedInput, subtotal);
+      extras.fixed_value = discFixedInput;
+    } else {
+      const fi = items.find((i) => i.id === discFreeItemId);
+      if (!fi) { toast.error(lang === "th" ? "เลือกรายการ" : "Select an item"); return; }
+      amount = fi.qty * Number(fi.unit_price);
+      extras.free_item_id = fi.id;
+      extras.free_item_name = lang === "th" ? fi.name_th : fi.name_en;
+    }
+
+    // Delete any existing discount for this bill, then insert new one
+    await (supabase as any).from("bill_discounts").delete().eq("bill_id", bill.id);
+    await (supabase as any).from("bill_discounts").insert({
+      bill_id: bill.id,
+      type: discDlgTab,
+      amount,
+      applied_by: staff.id,
+      ...extras,
+    });
+
+    // Recompute totals with new discount and persist to bill
+    const newAfterDisc = Math.max(0, subtotal - amount - memberDisc);
+    const { vatAmount: newVat, total: newTotal } = computeTotals(newAfterDisc, settingsVatMode, Number(bill.vat_rate));
+    await supabase.from("bills").update({
+      discount_amount: amount,
+      vat_amount: newVat,
+      total: newTotal,
+    }).eq("id", bill.id);
+
+    await load();
+    setDiscDlgOpen(false);
+    toast.success(lang === "th" ? "ใส่ส่วนลดแล้ว" : "Discount applied");
+  };
+
+  const removeDiscount = async () => {
+    if (!bill) return;
+    await (supabase as any).from("bill_discounts").delete().eq("bill_id", bill.id);
+    const newAfterDisc = Math.max(0, subtotal - memberDisc);
+    const { vatAmount: newVat, total: newTotal } = computeTotals(newAfterDisc, settingsVatMode, Number(bill.vat_rate));
+    await supabase.from("bills").update({ discount_amount: 0, vat_amount: newVat, total: newTotal }).eq("id", bill.id);
+    await load();
+    toast.success(lang === "th" ? "ยกเลิกส่วนลดแล้ว" : "Discount removed");
+  };
+
+  const openDiscountDialog = () => {
+    // Pre-fill inputs from existing discount if any
+    if (appliedDiscount) {
+      setDiscDlgTab(appliedDiscount.type);
+      setDiscPctInput(appliedDiscount.percent_value ?? 0);
+      setDiscFixedInput(appliedDiscount.fixed_value ?? 0);
+      setDiscFreeItemId(appliedDiscount.free_item_id ?? "");
+    } else {
+      setDiscDlgTab("percent");
+      setDiscPctInput(0);
+      setDiscFixedInput(0);
+      setDiscFreeItemId("");
+    }
+    setDiscDlgOpen(true);
+  };
+
+  // ── Discount label helpers ──────────────────────────────────────────────────
+  const discTypeLabel = (d: BillDiscount) => {
+    if (d.type === "percent") return `${d.percent_value ?? ""}%`;
+    if (d.type === "fixed")   return thb(d.fixed_value ?? 0);
+    return d.free_item_name ?? (lang === "th" ? "แถมฟรี" : "Free item");
+  };
+
+  // ── Payment helpers ─────────────────────────────────────────────────────────
   const addPayment = async (method: Payment["method"], amount: number, extras: Record<string, unknown> = {}) => {
     if (!bill || amount <= 0) return;
     await supabase.from("payments").insert({ bill_id: bill.id, method, amount, ...extras });
     await load();
-    if (paid + amount + 0.001 >= total) {
-      await finalize();
-    }
+    if (paid + amount + 0.001 >= total) await finalize();
   };
 
   const finalize = async () => {
@@ -144,24 +274,22 @@ function PaymentPage() {
     if (ord?.table_id) {
       await supabase.from("restaurant_tables").update({ status: "available", guests: 0, has_qr_alert: false }).eq("id", ord.table_id);
     }
-    // Queue receipt print job
     await supabase.from("print_jobs").insert({
       printer: "counter",
-      payload: { kind: "receipt", bill_id: bill.id, restaurant: restName, table: tableCode, items, total, vatAmount: settingsVatMode === "exclusive" ? vatAmount : 0, vat_mode: settingsVatMode, payments: [...payments], language: lang },
+      payload: {
+        kind: "receipt", bill_id: bill.id, restaurant: restName, table: tableCode,
+        items, total, vatAmount: settingsVatMode === "exclusive" ? vatAmount : 0,
+        vat_mode: settingsVatMode, payments: [...payments], language: lang,
+        discount: appliedDiscount ? { type: appliedDiscount.type, label: discTypeLabel(appliedDiscount), amount: appliedDiscount.amount } : null,
+      },
     });
     toast.success(t("paid"));
-    await load(); // refresh bill.paid_at so Edit Payment Type window can open
+    await load();
   };
 
-  const openCash = () => {
-    setCashCount({});
-    setCashAmount(remaining);
-    setCashOpen(true);
-  };
-
+  const openCash = () => { setCashCount({}); setCashAmount(remaining); setCashOpen(true); };
   const cashTotal = Object.entries(cashCount).reduce((s, [d, c]) => s + Number(d) * (c || 0), 0);
   const change = Math.max(0, cashTotal - cashAmount);
-
   const submitCash = async () => {
     if (cashTotal < cashAmount) { toast.error("Not enough cash"); return; }
     await addPayment("cash", cashAmount, { cash_received: cashTotal, change_due: change, cash_breakdown: cashCount });
@@ -173,7 +301,6 @@ function PaymentPage() {
     if (staff?.role === "staff") { setPendingAction("refund"); setManagerOpen(true); return; }
     doRefund();
   };
-
   const doRefund = async () => {
     if (!bill) return;
     await supabase.from("refunds").insert({ bill_id: bill.id, amount: refundAmt, reason: refundReason, refunded_by: staff?.id });
@@ -182,19 +309,12 @@ function PaymentPage() {
     toast.success("Refunded");
   };
 
-  const printReceipt = () => {
-    window.print();
-  };
-
   const paidStatus = bill?.status === "paid" || bill?.status === "partial_refund";
-
   const canCorrect = !!paidStatus && (staff?.role === "admin" || staff?.role === "manager");
-
   const openCorr = () => {
     if (staff?.role === "manager") { setPendingAction("correction"); setManagerOpen(true); return; }
     setCorrChanges({}); setCorrReason(""); setCorrOpen(true);
   };
-
   const applyCorrection = async () => {
     if (!bill || !staff) return;
     const changed = payments.filter((p) => corrChanges[p.id] && corrChanges[p.id] !== p.method);
@@ -213,15 +333,16 @@ function PaymentPage() {
   };
 
   if (!bill) return <div className="p-8 text-center text-muted-foreground">{t("loading")}</div>;
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_440px] h-[calc(100vh-3.5rem)]">
+      {/* ── Left: receipt preview ─────────────────────────────────────────── */}
       <div className="overflow-auto p-6 space-y-4">
         <div className="flex items-center gap-3">
           <Link to="/pos"><Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4 mr-1" />{t("back")}</Button></Link>
           <h1 className="text-2xl font-bold">{t("payment")} — {tableCode}</h1>
         </div>
 
-        {/* Receipt-style preview */}
         <Card>
           <CardHeader>
             <CardTitle className="text-center">{restName || "Restaurant"}</CardTitle>
@@ -231,21 +352,44 @@ function PaymentPage() {
             <table className="w-full text-sm">
               <tbody>
                 {items.map((i) => (
-                  <tr key={i.id} className="border-b last:border-0">
-                    <td className="py-1.5">{pickName(i, lang)}</td>
+                  <tr key={i.id} className={`border-b last:border-0 ${appliedDiscount?.type === "free_item" && appliedDiscount.free_item_id === i.id ? "text-green-600 dark:text-green-400" : ""}`}>
+                    <td className="py-1.5">{pickName(i, lang)}
+                      {appliedDiscount?.type === "free_item" && appliedDiscount.free_item_id === i.id && (
+                        <span className="ml-1.5 text-xs bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded-full font-medium">FREE</span>
+                      )}
+                    </td>
                     <td className="py-1.5 text-right w-12">{i.qty}</td>
-                    <td className="py-1.5 text-right w-24">{thb(i.qty * Number(i.unit_price))}</td>
+                    <td className="py-1.5 text-right w-24 tabular-nums">{thb(i.qty * Number(i.unit_price))}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+
             <div className="mt-4 space-y-1 text-sm">
               <Row label={t("subtotal")} value={thb(subtotal)} />
-              {totalDisc > 0 && <Row label={t("discount")} value={`- ${thb(totalDisc)}`} />}
+
+              {/* Applied discount row */}
+              {appliedDiscount && (
+                <div className="flex items-center justify-between text-green-700 dark:text-green-400">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <Tag className="h-3.5 w-3.5 shrink-0" />
+                    <span className="font-medium">
+                      {appliedDiscount.type === "percent" && `${t("disc_pct")} (${appliedDiscount.percent_value}%)`}
+                      {appliedDiscount.type === "fixed"   && `${t("disc_fixed")} (${thb(appliedDiscount.fixed_value ?? 0)})`}
+                      {appliedDiscount.type === "free_item" && `${t("disc_free_item")}: ${appliedDiscount.free_item_name ?? ""}`}
+                    </span>
+                    {appliedDiscount.applied_by_name && (
+                      <span className="text-xs text-muted-foreground shrink-0 ml-1">· {appliedDiscount.applied_by_name}</span>
+                    )}
+                  </div>
+                  <span className="shrink-0 font-medium tabular-nums">- {thb(appliedDiscount.amount)}</span>
+                </div>
+              )}
+
               {memberDisc > 0 && <Row label={t("member_discount")} value={`- ${thb(memberDisc)}`} />}
               {settingsVatMode === "exclusive" && <Row label={`${t("vat")} ${bill.vat_rate}%`} value={thb(vatAmount)} />}
               <div className="border-t pt-2 mt-2 flex justify-between text-lg font-bold">
-                <span>{t("total")}</span><span>{thb(total)}</span>
+                <span>{t("total")}</span><span className="tabular-nums">{thb(total)}</span>
               </div>
             </div>
             <Button variant="outline" size="sm" className="w-full mt-3 text-muted-foreground" onClick={() => setCustomerViewOpen(true)}>
@@ -271,25 +415,52 @@ function PaymentPage() {
         )}
       </div>
 
-      {/* Right: actions */}
+      {/* ── Right: actions ────────────────────────────────────────────────── */}
       <aside className="border-l bg-card p-4 overflow-auto">
         {!paidStatus ? (
           <>
-            <h3 className="font-semibold mb-2">{t("discount")}</h3>
-            <div className="grid grid-cols-2 gap-2 mb-3">
-              <div>
-                <Label className="text-xs">{t("amount")}</Label>
-                <Input type="number" min={0} value={discAmt} onChange={(e) => setDiscAmt(Math.max(0, Number(e.target.value)))} />
+            {/* ── Discount section ── */}
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="font-semibold text-sm">{t("discount")}</h3>
               </div>
-              <div>
-                <Label className="text-xs">{t("percent")} %</Label>
-                <Input type="number" min={0} max={100} value={discPct} onChange={(e) => setDiscPct(Math.max(0, Math.min(100, Number(e.target.value))))} />
-              </div>
-            </div>
-            <Label className="text-xs">{t("member_discount")}</Label>
-            <Input type="number" min={0} value={memberDisc} onChange={(e) => setMemberDisc(Math.max(0, Number(e.target.value)))} className="mb-4" />
 
-            <h3 className="font-semibold mb-2">{t("pay")}</h3>
+              {appliedDiscount ? (
+                /* Applied discount badge */
+                <div className="flex items-center gap-2 rounded-lg border border-green-300 bg-green-50 dark:bg-green-950/30 dark:border-green-800 px-3 py-2">
+                  <Tag className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-green-700 dark:text-green-400 truncate">
+                      - {thb(appliedDiscount.amount)} · {discTypeLabel(appliedDiscount)}
+                    </p>
+                    {appliedDiscount.applied_by_name && (
+                      <p className="text-xs text-muted-foreground">{t("disc_applied_by")}: {appliedDiscount.applied_by_name}</p>
+                    )}
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    <Button size="sm" variant="outline" className="h-7 text-xs px-2" onClick={openDiscountDialog}>
+                      {t("change_discount")}
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={removeDiscount}>
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button variant="outline" className="w-full border-dashed" onClick={openDiscountDialog}>
+                  <Tag className="h-4 w-4 mr-2" />{t("apply_discount")}
+                </Button>
+              )}
+            </div>
+
+            {/* Member discount */}
+            <div className="mb-4">
+              <Label className="text-xs">{t("member_discount")}</Label>
+              <Input type="number" min={0} value={memberDisc} onChange={(e) => setMemberDisc(Math.max(0, Number(e.target.value)))} />
+            </div>
+
+            {/* ── Payment methods ── */}
+            <h3 className="font-semibold mb-2 text-sm">{t("pay")}</h3>
             <Tabs defaultValue="cash">
               <TabsList className="grid grid-cols-3 w-full">
                 <TabsTrigger value="cash"><Banknote className="h-4 w-4 mr-1" />{t("cash")}</TabsTrigger>
@@ -317,10 +488,10 @@ function PaymentPage() {
                     <span className="font-semibold">{thb(qrAmt + qrTip)}</span>
                   </div>
                 )}
-                <Button className="w-full" size="lg" disabled={remaining <= 0 || qrAmt <= 0} onClick={() => {
-                  addPayment("qr", qrAmt, { tip_amount: qrTip });
-                  setQrTip(0);
-                }}>{t("qr_transfer")}{qrTip > 0 ? ` + Tip ${thb(qrTip)}` : ""}</Button>
+                <Button className="w-full" size="lg" disabled={remaining <= 0 || qrAmt <= 0}
+                  onClick={() => { addPayment("qr", qrAmt, { tip_amount: qrTip }); setQrTip(0); }}>
+                  {t("qr_transfer")}{qrTip > 0 ? ` + Tip ${thb(qrTip)}` : ""}
+                </Button>
               </TabsContent>
               <TabsContent value="card" className="pt-3 space-y-2">
                 <Input id="card-amt" type="number" defaultValue={remaining} step="0.01" />
@@ -336,8 +507,14 @@ function PaymentPage() {
             <div className="text-center py-4">
               <div className="text-3xl">✅</div>
               <div className="text-xl font-bold mt-2">{t("paid")}</div>
+              {appliedDiscount && (
+                <p className="text-sm text-green-600 dark:text-green-400 mt-1">
+                  <Tag className="h-3.5 w-3.5 inline mr-1" />
+                  {lang === "th" ? "ส่วนลด" : "Discount"} {discTypeLabel(appliedDiscount)} — - {thb(appliedDiscount.amount)}
+                </p>
+              )}
             </div>
-            <Button className="w-full" onClick={printReceipt}><Printer className="h-4 w-4 mr-2" />{t("print_receipt")}</Button>
+            <Button className="w-full" onClick={() => window.print()}><Printer className="h-4 w-4 mr-2" />{t("print_receipt")}</Button>
             {canCorrect && (
               <Button variant="outline" className="w-full border-amber-400 text-amber-700 hover:bg-amber-50 dark:text-amber-400" onClick={openCorr}>
                 <PencilLine className="h-4 w-4 mr-2" />Edit Payment Type
@@ -351,7 +528,122 @@ function PaymentPage() {
         )}
       </aside>
 
-      {/* Cash dialog */}
+      {/* ── Discount dialog ──────────────────────────────────────────────────── */}
+      <Dialog open={discDlgOpen} onOpenChange={setDiscDlgOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Tag className="h-4 w-4" />
+              {appliedDiscount ? t("change_discount") : t("apply_discount")}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground -mt-2">
+            {lang === "th" ? "มีส่วนลดได้ครั้งละ 1 รายการ ใส่ใหม่จะแทนที่รายการเดิม" : "One discount per order — applying a new one replaces the existing."}
+          </p>
+
+          <Tabs value={discDlgTab} onValueChange={(v) => setDiscDlgTab(v as typeof discDlgTab)}>
+            <TabsList className="grid grid-cols-3 w-full">
+              <TabsTrigger value="percent"><Percent className="h-3.5 w-3.5 mr-1" />{t("disc_pct")}</TabsTrigger>
+              <TabsTrigger value="fixed"><DollarSign className="h-3.5 w-3.5 mr-1" />{t("disc_fixed")}</TabsTrigger>
+              <TabsTrigger value="free_item"><Gift className="h-3.5 w-3.5 mr-1" />{t("disc_free_item")}</TabsTrigger>
+            </TabsList>
+
+            {/* % Off */}
+            <TabsContent value="percent" className="pt-3 space-y-3">
+              <div>
+                <Label>{lang === "th" ? "ลดกี่ %" : "Percentage off"}</Label>
+                <div className="flex items-center gap-2 mt-1">
+                  <Input
+                    type="number" min={0} max={100} step={1}
+                    value={discPctInput}
+                    onChange={(e) => setDiscPctInput(Math.max(0, Math.min(100, Number(e.target.value))))}
+                    className="text-center text-lg font-bold"
+                    placeholder="0"
+                  />
+                  <span className="text-xl font-bold text-muted-foreground">%</span>
+                </div>
+                {/* Quick picks */}
+                <div className="flex gap-1.5 mt-2 flex-wrap">
+                  {[5, 10, 15, 20, 25, 50].map((p) => (
+                    <button key={p} onClick={() => setDiscPctInput(p)}
+                      className={`px-2.5 py-1 rounded-md border text-sm font-medium transition-colors ${discPctInput === p ? "bg-primary text-primary-foreground border-primary" : "hover:bg-accent"}`}>
+                      {p}%
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {discPctInput > 0 && (
+                <div className="rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-3 text-center">
+                  <p className="text-xs text-muted-foreground">{t("disc_saves")}</p>
+                  <p className="text-2xl font-black text-green-600 dark:text-green-400 tabular-nums">- {thb(discPreviewAmt)}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{lang === "th" ? "ยอดที่ต้องชำระ" : "New total"}: {thb(Math.max(0, total - discPreviewAmt + totalDisc))}</p>
+                </div>
+              )}
+            </TabsContent>
+
+            {/* Fixed ฿ */}
+            <TabsContent value="fixed" className="pt-3 space-y-3">
+              <div>
+                <Label>{lang === "th" ? "ลดเป็นจำนวนเงิน (บาท)" : "Amount to discount (฿)"}</Label>
+                <Input
+                  type="number" min={0} step={1}
+                  value={discFixedInput}
+                  onChange={(e) => setDiscFixedInput(Math.max(0, Number(e.target.value)))}
+                  className="mt-1 text-center text-lg font-bold"
+                  placeholder="0"
+                />
+                <div className="flex gap-1.5 mt-2 flex-wrap">
+                  {[20, 50, 100, 200, 500].map((a) => (
+                    <button key={a} onClick={() => setDiscFixedInput(a)}
+                      className={`px-2.5 py-1 rounded-md border text-sm font-medium transition-colors ${discFixedInput === a ? "bg-primary text-primary-foreground border-primary" : "hover:bg-accent"}`}>
+                      ฿{a}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {discFixedInput > 0 && (
+                <div className="rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-3 text-center">
+                  <p className="text-xs text-muted-foreground">{t("disc_saves")}</p>
+                  <p className="text-2xl font-black text-green-600 dark:text-green-400 tabular-nums">- {thb(discPreviewAmt)}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{lang === "th" ? "ยอดที่ต้องชำระ" : "New total"}: {thb(Math.max(0, total - discPreviewAmt + totalDisc))}</p>
+                </div>
+              )}
+            </TabsContent>
+
+            {/* Free Item */}
+            <TabsContent value="free_item" className="pt-3 space-y-2">
+              <p className="text-xs text-muted-foreground">{t("disc_select_item")}</p>
+              <div className="space-y-1.5 max-h-52 overflow-y-auto">
+                {items.map((i) => (
+                  <button key={i.id}
+                    onClick={() => setDiscFreeItemId(i.id)}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg border text-sm transition-colors text-left ${discFreeItemId === i.id ? "bg-primary text-primary-foreground border-primary" : "bg-card hover:bg-accent"}`}
+                  >
+                    <span className="truncate mr-2">{pickName(i, lang)} <span className="opacity-70">×{i.qty}</span></span>
+                    <span className="shrink-0 font-semibold tabular-nums">{thb(i.qty * Number(i.unit_price))}</span>
+                  </button>
+                ))}
+              </div>
+              {discFreeItemId && (
+                <div className="rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-3 text-center">
+                  <p className="text-xs text-muted-foreground">{t("disc_saves")}</p>
+                  <p className="text-2xl font-black text-green-600 dark:text-green-400 tabular-nums">- {thb(discPreviewAmt)}</p>
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDiscDlgOpen(false)}>{t("cancel")}</Button>
+            <Button onClick={applyDiscount} disabled={discPreviewAmt <= 0}>
+              <Tag className="h-4 w-4 mr-1.5" />
+              {appliedDiscount ? t("change_discount") : t("apply_discount")} {discPreviewAmt > 0 ? `· - ${thb(discPreviewAmt)}` : ""}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Cash dialog ──────────────────────────────────────────────────────── */}
       <Dialog open={cashOpen} onOpenChange={setCashOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>{t("cash_received")}</DialogTitle></DialogHeader>
@@ -378,7 +670,7 @@ function PaymentPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Refund dialog */}
+      {/* ── Refund dialog ────────────────────────────────────────────────────── */}
       <Dialog open={refundOpen} onOpenChange={setRefundOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>{t("refund")}</DialogTitle></DialogHeader>
@@ -399,7 +691,7 @@ function PaymentPage() {
         setPendingAction(null);
       }} />
 
-      {/* Payment type correction dialog */}
+      {/* ── Payment type correction dialog ──────────────────────────────────── */}
       <Dialog open={corrOpen} onOpenChange={setCorrOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -441,15 +733,13 @@ function PaymentPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Customer-facing full-screen bill view */}
+      {/* ── Customer-facing full-screen bill ────────────────────────────────── */}
       {customerViewOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-background flex flex-col items-center justify-center p-8 cursor-pointer select-none"
-          onClick={() => setCustomerViewOpen(false)}
-        >
+        <div className="fixed inset-0 z-50 bg-background flex flex-col items-center justify-center p-8 cursor-pointer select-none"
+          onClick={() => setCustomerViewOpen(false)}>
           <p className="text-base text-muted-foreground">{restName}</p>
           <p className="text-3xl font-bold mt-1 mb-8">{t("table")} {tableCode}</p>
-          <div className="w-full max-w-xs space-y-2 mb-8">
+          <div className="w-full max-w-xs space-y-2 mb-6">
             {items.filter((i) => i.status !== "voided").map((i) => (
               <div key={i.id} className="flex justify-between text-lg">
                 <span className="truncate mr-2">{pickName(i, lang)} <span className="text-muted-foreground text-base">×{i.qty}</span></span>
@@ -457,9 +747,12 @@ function PaymentPage() {
               </div>
             ))}
           </div>
-          <div className="w-full max-w-xs space-y-1 text-sm text-muted-foreground">
-            {(discAmt + (subtotal * discPct / 100)) > 0 && (
-              <div className="flex justify-between"><span>{t("discount")}</span><span>- {thb(discAmt + subtotal * discPct / 100)}</span></div>
+          <div className="w-full max-w-xs space-y-1 text-base text-muted-foreground">
+            {appliedDiscount && (
+              <div className="flex justify-between text-green-600 dark:text-green-400">
+                <span className="flex items-center gap-1"><Tag className="h-4 w-4" />{discTypeLabel(appliedDiscount)}</span>
+                <span className="tabular-nums">- {thb(appliedDiscount.amount)}</span>
+              </div>
             )}
             {memberDisc > 0 && <div className="flex justify-between"><span>{t("member_discount")}</span><span>- {thb(memberDisc)}</span></div>}
             {settingsVatMode === "exclusive" && <div className="flex justify-between"><span>VAT {bill?.vat_rate}%</span><span>{thb(vatAmount)}</span></div>}
@@ -478,7 +771,7 @@ function PaymentPage() {
 function Row({ label, value, muted }: { label: string; value: string; muted?: boolean }) {
   return (
     <div className={`flex justify-between ${muted ? "text-muted-foreground" : ""}`}>
-      <span>{label}</span><span className="font-medium">{value}</span>
+      <span>{label}</span><span className="font-medium tabular-nums">{value}</span>
     </div>
   );
 }
