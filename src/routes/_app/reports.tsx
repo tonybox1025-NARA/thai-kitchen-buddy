@@ -18,7 +18,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import type { DateRange } from "react-day-picker";
-import { PencilLine, ArrowRight, CalendarIcon, XCircle } from "lucide-react";
+import { PencilLine, ArrowRight, CalendarIcon, XCircle, Printer } from "lucide-react";
 
 export const Route = createFileRoute("/_app/reports")({ component: Reports });
 
@@ -359,6 +359,7 @@ function Reports() {
         <TabsList>
           <TabsTrigger value="shift">Shift Reports</TabsTrigger>
           <TabsTrigger value="history">Bill History</TabsTrigger>
+          <TabsTrigger value="item_sales">{t("item_sales")}</TabsTrigger>
           {(staff?.role === "admin" || staff?.role === "manager") && (
             <TabsTrigger value="cancelled">Cancelled Orders</TabsTrigger>
           )}
@@ -392,6 +393,10 @@ function Reports() {
 
         <TabsContent value="history" className="mt-4">
           <BillHistoryTab />
+        </TabsContent>
+
+        <TabsContent value="item_sales" className="mt-4">
+          <ItemSalesTab />
         </TabsContent>
 
         {(staff?.role === "admin" || staff?.role === "manager") && (
@@ -707,6 +712,359 @@ function BillHistoryTab() {
               </Card>
             ))}
           </div>
+        )
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Item Sales Tab
+// ---------------------------------------------------------------------------
+type ItemSalesRow = {
+  menu_id: string;
+  name_th: string;
+  name_en: string;
+  category_th: string;
+  category_en: string;
+  qty: number;
+  unit_price: number;
+  revenue: number;
+};
+
+function ItemSalesTab() {
+  const { t, lang } = useI18n();
+  const [range, setRange] = useState<HistRange>("today");
+  const [custom, setCustom] = useState<DateRange | undefined>();
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [rows, setRows] = useState<ItemSalesRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [catFilter, setCatFilter] = useState<string>("all");
+  const [search, setSearch] = useState("");
+
+  const getBounds = (): [Date, Date] | null => {
+    if (range === "custom") {
+      if (!custom?.from) return null;
+      const s = new Date(custom.from); s.setHours(0, 0, 0, 0);
+      const e = new Date(custom.to ?? custom.from); e.setHours(23, 59, 59, 999);
+      return [s, e];
+    }
+    return histBounds(range);
+  };
+
+  const load = async () => {
+    const bounds = getBounds();
+    if (!bounds) return;
+    setLoading(true);
+    try {
+      const [fromDt, toDt] = bounds;
+
+      // 1. Paid bills in range → order IDs
+      const { data: bills } = await supabase
+        .from("bills")
+        .select("id,order_id")
+        .eq("status", "paid")
+        .gte("paid_at", fromDt.toISOString())
+        .lte("paid_at", toDt.toISOString())
+        .limit(2000);
+
+      if (!bills?.length) { setRows([]); setLoaded(true); return; }
+
+      const orderIds = bills.map((b) => b.order_id).filter(Boolean) as string[];
+
+      // 2. Non-voided order items for those orders
+      const { data: items } = await supabase
+        .from("order_items")
+        .select("menu_id,name_th,name_en,qty,unit_price")
+        .in("order_id", orderIds)
+        .neq("status", "voided");
+
+      if (!items?.length) { setRows([]); setLoaded(true); return; }
+
+      // 3. Menus → category IDs
+      const menuIds = [...new Set(items.map((i) => i.menu_id).filter(Boolean))] as string[];
+      const { data: menus } = menuIds.length
+        ? await supabase.from("menus").select("id,category_id").in("id", menuIds)
+        : { data: [] as { id: string; category_id: string | null }[] };
+
+      // 4. Categories
+      const catIds = [...new Set((menus ?? []).map((m) => m.category_id).filter(Boolean))] as string[];
+      const { data: cats } = catIds.length
+        ? await supabase.from("menu_categories").select("id,name_th,name_en").in("id", catIds)
+        : { data: [] as { id: string; name_th: string; name_en: string }[] };
+
+      const menuCatMap = new Map((menus ?? []).map((m) => [m.id, m.category_id]));
+      const catMap = new Map((cats ?? []).map((c) => [c.id, { th: c.name_th, en: c.name_en }]));
+
+      // 5. Aggregate by menu_id (fall back to name_th when menu_id is null)
+      const agg = new Map<string, ItemSalesRow>();
+      for (const item of items) {
+        const key = item.menu_id ?? `__name__${item.name_th}`;
+        if (!agg.has(key)) {
+          const catId = item.menu_id ? (menuCatMap.get(item.menu_id) ?? null) : null;
+          const cat = catId ? catMap.get(catId) : null;
+          agg.set(key, {
+            menu_id: item.menu_id ?? "",
+            name_th: item.name_th,
+            name_en: item.name_en,
+            category_th: cat?.th ?? "—",
+            category_en: cat?.en ?? "—",
+            qty: 0,
+            unit_price: Number(item.unit_price),
+            revenue: 0,
+          });
+        }
+        const row = agg.get(key)!;
+        row.qty += item.qty;
+        row.revenue += item.qty * Number(item.unit_price);
+      }
+
+      // Sort by quantity sold, descending
+      setRows([...agg.values()].sort((a, b) => b.qty - a.qty));
+      setLoaded(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [range]);
+  useEffect(() => { if (range === "custom" && custom?.from && custom?.to) load(); /* eslint-disable-next-line */ }, [custom]);
+
+  // Unique categories derived from loaded data
+  const categories = useMemo(() => {
+    const seen = new Set<string>();
+    const result: { key: string; th: string; en: string }[] = [];
+    for (const r of rows) {
+      if (r.category_th !== "—" && !seen.has(r.category_th)) {
+        seen.add(r.category_th);
+        result.push({ key: r.category_th, th: r.category_th, en: r.category_en });
+      }
+    }
+    return result;
+  }, [rows]);
+
+  const filtered = useMemo(() => {
+    return rows.filter((r) => {
+      if (catFilter !== "all" && r.category_th !== catFilter) return false;
+      if (search.trim()) {
+        const q = search.toLowerCase();
+        if (!r.name_th.toLowerCase().includes(q) && !r.name_en.toLowerCase().includes(q)) return false;
+      }
+      return true;
+    });
+  }, [rows, catFilter, search]);
+
+  const totalQty = filtered.reduce((s, r) => s + r.qty, 0);
+  const totalRevenue = filtered.reduce((s, r) => s + r.revenue, 0);
+
+  const customLabel = custom?.from
+    ? custom.to && custom.to.getTime() !== custom.from.getTime()
+      ? `${format(custom.from, "dd MMM")} – ${format(custom.to, "dd MMM yyyy")}`
+      : format(custom.from, "dd MMM yyyy")
+    : t("custom_range");
+
+  const handlePrint = () => {
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${t("item_sales")}</title>
+<style>
+  body{font-family:ui-sans-serif,system-ui;padding:24px;max-width:900px;margin:auto}
+  h1{text-align:center;margin:0 0 4px;font-size:20px}
+  .meta{text-align:center;font-size:12px;color:#555;margin-bottom:12px}
+  .summary{display:flex;gap:32px;margin-bottom:12px;font-size:14px}
+  .summary span b{font-size:18px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:5px 8px;border:1px solid #ddd;text-align:left}
+  th{background:#f5f5f5;font-weight:600}
+  .num{text-align:right;font-variant-numeric:tabular-nums}
+  .rank{color:#888;font-size:11px}
+  tfoot td{font-weight:700;background:#f9f9f9}
+</style></head><body>
+<h1>${t("item_sales")}</h1>
+<div class="meta">${new Date().toLocaleString()}</div>
+<div class="summary">
+  <span>${t("total_items_sold")}: <b>${totalQty.toLocaleString()}</b></span>
+  <span>${t("total_revenue")}: <b>${thb(totalRevenue)}</b></span>
+</div>
+<table>
+<thead><tr>
+  <th class="rank">#</th>
+  <th>${t("item_name_th")}</th>
+  <th>${t("item_name_en")}</th>
+  <th>${t("category")}</th>
+  <th class="num">${t("qty_sold")}</th>
+  <th class="num">${t("unit_price")}</th>
+  <th class="num">${t("revenue")}</th>
+</tr></thead>
+<tbody>
+${filtered.map((r, i) => `<tr>
+  <td class="rank">${i + 1}</td>
+  <td>${r.name_th}</td>
+  <td>${r.name_en}</td>
+  <td>${lang === "th" ? r.category_th : r.category_en}</td>
+  <td class="num">${r.qty}</td>
+  <td class="num">${thb(r.unit_price)}</td>
+  <td class="num">${thb(r.revenue)}</td>
+</tr>`).join("")}
+</tbody>
+<tfoot><tr>
+  <td colspan="4">${t("total")}</td>
+  <td class="num">${totalQty}</td>
+  <td></td>
+  <td class="num">${thb(totalRevenue)}</td>
+</tr></tfoot>
+</table>
+<script>window.onload=()=>setTimeout(()=>window.print(),100)</script>
+</body></html>`;
+    const w = window.open("", "_blank");
+    if (w) { w.document.write(html); w.document.close(); }
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* ── Date filter ── */}
+      <div className="flex gap-2 flex-wrap items-center">
+        {(["today", "yesterday", "week", "month"] as const).map((r) => (
+          <Button key={r} size="sm" variant={range === r ? "default" : "outline"} onClick={() => setRange(r)}>
+            {r === "today" ? t("today") : r === "yesterday" ? t("yesterday") : r === "week" ? t("this_week") : t("this_month")}
+          </Button>
+        ))}
+        <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+          <PopoverTrigger asChild>
+            <Button size="sm" variant={range === "custom" ? "default" : "outline"}
+              className={cn(!custom?.from && "text-muted-foreground")}>
+              <CalendarIcon className="h-3.5 w-3.5 mr-1" />
+              {range === "custom" ? customLabel : t("custom_range")}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar mode="range" selected={custom}
+              onSelect={(r) => { setCustom(r); setRange("custom"); if (r?.from && r?.to) setPickerOpen(false); }}
+              numberOfMonths={2} initialFocus className={cn("p-3 pointer-events-auto")} />
+          </PopoverContent>
+        </Popover>
+      </div>
+
+      {/* ── Summary cards ── */}
+      {loaded && (
+        <div className="grid grid-cols-2 gap-4">
+          <Card>
+            <CardContent className="pt-5">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">{t("total_items_sold")}</p>
+              <p className="text-3xl font-bold mt-1 tabular-nums">{totalQty.toLocaleString()}</p>
+              {catFilter !== "all" || search ? (
+                <p className="text-xs text-muted-foreground mt-0.5">{t("total")}: {rows.reduce((s, r) => s + r.qty, 0).toLocaleString()}</p>
+              ) : null}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-5">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">{t("total_revenue")}</p>
+              <p className="text-3xl font-bold mt-1 tabular-nums">{thb(totalRevenue)}</p>
+              {catFilter !== "all" || search ? (
+                <p className="text-xs text-muted-foreground mt-0.5">{t("total")}: {thb(rows.reduce((s, r) => s + r.revenue, 0))}</p>
+              ) : null}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* ── Filter + search + print bar ── */}
+      {loaded && rows.length > 0 && (
+        <div className="flex gap-2 flex-wrap items-center">
+          <Input
+            placeholder={t("search_items")}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-44 h-8 text-sm"
+          />
+          <Select value={catFilter} onValueChange={setCatFilter}>
+            <SelectTrigger className="w-44 h-8 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("all_categories")}</SelectItem>
+              {categories.map((c) => (
+                <SelectItem key={c.key} value={c.key}>
+                  {lang === "th" ? c.th : c.en}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <span className="text-xs text-muted-foreground">
+            {filtered.length} {lang === "th" ? "เมนู" : "items"}
+          </span>
+          <Button size="sm" variant="outline" className="ml-auto" onClick={handlePrint}>
+            <Printer className="h-3.5 w-3.5 mr-1.5" />{t("print")}
+          </Button>
+        </div>
+      )}
+
+      {/* ── Table ── */}
+      {loading && <p className="text-sm text-muted-foreground py-8 text-center">{t("loading")}</p>}
+      {loaded && !loading && (
+        filtered.length === 0 ? (
+          <Card>
+            <CardContent className="py-12 text-center text-muted-foreground text-sm">
+              {t("no_sales_period")}
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardContent className="p-0 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/40">
+                      <th className="text-left px-3 py-3 text-xs uppercase tracking-wide text-muted-foreground w-8">#</th>
+                      <th className="text-left px-3 py-3 text-xs uppercase tracking-wide text-muted-foreground">{t("item_name_th")}</th>
+                      <th className="text-left px-3 py-3 text-xs uppercase tracking-wide text-muted-foreground hidden sm:table-cell">{t("item_name_en")}</th>
+                      <th className="text-left px-3 py-3 text-xs uppercase tracking-wide text-muted-foreground hidden md:table-cell">{t("category")}</th>
+                      <th className="text-right px-3 py-3 text-xs uppercase tracking-wide text-muted-foreground">{t("qty_sold")}</th>
+                      <th className="text-right px-3 py-3 text-xs uppercase tracking-wide text-muted-foreground hidden sm:table-cell">{t("unit_price")}</th>
+                      <th className="text-right px-3 py-3 text-xs uppercase tracking-wide text-muted-foreground">{t("revenue")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((r, i) => {
+                      const medal = i === 0 ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                                 : i === 1 ? "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                                 : i === 2 ? "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300"
+                                 : "bg-muted/60 text-muted-foreground";
+                      return (
+                        <tr key={r.menu_id || i} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+                          <td className="px-3 py-3 text-xs text-muted-foreground">{i + 1}</td>
+                          <td className="px-3 py-3 font-medium leading-tight">{r.name_th}</td>
+                          <td className="px-3 py-3 text-xs text-muted-foreground hidden sm:table-cell">{r.name_en}</td>
+                          <td className="px-3 py-3 hidden md:table-cell">
+                            <span className="px-2 py-0.5 rounded-full text-xs bg-muted text-muted-foreground">
+                              {lang === "th" ? r.category_th : r.category_en}
+                            </span>
+                          </td>
+                          <td className="px-3 py-3 text-right">
+                            <span className={`inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full text-xs font-bold tabular-nums ${medal}`}>
+                              {r.qty}
+                            </span>
+                          </td>
+                          <td className="px-3 py-3 text-right text-xs text-muted-foreground tabular-nums hidden sm:table-cell">{thb(r.unit_price)}</td>
+                          <td className="px-3 py-3 text-right font-semibold tabular-nums">{thb(r.revenue)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  {filtered.length > 1 && (
+                    <tfoot>
+                      <tr className="border-t bg-muted/30 font-bold text-sm">
+                        <td colSpan={4} className="px-3 py-3">{t("total")}</td>
+                        <td className="px-3 py-3 text-right tabular-nums">{totalQty.toLocaleString()}</td>
+                        <td className="hidden sm:table-cell" />
+                        <td className="px-3 py-3 text-right tabular-nums">{thb(totalRevenue)}</td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+            </CardContent>
+          </Card>
         )
       )}
     </div>

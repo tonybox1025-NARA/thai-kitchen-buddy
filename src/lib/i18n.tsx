@@ -202,6 +202,18 @@ const dict: Dict = {
   set_includes:     { th: "รวมข้าวสวยหรือโจ๊ก",       en: "Includes rice or porridge" },
   set_select_1:     { th: "เลือก 1",                 en: "Select 1"          },
   set_select_2:     { th: "เลือก 2",                 en: "Select 2"          },
+  // item sales tab
+  item_sales:        { th: "ยอดขายรายเมนู",              en: "Item Sales"                      },
+  total_items_sold:  { th: "จำนวนที่ขายได้ทั้งหมด",        en: "Total Items Sold"                },
+  total_revenue:     { th: "รายได้รวม",                   en: "Total Revenue"                   },
+  item_name_th:      { th: "ชื่อเมนู (ไทย)",              en: "Item (TH)"                       },
+  item_name_en:      { th: "ชื่อเมนู (อังกฤษ)",           en: "Item (EN)"                       },
+  qty_sold:          { th: "จำนวนที่ขาย",                 en: "Qty Sold"                        },
+  unit_price:        { th: "ราคาต่อหน่วย",                en: "Unit Price"                      },
+  revenue:           { th: "รายได้",                      en: "Revenue"                         },
+  all_categories:    { th: "ทุกหมวดหมู่",                 en: "All Categories"                  },
+  no_sales_period:   { th: "ไม่มียอดขายในช่วงเวลานี้",     en: "No item sales for this period"   },
+  search_items:      { th: "ค้นหาเมนู…",                  en: "Search items…"                   },
   // misc
   loading: { th: "กำลังโหลด…", en: "Loading…" },
   qr_alert: { th: "ออเดอร์ QR ใหม่!", en: "New QR order!" },
