@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Trash2, Plus, Printer, QrCode, Wifi, WifiOff } from "lucide-react";
+import { Trash2, Plus, Printer, QrCode, Wifi, WifiOff, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 // qrcode is dynamically imported inside QrCodesTab to avoid Node deps at SSR module-eval
 
@@ -18,7 +18,7 @@ export const Route = createFileRoute("/_app/settings")({ component: SettingsPage
 
 type RTable = { id: string; code: string; capacity: number };
 
-type Menu = { id: string; category_id: string | null; name_th: string; name_en: string; name_my: string; price: number; cost: number; available: boolean };
+type Menu = { id: string; category_id: string | null; name_th: string; name_en: string; name_my: string; price: number; cost: number; available: boolean; image_url?: string | null };
 
 function MarginIndicator({ price, cost }: { price: number; cost: number }) {
   const margin = price > 0 ? ((price - cost) / price) * 100 : 0;
@@ -38,19 +38,39 @@ function MarginIndicator({ price, cost }: { price: number; cost: number }) {
   );
 }
 type Category = { id: string; name_th: string; name_en: string; name_my: string };
+// MenuIngredient as stored in state during editing (uses real DB column names: name_thai / name_english)
+type MenuIngredientRow = {
+  id?: string;           // undefined = newly added, not yet saved
+  ingredient_id: string;
+  name_thai: string;
+  name_english: string | null;
+  unit: string;
+  cost_per_unit: number;
+  quantity: number;
+  _deleted?: boolean;    // marked for removal on save
+};
 type Settings = { restaurant_name: string; vat_mode: "inclusive" | "exclusive"; vat_rate: number; printer_counter_ip: string | null; printer_kitchen_ip: string | null; starting_cash: number };
 type Staff = { id: string; name: string; role: "admin" | "manager" | "staff"; active: boolean };
 
 function SettingsPage() {
   const { t } = useI18n();
+  const [activeTab, setActiveTab] = useState("general");
+
+  // Allow IngredientsSection to switch to the ingredients tab
+  useEffect(() => {
+    const handler = () => setActiveTab("ingredients");
+    window.addEventListener("pos:open-ingredients-tab", handler);
+    return () => window.removeEventListener("pos:open-ingredients-tab", handler);
+  }, []);
+
   return (
     <div className="p-6">
       <h1 className="text-2xl font-bold mb-4">{t("nav_settings")}</h1>
-      <Tabs defaultValue="general">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="general">{t("general")}</TabsTrigger>
           <TabsTrigger value="menu">{t("menu_management")}</TabsTrigger>
-          <TabsTrigger value="ingredients">Ingredients</TabsTrigger>
+          <TabsTrigger value="ingredients">{t("ingredients")}</TabsTrigger>
           <TabsTrigger value="printers">{t("printers")}</TabsTrigger>
           <TabsTrigger value="qr">{t("qr_codes")}</TabsTrigger>
           <TabsTrigger value="staff">{t("staff")}</TabsTrigger>
@@ -67,7 +87,7 @@ function SettingsPage() {
 }
 
 type Ingredient = { id: string; name_thai: string; name_english: string | null; unit: string; cost_per_unit: number };
-
+// ── Ingredients master list tab ───────────────────────────────────────────────
 function IngredientsTab() {
   const [list, setList] = useState<Ingredient[]>([]);
   const [edit, setEdit] = useState<Partial<Ingredient> | null>(null);
@@ -248,29 +268,309 @@ function PrintersTab() {
   );
 }
 
+// ── Ingredients section inside the menu edit dialog ──────────────────────────
+function IngredientsSection({
+  menuId,
+  rows,
+  onChange,
+}: {
+  menuId: string | undefined;
+  rows: MenuIngredientRow[];
+  onChange: (rows: MenuIngredientRow[]) => void;
+}) {
+  const { t, lang } = useI18n();
+  const [allIngredients, setAllIngredients] = useState<Ingredient[]>([]);
+  const [search, setSearch] = useState("");
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [addQty, setAddQty] = useState("1");
+  const [selectedIngredient, setSelectedIngredient] = useState<Ingredient | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Load all ingredients for the picker
+  useEffect(() => {
+    supabase.from("ingredients").select("*").order("name_thai").then(({ data }: any) => {
+      setAllIngredients((data ?? []) as Ingredient[]);
+    });
+  }, []);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const visible = rows.filter((r) => !r._deleted);
+
+  // Filtered ingredient list for dropdown (exclude already-added ones)
+  const addedIds = new Set(visible.map((r) => r.ingredient_id));
+  const filtered = allIngredients.filter(
+    (ing) =>
+      !addedIds.has(ing.id) &&
+      (search === "" ||
+        ing.name_thai.toLowerCase().includes(search.toLowerCase()) ||
+        (ing.name_english ?? "").toLowerCase().includes(search.toLowerCase()))
+  );
+
+  const handleSelectIngredient = (ing: Ingredient) => {
+    setSelectedIngredient(ing);
+    setSearch(lang === "th" ? ing.name_thai : (ing.name_english ?? ing.name_thai));
+    setShowDropdown(false);
+  };
+
+  const handleAdd = () => {
+    if (!selectedIngredient) return;
+    const qty = parseFloat(addQty) || 1;
+    const newRow: MenuIngredientRow = {
+      ingredient_id: selectedIngredient.id,
+      name_thai: selectedIngredient.name_thai,
+      name_english: selectedIngredient.name_english,
+      unit: selectedIngredient.unit,
+      cost_per_unit: selectedIngredient.cost_per_unit,
+      quantity: qty,
+    };
+    onChange([...rows, newRow]);
+    setSelectedIngredient(null);
+    setSearch("");
+    setAddQty("1");
+  };
+
+  const handleRemove = (idx: number) => {
+    const target = visible[idx];
+    if (target.id) {
+      // existing DB row — mark deleted
+      onChange(rows.map((r) => (r === target ? { ...r, _deleted: true } : r)));
+    } else {
+      // new row — just filter out
+      onChange(rows.filter((r) => r !== target));
+    }
+  };
+
+  const handleQtyChange = (idx: number, val: string) => {
+    const target = visible[idx];
+    const qty = parseFloat(val) || 0;
+    onChange(rows.map((r) => (r === target ? { ...r, quantity: qty } : r)));
+  };
+
+  const totalCost = visible.reduce((s, r) => s + r.quantity * r.cost_per_unit, 0);
+
+  return (
+    <div className="space-y-3 pt-1">
+      <div className="flex items-center justify-between">
+        <Label className="text-sm font-semibold">{t("ingredients")}</Label>
+        {visible.length > 0 && (
+          <span className="text-xs text-muted-foreground">
+            {t("total_cost")}: ฿{totalCost.toFixed(2)}
+          </span>
+        )}
+      </div>
+
+      {/* Existing ingredient rows */}
+      {visible.length === 0 ? (
+        <p className="text-xs text-muted-foreground">{t("no_ingredients")}</p>
+      ) : (
+        <div className="space-y-2">
+          {visible.map((row, idx) => (
+            <div key={row.ingredient_id} className="flex items-center gap-2 text-sm">
+              <div className="flex-1 min-w-0">
+                <span className="font-medium">{lang === "th" ? row.name_thai : (row.name_english ?? row.name_thai)}</span>
+                <span className="text-muted-foreground ml-1 text-xs">
+                  ฿{Number(row.cost_per_unit).toFixed(2)}/{row.unit}
+                </span>
+              </div>
+              <Input
+                type="number"
+                min="0"
+                step="0.001"
+                value={row.quantity}
+                onChange={(e) => handleQtyChange(idx, e.target.value)}
+                className="w-20 h-7 text-xs"
+              />
+              <span className="text-xs text-muted-foreground w-8">{row.unit}</span>
+              <span className="text-xs w-16 text-right">
+                ฿{(row.quantity * row.cost_per_unit).toFixed(2)}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 shrink-0"
+                onClick={() => handleRemove(idx)}
+              >
+                <Trash2 className="h-3 w-3 text-destructive" />
+              </Button>
+            </div>
+          ))}
+          <div className="flex justify-end pt-1 border-t text-sm font-medium">
+            <span>{t("total_cost")}: ฿{totalCost.toFixed(2)}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Add ingredient row */}
+      <div className="flex items-start gap-2 pt-1 border-t">
+        <div className="relative flex-1" ref={dropdownRef}>
+          <div className="relative">
+            <Input
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setSelectedIngredient(null); setShowDropdown(true); }}
+              onFocus={() => setShowDropdown(true)}
+              placeholder={t("select_ingredient")}
+              className="h-8 text-xs pr-6"
+            />
+            <ChevronDown className="absolute right-2 top-2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          </div>
+          {showDropdown && (
+            <div className="absolute z-50 w-full mt-1 bg-background border rounded-md shadow-md max-h-44 overflow-y-auto text-sm">
+              {filtered.length === 0 ? (
+                <div className="px-3 py-2 text-muted-foreground text-xs">{t("no_data")}</div>
+              ) : (
+                filtered.map((ing) => (
+                  <button
+                    key={ing.id}
+                    type="button"
+                    className="w-full text-left px-3 py-1.5 hover:bg-muted flex items-center justify-between gap-2"
+                    onMouseDown={(e) => { e.preventDefault(); handleSelectIngredient(ing); }}
+                  >
+                    <span>{lang === "th" ? ing.name_thai : (ing.name_english ?? ing.name_thai)}</span>
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      ฿{Number(ing.cost_per_unit).toFixed(2)}/{ing.unit}
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+        <Input
+          type="number"
+          min="0"
+          step="0.001"
+          value={addQty}
+          onChange={(e) => setAddQty(e.target.value)}
+          placeholder={t("qty_label")}
+          className="w-20 h-8 text-xs"
+        />
+        <Button
+          size="sm"
+          className="h-8 text-xs shrink-0"
+          onClick={handleAdd}
+          disabled={!selectedIngredient}
+        >
+          <Plus className="h-3 w-3 mr-1" />{t("add")}
+        </Button>
+      </div>
+
+      {/* Link to manage ingredients master list */}
+      <p className="text-[11px] text-muted-foreground">
+        {t("manage_ingredients")}:{" "}
+        <button
+          type="button"
+          className="underline hover:text-foreground"
+          onClick={() => {
+            // Open ingredients management tab — passed via custom event so MenuTab can hear it
+            window.dispatchEvent(new CustomEvent("pos:open-ingredients-tab"));
+          }}
+        >
+          {t("nav_settings")} → {t("ingredients")}
+        </button>
+      </p>
+    </div>
+  );
+}
+
+// ── MenuTab ───────────────────────────────────────────────────────────────────
 function MenuTab() {
   const { t } = useI18n();
   const [menus, setMenus] = useState<Menu[]>([]);
   const [cats, setCats] = useState<Category[]>([]);
   const [edit, setEdit] = useState<Partial<Menu> | null>(null);
+  // Ingredient rows being edited for the current menu item
+  const [editIngRows, setEditIngRows] = useState<MenuIngredientRow[]>([]);
 
   const load = async () => {
     const { data: m } = await supabase.from("menus").select("*").order("sort");
     const { data: c } = await supabase.from("categories").select("*").order("sort");
-    setMenus((m ?? []) as Menu[]); setCats((c ?? []) as Category[]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    setMenus((m ?? []) as any as Menu[]); setCats((c ?? []) as Category[]);
   };
   useEffect(() => { load(); }, []);
+
+  // When opening edit for an existing menu item, load its ingredients
+  const openEdit = async (m: Partial<Menu>) => {
+    setEdit(m);
+    if (!m.id) { setEditIngRows([]); return; }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (supabase as any)
+      .from("menu_ingredients")
+      .select("id, ingredient_id, quantity, ingredients(id, name_thai, name_english, unit, cost_per_unit)")
+      .eq("menu_id", m.id);
+    const rows: MenuIngredientRow[] = (data ?? []).map((row: any) => ({
+      id: row.id,
+      ingredient_id: row.ingredient_id,
+      quantity: row.quantity,
+      name_thai: row.ingredients?.name_thai ?? "",
+      name_english: row.ingredients?.name_english ?? null,
+      unit: row.ingredients?.unit ?? "",
+      cost_per_unit: row.ingredients?.cost_per_unit ?? 0,
+    }));
+    setEditIngRows(rows);
+  };
+
+  // Compute auto-derived cost from visible ingredient rows
+  const derivedCost = editIngRows
+    .filter((r) => !r._deleted)
+    .reduce((s, r) => s + r.quantity * r.cost_per_unit, 0);
+
+  // Keep edit.cost in sync whenever ingredient rows change
+  useEffect(() => {
+    if (edit) setEdit((prev) => prev ? { ...prev, cost: parseFloat(derivedCost.toFixed(2)) } : prev);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [derivedCost]);
 
   const save = async () => {
     if (!edit) return;
     const payload = {
       name_th: edit.name_th ?? "", name_en: edit.name_en ?? "", name_my: edit.name_my ?? "",
-      price: Number(edit.price ?? 0), cost: Number(edit.cost ?? 0), category_id: edit.category_id ?? null, available: edit.available ?? true,
+      price: Number(edit.price ?? 0), cost: Number(edit.cost ?? 0),
+      category_id: edit.category_id ?? null, available: edit.available ?? true,
     };
-    if (edit.id) await supabase.from("menus").update(payload).eq("id", edit.id);
-    else await supabase.from("menus").insert(payload);
-    setEdit(null); load();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db = supabase as any;
+    let menuId = edit.id;
+    if (menuId) {
+      await db.from("menus").update(payload).eq("id", menuId);
+    } else {
+      const { data: inserted } = await db.from("menus").insert(payload).select("id").single();
+      menuId = inserted?.id;
+    }
+
+    // Save ingredient rows
+    if (menuId) {
+      for (const row of editIngRows) {
+        if (row._deleted && row.id) {
+          await db.from("menu_ingredients").delete().eq("id", row.id);
+        } else if (!row._deleted) {
+          if (row.id) {
+            await db.from("menu_ingredients").update({ quantity: row.quantity }).eq("id", row.id);
+          } else {
+            await db.from("menu_ingredients").insert({
+              menu_id: menuId,
+              ingredient_id: row.ingredient_id,
+              quantity: row.quantity,
+            });
+          }
+        }
+      }
+    }
+
+    setEdit(null); setEditIngRows([]); load();
   };
+
+  const closeEdit = () => { setEdit(null); setEditIngRows([]); };
 
   const toggleAvail = async (m: Menu) => {
     await supabase.from("menus").update({ available: !m.available }).eq("id", m.id);
@@ -284,7 +584,7 @@ function MenuTab() {
 
   return (
     <div className="mt-4 space-y-4">
-      <Button onClick={() => setEdit({})}><Plus className="h-4 w-4 mr-1" />{t("add")}</Button>
+      <Button onClick={() => openEdit({})}><Plus className="h-4 w-4 mr-1" />{t("add")}</Button>
       <div className="grid gap-2">
         {menus.map((m) => (
           <Card key={m.id}>
@@ -299,15 +599,15 @@ function MenuTab() {
                 <div className="mt-1"><MarginIndicator price={Number(m.price)} cost={Number(m.cost ?? 0)} /></div>
               </div>
               <Switch checked={m.available} onCheckedChange={() => toggleAvail(m)} />
-              <Button variant="outline" size="sm" onClick={() => setEdit(m)}>{t("edit")}</Button>
+              <Button variant="outline" size="sm" onClick={() => openEdit(m)}>{t("edit")}</Button>
               <Button variant="ghost" size="sm" onClick={() => del(m)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      <Dialog open={!!edit} onOpenChange={(o) => !o && setEdit(null)}>
-        <DialogContent>
+      <Dialog open={!!edit} onOpenChange={(o) => !o && closeEdit()}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{edit?.id ? t("edit") : t("add")}</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div><Label>{t("name_th")}</Label><Input value={edit?.name_th ?? ""} onChange={(e) => setEdit({ ...edit, name_th: e.target.value })} /></div>
@@ -319,6 +619,28 @@ function MenuTab() {
             </div>
             <MarginIndicator price={Number(edit?.price ?? 0)} cost={Number(edit?.cost ?? 0)} />
             <div>
+              <Label>{t("cost")} — {t("total_cost")}</Label>
+              <Input
+                type="number"
+                step="0.01"
+                value={edit?.cost ?? 0}
+                onChange={(e) => setEdit({ ...edit, cost: Number(e.target.value) })}
+                className="text-muted-foreground"
+              />
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {t("auto_update")} {t("ingredients").toLowerCase()}
+              </p>
+            </div>
+            {/* ── Ingredients section ── */}
+            <div className="border rounded-md p-3 bg-muted/30">
+              <IngredientsSection
+                menuId={edit?.id}
+                rows={editIngRows}
+                onChange={setEditIngRows}
+              />
+            </div>
+
+            <div>
               <Label>{t("category")}</Label>
               <Select value={edit?.category_id ?? ""} onValueChange={(v) => setEdit({ ...edit, category_id: v })}>
                 <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
@@ -328,7 +650,7 @@ function MenuTab() {
             <div className="flex items-center gap-2"><Switch checked={edit?.available ?? true} onCheckedChange={(v) => setEdit({ ...edit, available: v })} /><Label>{t("available_toggle")}</Label></div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEdit(null)}>{t("cancel")}</Button>
+            <Button variant="outline" onClick={closeEdit}>{t("cancel")}</Button>
             <Button onClick={save}>{t("save")}</Button>
           </DialogFooter>
         </DialogContent>
