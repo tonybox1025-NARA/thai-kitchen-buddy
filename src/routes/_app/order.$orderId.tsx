@@ -40,8 +40,8 @@ type Item = {
 };
 type AddonOption = { id: string; name: string; price: number };
 type AddonGroup = { id: string; name: string; kitchen_name: string | null; addon_options: AddonOption[] };
-type SelectedAddon = { group_id: string; group_name: string; option_id: string; option_name: string; price: number };
-type Modifier = { option_id: string; group_name: string; option_name: string; price: number };
+type SelectedAddon = { group_id: string; group_name: string; option_id: string; option_name: string; price: number; qty: number };
+type Modifier = { option_id: string; group_name: string; option_name: string; price: number; qty: number };
 
 function MenuCardImage({ src, alt }: { src: string | null; alt: string }) {
   const [failed, setFailed] = useState(false);
@@ -200,11 +200,11 @@ function OrderPage() {
 
   const addToOrder = async () => {
     if (!selected) return;
-    const addonsArr = Array.from(selectedAddons.values());
-    const addonPrice = addonsArr.reduce((s, a) => s + a.price, 0);
+    const addonsArr = Array.from(selectedAddons.values()).filter((a) => a.qty > 0);
+    const addonPrice = addonsArr.reduce((s, a) => s + a.price * a.qty, 0);
     const unit_price = selected.price + addonPrice;
     const modifiers: Modifier[] | null = addonsArr.length > 0
-      ? addonsArr.map((a) => ({ option_id: a.option_id, group_name: a.group_name, option_name: a.option_name, price: a.price }))
+      ? addonsArr.map((a) => ({ option_id: a.option_id, group_name: a.group_name, option_name: a.option_name, price: a.price, qty: a.qty }))
       : null;
     const { error } = await (supabase as any).from("order_items").insert({
       order_id: orderId, menu_id: selected.id,
@@ -560,7 +560,10 @@ function OrderPage() {
                     <div className="font-medium truncate">{pickName(i, lang)}</div>
                     {mods.length > 0 && (
                       <div className="text-xs text-muted-foreground mt-0.5">
-                        {mods.map((m) => `+ ${m.option_name}${m.price > 0 ? ` (+${thb(m.price)})` : ""}`).join(" · ")}
+                        {mods.map((m) => {
+                          const q = m.qty ?? 1;
+                          return `+ ${m.option_name}${q > 1 ? ` ×${q}` : ""}${m.price > 0 ? ` (+${thb(m.price * q)})` : ""}`;
+                        }).join(" · ")}
                       </div>
                     )}
                     {i.notes && <div className="text-xs text-muted-foreground">📝 {i.notes}</div>}
@@ -617,7 +620,7 @@ function OrderPage() {
         <DialogContent className="max-h-[85vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{selected ? pickName(selected, lang) : ""}</DialogTitle></DialogHeader>
           {selected && (() => {
-            const addonTotal = Array.from(selectedAddons.values()).reduce((s, a) => s + a.price, 0);
+            const addonTotal = Array.from(selectedAddons.values()).reduce((s, a) => s + a.price * a.qty, 0);
             const totalPrice = (selected.price + addonTotal) * qty;
             return (
               <div className="space-y-4">
@@ -634,48 +637,54 @@ function OrderPage() {
                 {addonGroups.length > 0 && (
                   <div className="space-y-3">
                     <Label>{lang === "th" ? "ท็อปปิ้ง / เพิ่มเติม" : "Add-ons"}</Label>
-                    {addonGroups.map((group) => {
-                      const chosen = selectedAddons.get(group.id);
-                      return (
-                        <div key={group.id}>
-                          <p className="text-sm font-medium mb-1.5">{group.name}</p>
-                          <div className="flex flex-wrap gap-2">
-                            {(group.addon_options ?? []).map((opt) => {
-                              const isSelected = chosen?.option_id === opt.id;
-                              return (
-                                <button
-                                  key={opt.id}
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedAddons((prev) => {
+                    {addonGroups.map((group) => (
+                      <div key={group.id}>
+                        <p className="text-sm font-medium mb-1.5">{group.name}</p>
+                        <div className="space-y-1.5">
+                          {(group.addon_options ?? []).map((opt) => {
+                            const current = selectedAddons.get(opt.id);
+                            const optQty = current?.qty ?? 0;
+                            return (
+                              <div
+                                key={opt.id}
+                                className={`flex items-center justify-between rounded-lg border px-3 py-2 transition-colors
+                                  ${optQty > 0 ? "border-primary bg-primary/5" : "border-border"}`}
+                              >
+                                <span className="text-sm">
+                                  {opt.name}
+                                  {opt.price > 0 && (
+                                    <span className="text-muted-foreground ml-1">+{thb(opt.price)}</span>
+                                  )}
+                                </span>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <Button
+                                    size="icon" variant="outline" className="h-7 w-7"
+                                    type="button"
+                                    onClick={() => setSelectedAddons((prev) => {
                                       const next = new Map(prev);
-                                      if (isSelected) {
-                                        next.delete(group.id);
-                                      } else {
-                                        next.set(group.id, {
-                                          group_id: group.id,
-                                          group_name: group.kitchen_name ?? group.name,
-                                          option_id: opt.id,
-                                          option_name: opt.name,
-                                          price: opt.price,
-                                        });
-                                      }
+                                      if (optQty <= 1) { next.delete(opt.id); }
+                                      else { next.set(opt.id, { ...current!, qty: optQty - 1 }); }
                                       return next;
-                                    });
-                                  }}
-                                  className={`rounded-full border px-3 py-1.5 text-sm transition-colors
-                                    ${isSelected
-                                      ? "border-primary bg-primary text-primary-foreground font-medium"
-                                      : "border-border hover:border-primary/60 hover:bg-muted/50"}`}
-                                >
-                                  {opt.name}{opt.price > 0 && ` +${thb(opt.price)}`}
-                                </button>
-                              );
-                            })}
-                          </div>
+                                    })}
+                                  ><Minus className="h-3 w-3" /></Button>
+                                  <span className="w-5 text-center text-sm tabular-nums font-medium">{optQty}</span>
+                                  <Button
+                                    size="icon" variant="outline" className="h-7 w-7"
+                                    type="button"
+                                    onClick={() => setSelectedAddons((prev) => {
+                                      const next = new Map(prev);
+                                      if (current) { next.set(opt.id, { ...current, qty: optQty + 1 }); }
+                                      else { next.set(opt.id, { group_id: group.id, group_name: group.kitchen_name ?? group.name, option_id: opt.id, option_name: opt.name, price: opt.price, qty: 1 }); }
+                                      return next;
+                                    })}
+                                  ><Plus className="h-3 w-3" /></Button>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
-                      );
-                    })}
+                      </div>
+                    ))}
                   </div>
                 )}
 

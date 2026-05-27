@@ -215,8 +215,10 @@ function buildKitchen(p) {
     // Print selected add-ons (stored in modifiers array)
     if (Array.isArray(item.modifiers) && item.modifiers.length > 0) {
       for (const mod of item.modifiers) {
-        const priceStr = mod.price > 0 ? ` +${mod.price}` : "";
-        parts.push(`     + ${mod.option_name}${priceStr}`, lf());
+        const q = mod.qty ?? 1;
+        const qtyStr = q > 1 ? ` x${q}` : "";
+        const priceStr = mod.price > 0 ? ` +${mod.price * q}` : "";
+        parts.push(`     + ${mod.option_name}${qtyStr}${priceStr}`, lf());
       }
     }
   }
