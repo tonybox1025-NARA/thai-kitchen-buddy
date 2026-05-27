@@ -214,7 +214,11 @@ function MenuTab() {
                 <div className="font-medium">{m.name_th} · {m.name_en}</div>
                 <div className="text-xs text-muted-foreground font-burmese">{m.name_my}</div>
               </div>
-              <div className="font-bold w-24 text-right">฿{Number(m.price).toFixed(2)}</div>
+              <div className="w-40 text-right">
+                <div className="font-bold">฿{Number(m.price).toFixed(2)}</div>
+                <div className="text-xs text-muted-foreground">Cost ฿{Number(m.cost ?? 0).toFixed(2)}</div>
+                <div className="mt-1"><MarginIndicator price={Number(m.price)} cost={Number(m.cost ?? 0)} /></div>
+              </div>
               <Switch checked={m.available} onCheckedChange={() => toggleAvail(m)} />
               <Button variant="outline" size="sm" onClick={() => setEdit(m)}>{t("edit")}</Button>
               <Button variant="ghost" size="sm" onClick={() => del(m)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
