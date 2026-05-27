@@ -176,12 +176,12 @@ function OrderPage() {
     setSelected(m); setQty(1); setNotes(""); setSelectedAddons(new Map()); setAddonGroups([]);
     // Two-step fetch (avoids relying on FK declarations for PostgREST nested selects)
     const db = supabase as any;
-    // Step 1: get addon_group_ids linked to this menu item
+    // Step 1: get group_ids linked to this menu item
     const { data: links } = await db
       .from("menu_addons")
-      .select("addon_group_id")
+      .select("group_id")
       .eq("menu_id", m.id);
-    const groupIds = ((links ?? []) as { addon_group_id: string }[]).map((r) => r.addon_group_id);
+    const groupIds = ((links ?? []) as { group_id: string }[]).map((r) => r.group_id);
     if (groupIds.length === 0) return;
     // Step 2: fetch each group with its options
     const { data: groups, error: groupErr } = await db

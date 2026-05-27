@@ -758,9 +758,9 @@ function MenuTab() {
     // Load linked addon groups
     const { data: addonData } = await db
       .from("menu_addons")
-      .select("addon_group_id")
+      .select("group_id")
       .eq("menu_id", m.id);
-    setLinkedAddonIds(new Set((addonData ?? []).map((r: any) => r.addon_group_id)));
+    setLinkedAddonIds(new Set((addonData ?? []).map((r: any) => r.group_id)));
   };
 
   // Compute auto-derived cost from visible ingredient rows
@@ -809,7 +809,7 @@ function MenuTab() {
       // Sync menu_addons: replace all
       await db.from("menu_addons").delete().eq("menu_id", menuId);
       for (const groupId of linkedAddonIds) {
-        await db.from("menu_addons").insert({ menu_id: menuId, addon_group_id: groupId });
+        await db.from("menu_addons").insert({ menu_id: menuId, group_id: groupId });
       }
     }
 
