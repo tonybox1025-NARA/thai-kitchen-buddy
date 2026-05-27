@@ -188,6 +188,75 @@ export type Database = {
         }
         Relationships: []
       }
+      ingredients: {
+        Row: {
+          cost_per_unit: number
+          created_at: string | null
+          id: string
+          name_english: string | null
+          name_thai: string
+          unit: string
+          updated_at: string | null
+        }
+        Insert: {
+          cost_per_unit?: number
+          created_at?: string | null
+          id?: string
+          name_english?: string | null
+          name_thai: string
+          unit: string
+          updated_at?: string | null
+        }
+        Update: {
+          cost_per_unit?: number
+          created_at?: string | null
+          id?: string
+          name_english?: string | null
+          name_thai?: string
+          unit?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      menu_ingredients: {
+        Row: {
+          created_at: string | null
+          id: string
+          ingredient_id: string | null
+          menu_id: string | null
+          quantity: number
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          ingredient_id?: string | null
+          menu_id?: string | null
+          quantity?: number
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          ingredient_id?: string | null
+          menu_id?: string | null
+          quantity?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_ingredients_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "menu_ingredients_menu_id_fkey"
+            columns: ["menu_id"]
+            isOneToOne: false
+            referencedRelation: "menus"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       menus: {
         Row: {
           available: boolean
