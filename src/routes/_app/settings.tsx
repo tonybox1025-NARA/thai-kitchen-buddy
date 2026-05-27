@@ -186,7 +186,7 @@ function MenuTab() {
     if (!edit) return;
     const payload = {
       name_th: edit.name_th ?? "", name_en: edit.name_en ?? "", name_my: edit.name_my ?? "",
-      price: Number(edit.price ?? 0), category_id: edit.category_id ?? null, available: edit.available ?? true,
+      price: Number(edit.price ?? 0), cost: Number(edit.cost ?? 0), category_id: edit.category_id ?? null, available: edit.available ?? true,
     };
     if (edit.id) await supabase.from("menus").update(payload).eq("id", edit.id);
     else await supabase.from("menus").insert(payload);
