@@ -174,16 +174,22 @@ function OrderPage() {
       if (setDef) { setSelectedSet(setDef); return; }
     }
     setSelected(m); setQty(1); setNotes(""); setSelectedAddons(new Map()); setAddonGroups([]);
-    // Fetch linked addon groups
+    // Two-step fetch (avoids relying on FK declarations for PostgREST nested selects)
     const db = supabase as any;
-    const { data } = await db
+    // Step 1: get addon_group_ids linked to this menu item
+    const { data: links } = await db
       .from("menu_addons")
-      .select("addon_groups(id, name, kitchen_name, addon_options(id, name, price))")
+      .select("addon_group_id")
       .eq("menu_id", m.id);
-    const groups = ((data ?? []) as { addon_groups: AddonGroup | null }[])
-      .map((r) => r.addon_groups)
-      .filter((g): g is AddonGroup => g !== null);
-    setAddonGroups(groups);
+    const groupIds = ((links ?? []) as { addon_group_id: string }[]).map((r) => r.addon_group_id);
+    if (groupIds.length === 0) return;
+    // Step 2: fetch each group with its options
+    const { data: groups, error: groupErr } = await db
+      .from("addon_groups")
+      .select("id, name, kitchen_name, addon_options(id, name, price)")
+      .in("id", groupIds);
+    if (groupErr) { console.error("addon_groups fetch:", groupErr.message); return; }
+    setAddonGroups((groups ?? []) as AddonGroup[]);
   };
 
   const addToOrder = async () => {
