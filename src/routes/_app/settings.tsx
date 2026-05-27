@@ -530,17 +530,18 @@ function AddonsTab() {
       groupId = data.id;
     }
 
-    // Sync options
-    for (const opt of editGroup.options) {
-      if (opt._deleted && opt.id) {
-        await db.from("addon_options").delete().eq("id", opt.id);
-      } else if (!opt._deleted && opt.name.trim()) {
-        if (opt.id) {
-          await db.from("addon_options").update({ name: opt.name.trim(), price: Number(opt.price) }).eq("id", opt.id);
-        } else {
-          await db.from("addon_options").insert({ addon_group_id: groupId, name: opt.name.trim(), price: Number(opt.price) });
-        }
-      }
+    // Sync options: delete all existing then bulk-insert current list
+    await db.from("addon_options").delete().eq("addon_group_id", groupId);
+    const validOptions = editGroup.options.filter((o) => !o._deleted && o.name.trim());
+    if (validOptions.length > 0) {
+      const { error: optErr } = await db.from("addon_options").insert(
+        validOptions.map((o) => ({
+          addon_group_id: groupId,
+          name: o.name.trim(),
+          price: Number(o.price),
+        }))
+      );
+      if (optErr) { toast.error(`Options: ${optErr.message}`); return; }
     }
 
     toast.success("Saved");
