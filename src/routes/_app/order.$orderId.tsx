@@ -38,6 +38,10 @@ type Item = {
   status: "pending" | "sent" | "served" | "voided";
   set_config?: any;
 };
+type AddonOption = { id: string; name: string; price: number };
+type AddonGroup = { id: string; name: string; kitchen_name: string | null; addon_options: AddonOption[] };
+type SelectedAddon = { group_id: string; group_name: string; option_id: string; option_name: string; price: number };
+type Modifier = { option_id: string; group_name: string; option_name: string; price: number };
 
 function MenuCardImage({ src, alt }: { src: string | null; alt: string }) {
   const [failed, setFailed] = useState(false);
@@ -72,6 +76,8 @@ function OrderPage() {
   const [selected, setSelected] = useState<Menu | null>(null);
   const [qty, setQty] = useState(1);
   const [notes, setNotes] = useState("");
+  const [addonGroups, setAddonGroups] = useState<AddonGroup[]>([]);
+  const [selectedAddons, setSelectedAddons] = useState<Map<string, SelectedAddon>>(new Map());
   const [voidItem, setVoidItem] = useState<Item | null>(null);
   const [voidReason, setVoidReason] = useState("");
   const [voidPreset, setVoidPreset] = useState<string>("");
@@ -159,7 +165,7 @@ function OrderPage() {
     [allMenusSorted, activeCat],
   );
 
-  const openMenu = (m: Menu) => {
+  const openMenu = async (m: Menu) => {
     // Detect set-menu items by name (e.g. "Lon Moh - SET A", "Lon Moh - SET B", "Lon Moh - SET C")
     const combined = `${m.name_en} ${m.name_th}`.toLowerCase();
     const setId = combined.includes("set a") ? "A" : combined.includes("set b") ? "B" : combined.includes("set c") ? "C" : null;
@@ -167,15 +173,31 @@ function OrderPage() {
       const setDef = SETS.find(s => s.id === setId);
       if (setDef) { setSelectedSet(setDef); return; }
     }
-    setSelected(m); setQty(1); setNotes("");
+    setSelected(m); setQty(1); setNotes(""); setSelectedAddons(new Map()); setAddonGroups([]);
+    // Fetch linked addon groups
+    const db = supabase as any;
+    const { data } = await db
+      .from("menu_addons")
+      .select("addon_groups(id, name, kitchen_name, addon_options(id, name, price))")
+      .eq("menu_id", m.id);
+    const groups = ((data ?? []) as { addon_groups: AddonGroup | null }[])
+      .map((r) => r.addon_groups)
+      .filter((g): g is AddonGroup => g !== null);
+    setAddonGroups(groups);
   };
 
   const addToOrder = async () => {
     if (!selected) return;
-    const { error } = await supabase.from("order_items").insert({
+    const addonsArr = Array.from(selectedAddons.values());
+    const addonPrice = addonsArr.reduce((s, a) => s + a.price, 0);
+    const unit_price = selected.price + addonPrice;
+    const modifiers: Modifier[] | null = addonsArr.length > 0
+      ? addonsArr.map((a) => ({ option_id: a.option_id, group_name: a.group_name, option_name: a.option_name, price: a.price }))
+      : null;
+    const { error } = await (supabase as any).from("order_items").insert({
       order_id: orderId, menu_id: selected.id,
       name_th: selected.name_th, name_en: selected.name_en, name_my: selected.name_my,
-      qty, unit_price: selected.price, notes: notes || null, status: "pending",
+      qty, unit_price, notes: notes || null, modifiers, status: "pending",
     });
     if (error) toast.error(error.message);
     setSelected(null);
@@ -227,9 +249,9 @@ function OrderPage() {
         const drinkStr = sc.drink ? ` | ${sc.drink.th}` : "";
         const riceStr = sc.rice === "rice" ? "ข้าวสวย" : "โจ๊ก";
         const setNotes = `หลัก: ${sc.main.th} | ${sideStr}${drinkStr} | ${riceStr}`;
-        return { name_my: p.name_en, name_en: p.name_en, name_th: p.name_th, qty: p.qty, notes: setNotes };
+        return { name_my: p.name_en, name_en: p.name_en, name_th: p.name_th, qty: p.qty, notes: setNotes, modifiers: null };
       }
-      return { name_my: p.name_my, name_en: p.name_en, name_th: p.name_th, qty: p.qty, notes: p.notes };
+      return { name_my: p.name_my, name_en: p.name_en, name_th: p.name_th, qty: p.qty, notes: p.notes, modifiers: (p.modifiers as Modifier[] | null) ?? null };
     });
     const displayLabel = orderSource === "takeout" ? `Takeout ${orderNumber ?? ""}` : orderSource === "staff_meal" ? `Staff ${orderNumber ?? ""}` : tableCode;
     const ticketPayload = { kind: "order_ticket", table: displayLabel, lines, sent_at: sentAt };
@@ -518,11 +540,17 @@ function OrderPage() {
               );
             }
             // --- regular item (original code preserved exactly) ---
+            const mods = Array.isArray(i.modifiers) ? (i.modifiers as Modifier[]) : [];
             return (
               <div key={i.id} className="rounded-lg border p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="font-medium truncate">{pickName(i, lang)}</div>
+                    {mods.length > 0 && (
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {mods.map((m) => `+ ${m.option_name}${m.price > 0 ? ` (+${thb(m.price)})` : ""}`).join(" · ")}
+                      </div>
+                    )}
                     {i.notes && <div className="text-xs text-muted-foreground">📝 {i.notes}</div>}
                     <div className="text-xs mt-1">
                       <span className={`inline-block px-1.5 py-0.5 rounded ${i.status === "pending" ? "bg-warning/20 text-warning-foreground" : "bg-success/20 text-success-foreground"}`}>
@@ -573,27 +601,84 @@ function OrderPage() {
       </aside>
 
       {/* Add item dialog */}
-      <Dialog open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
-        <DialogContent>
+      <Dialog open={!!selected} onOpenChange={(o) => { if (!o) { setSelected(null); setAddonGroups([]); setSelectedAddons(new Map()); } }}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{selected ? pickName(selected, lang) : ""}</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <Label>{t("qty")}</Label>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" onClick={() => setQty(Math.max(1, qty - 1))}><Minus className="h-4 w-4" /></Button>
-                <Input type="number" min={1} value={qty} onChange={(e) => setQty(Math.max(1, Number(e.target.value)))} className="text-center" />
-                <Button variant="outline" onClick={() => setQty(qty + 1)}><Plus className="h-4 w-4" /></Button>
+          {selected && (() => {
+            const addonTotal = Array.from(selectedAddons.values()).reduce((s, a) => s + a.price, 0);
+            const totalPrice = (selected.price + addonTotal) * qty;
+            return (
+              <div className="space-y-4">
+                <div>
+                  <Label>{t("qty")}</Label>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" onClick={() => setQty(Math.max(1, qty - 1))}><Minus className="h-4 w-4" /></Button>
+                    <Input type="number" min={1} value={qty} onChange={(e) => setQty(Math.max(1, Number(e.target.value)))} className="text-center" />
+                    <Button variant="outline" onClick={() => setQty(qty + 1)}><Plus className="h-4 w-4" /></Button>
+                  </div>
+                </div>
+
+                {/* ── Add-on groups ── */}
+                {addonGroups.length > 0 && (
+                  <div className="space-y-3">
+                    <Label>{lang === "th" ? "ท็อปปิ้ง / เพิ่มเติม" : "Add-ons"}</Label>
+                    {addonGroups.map((group) => {
+                      const chosen = selectedAddons.get(group.id);
+                      return (
+                        <div key={group.id}>
+                          <p className="text-sm font-medium mb-1.5">{group.name}</p>
+                          <div className="flex flex-wrap gap-2">
+                            {group.addon_options.map((opt) => {
+                              const isSelected = chosen?.option_id === opt.id;
+                              return (
+                                <button
+                                  key={opt.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedAddons((prev) => {
+                                      const next = new Map(prev);
+                                      if (isSelected) {
+                                        next.delete(group.id);
+                                      } else {
+                                        next.set(group.id, {
+                                          group_id: group.id,
+                                          group_name: group.kitchen_name ?? group.name,
+                                          option_id: opt.id,
+                                          option_name: opt.name,
+                                          price: opt.price,
+                                        });
+                                      }
+                                      return next;
+                                    });
+                                  }}
+                                  className={`rounded-full border px-3 py-1.5 text-sm transition-colors
+                                    ${isSelected
+                                      ? "border-primary bg-primary text-primary-foreground font-medium"
+                                      : "border-border hover:border-primary/60 hover:bg-muted/50"}`}
+                                >
+                                  {opt.name}{opt.price > 0 && ` +${thb(opt.price)}`}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <div>
+                  <Label>{t("notes")}</Label>
+                  <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="ไม่เผ็ด, no spicy…" />
+                </div>
+
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => { setSelected(null); setAddonGroups([]); setSelectedAddons(new Map()); }}>{t("cancel")}</Button>
+                  <Button onClick={addToOrder}>{t("add_to_order")} · {thb(totalPrice)}</Button>
+                </DialogFooter>
               </div>
-            </div>
-            <div>
-              <Label>{t("notes")}</Label>
-              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="ไม่เผ็ด, no spicy…" />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSelected(null)}>{t("cancel")}</Button>
-            <Button onClick={addToOrder}>{t("add_to_order")} · {selected ? thb(qty * selected.price) : ""}</Button>
-          </DialogFooter>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 
