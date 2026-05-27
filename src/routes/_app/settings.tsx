@@ -234,7 +234,11 @@ function MenuTab() {
             <div><Label>{t("name_th")}</Label><Input value={edit?.name_th ?? ""} onChange={(e) => setEdit({ ...edit, name_th: e.target.value })} /></div>
             <div><Label>{t("name_en")}</Label><Input value={edit?.name_en ?? ""} onChange={(e) => setEdit({ ...edit, name_en: e.target.value })} /></div>
             <div><Label>{t("name_my")}</Label><Input className="font-burmese" value={edit?.name_my ?? ""} onChange={(e) => setEdit({ ...edit, name_my: e.target.value })} /></div>
-            <div><Label>{t("price")}</Label><Input type="number" step="0.01" value={edit?.price ?? 0} onChange={(e) => setEdit({ ...edit, price: Number(e.target.value) })} /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>{t("price")} (฿)</Label><Input type="number" step="0.01" value={edit?.price ?? 0} onChange={(e) => setEdit({ ...edit, price: Number(e.target.value) })} /></div>
+              <div><Label>Cost (฿)</Label><Input type="number" step="0.01" value={edit?.cost ?? 0} onChange={(e) => setEdit({ ...edit, cost: Number(e.target.value) })} /></div>
+            </div>
+            <MarginIndicator price={Number(edit?.price ?? 0)} cost={Number(edit?.cost ?? 0)} />
             <div>
               <Label>{t("category")}</Label>
               <Select value={edit?.category_id ?? ""} onValueChange={(v) => setEdit({ ...edit, category_id: v })}>
