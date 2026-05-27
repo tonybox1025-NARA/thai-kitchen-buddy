@@ -51,6 +51,10 @@ type MenuIngredientRow = {
 };
 type Settings = { restaurant_name: string; vat_mode: "inclusive" | "exclusive"; vat_rate: number; printer_counter_ip: string | null; printer_kitchen_ip: string | null; starting_cash: number };
 type Staff = { id: string; name: string; role: "admin" | "manager" | "staff"; active: boolean };
+// Add-ons
+type AddonOption = { id?: string; name: string; price: number; _deleted?: boolean };
+type AddonGroup = { id: string; name: string; kitchen_name: string | null; addon_options: AddonOption[] };
+type EditAddonGroup = { id?: string; name: string; kitchen_name: string; options: AddonOption[] };
 
 function SettingsPage() {
   const { t } = useI18n();
@@ -71,6 +75,7 @@ function SettingsPage() {
           <TabsTrigger value="general">{t("general")}</TabsTrigger>
           <TabsTrigger value="menu">{t("menu_management")}</TabsTrigger>
           <TabsTrigger value="ingredients">{t("ingredients")}</TabsTrigger>
+          <TabsTrigger value="addons">{t("add_ons")}</TabsTrigger>
           <TabsTrigger value="printers">{t("printers")}</TabsTrigger>
           <TabsTrigger value="qr">{t("qr_codes")}</TabsTrigger>
           <TabsTrigger value="staff">{t("staff")}</TabsTrigger>
@@ -78,6 +83,7 @@ function SettingsPage() {
         <TabsContent value="general"><GeneralTab /></TabsContent>
         <TabsContent value="menu"><MenuTab /></TabsContent>
         <TabsContent value="ingredients"><IngredientsTab /></TabsContent>
+        <TabsContent value="addons"><AddonsTab /></TabsContent>
         <TabsContent value="printers"><PrintersTab /></TabsContent>
         <TabsContent value="qr"><QrCodesTab /></TabsContent>
         <TabsContent value="staff"><StaffTab /></TabsContent>
@@ -482,6 +488,228 @@ function IngredientsSection({
   );
 }
 
+// ── Add-ons tab ───────────────────────────────────────────────────────────────
+function AddonsTab() {
+  const { t } = useI18n();
+  const db = supabase as any;
+  const [groups, setGroups] = useState<AddonGroup[]>([]);
+  const [editGroup, setEditGroup] = useState<EditAddonGroup | null>(null);
+
+  const load = async () => {
+    const { data } = await db.from("addon_groups").select("*, addon_options(*)").order("name");
+    setGroups((data ?? []) as AddonGroup[]);
+  };
+  useEffect(() => { load(); }, []);
+
+  const openAdd = () => setEditGroup({ name: "", kitchen_name: "", options: [{ name: "", price: 0 }] });
+
+  const openEdit = (g: AddonGroup) =>
+    setEditGroup({
+      id: g.id,
+      name: g.name,
+      kitchen_name: g.kitchen_name ?? "",
+      options: g.addon_options.map((o) => ({ id: o.id, name: o.name, price: o.price })),
+    });
+
+  const saveGroup = async () => {
+    if (!editGroup) return;
+    if (!editGroup.name.trim()) { toast.error("Group name required"); return; }
+
+    const groupPayload = {
+      name: editGroup.name.trim(),
+      kitchen_name: editGroup.kitchen_name.trim() || null,
+    };
+
+    let groupId = editGroup.id;
+    if (groupId) {
+      const { error } = await db.from("addon_groups").update(groupPayload).eq("id", groupId);
+      if (error) { toast.error(error.message); return; }
+    } else {
+      const { data, error } = await db.from("addon_groups").insert(groupPayload).select("id").single();
+      if (error) { toast.error(error.message); return; }
+      groupId = data.id;
+    }
+
+    // Sync options
+    for (const opt of editGroup.options) {
+      if (opt._deleted && opt.id) {
+        await db.from("addon_options").delete().eq("id", opt.id);
+      } else if (!opt._deleted && opt.name.trim()) {
+        if (opt.id) {
+          await db.from("addon_options").update({ name: opt.name.trim(), price: Number(opt.price) }).eq("id", opt.id);
+        } else {
+          await db.from("addon_options").insert({ addon_group_id: groupId, name: opt.name.trim(), price: Number(opt.price) });
+        }
+      }
+    }
+
+    toast.success("Saved");
+    setEditGroup(null);
+    load();
+  };
+
+  const delGroup = async (g: AddonGroup) => {
+    if (!confirm(`Delete "${g.name}" and all its options?`)) return;
+    const { error } = await db.from("addon_groups").delete().eq("id", g.id);
+    if (error) { toast.error(error.message); return; }
+    load();
+  };
+
+  const setOpt = (idx: number, patch: Partial<AddonOption>) =>
+    setEditGroup((prev) => prev ? {
+      ...prev,
+      options: prev.options.map((o, i) => i === idx ? { ...o, ...patch } : o),
+    } : prev);
+
+  const addOpt = () =>
+    setEditGroup((prev) => prev ? { ...prev, options: [...prev.options, { name: "", price: 0 }] } : prev);
+
+  const removeOpt = (idx: number) =>
+    setEditGroup((prev) => {
+      if (!prev) return prev;
+      const opt = prev.options[idx];
+      if (opt.id) {
+        // existing row — mark deleted
+        return { ...prev, options: prev.options.map((o, i) => i === idx ? { ...o, _deleted: true } : o) };
+      }
+      return { ...prev, options: prev.options.filter((_, i) => i !== idx) };
+    });
+
+  const visibleOpts = editGroup?.options.filter((o) => !o._deleted) ?? [];
+
+  return (
+    <div className="mt-4 space-y-4">
+      <Button onClick={openAdd}><Plus className="h-4 w-4 mr-1" />{t("add_group")}</Button>
+      <div className="grid gap-2">
+        {groups.map((g) => (
+          <Card key={g.id}>
+            <CardContent className="py-3 flex items-center gap-4">
+              <div className="flex-1 min-w-0">
+                <div className="font-medium">{g.name}</div>
+                {g.kitchen_name && <div className="text-xs text-muted-foreground">Kitchen: {g.kitchen_name}</div>}
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  {g.addon_options.length} {t("addon_options")}:&nbsp;
+                  {g.addon_options.slice(0, 4).map((o) => o.name).join(", ")}
+                  {g.addon_options.length > 4 ? "…" : ""}
+                </div>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => openEdit(g)}>{t("edit")}</Button>
+              <Button variant="ghost" size="sm" onClick={() => delGroup(g)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+            </CardContent>
+          </Card>
+        ))}
+        {groups.length === 0 && <p className="text-sm text-muted-foreground">{t("no_addon_groups")}</p>}
+      </div>
+
+      <Dialog open={!!editGroup} onOpenChange={(o) => !o && setEditGroup(null)}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editGroup?.id ? t("edit") : t("add_group")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>{t("addon_group_name")} *</Label>
+              <Input
+                value={editGroup?.name ?? ""}
+                onChange={(e) => setEditGroup((p) => p ? { ...p, name: e.target.value } : p)}
+              />
+            </div>
+            <div>
+              <Label>{t("addon_kitchen_name")}</Label>
+              <Input
+                value={editGroup?.kitchen_name ?? ""}
+                placeholder="e.g. ไม่เผ็ด / No spice"
+                onChange={(e) => setEditGroup((p) => p ? { ...p, kitchen_name: e.target.value } : p)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>{t("addon_options")}</Label>
+              {visibleOpts.map((opt, idx) => {
+                // map visible idx back to real idx
+                const realIdx = editGroup!.options.indexOf(opt);
+                return (
+                  <div key={realIdx} className="flex items-center gap-2">
+                    <Input
+                      value={opt.name}
+                      onChange={(e) => setOpt(realIdx, { name: e.target.value })}
+                      placeholder={t("option_name")}
+                      className="flex-1 h-8 text-sm"
+                    />
+                    <span className="text-sm text-muted-foreground shrink-0">฿</span>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={opt.price}
+                      onChange={(e) => setOpt(realIdx, { price: Number(e.target.value) })}
+                      className="w-24 h-8 text-sm"
+                    />
+                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => removeOpt(realIdx)}>
+                      <Trash2 className="h-3 w-3 text-destructive" />
+                    </Button>
+                  </div>
+                );
+              })}
+              <Button variant="outline" size="sm" onClick={addOpt} className="mt-1">
+                <Plus className="h-3 w-3 mr-1" />{t("add_option")}
+              </Button>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditGroup(null)}>{t("cancel")}</Button>
+            <Button onClick={saveGroup}>{t("save")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ── Add-ons section inside the menu edit dialog ───────────────────────────────
+function AddonsSection({
+  allGroups,
+  linkedIds,
+  onChange,
+}: {
+  allGroups: AddonGroup[];
+  linkedIds: Set<string>;
+  onChange: (ids: Set<string>) => void;
+}) {
+  const { t } = useI18n();
+  if (allGroups.length === 0)
+    return <p className="text-xs text-muted-foreground">{t("no_addon_groups")}</p>;
+
+  const toggle = (id: string, checked: boolean) => {
+    const next = new Set(linkedIds);
+    checked ? next.add(id) : next.delete(id);
+    onChange(next);
+  };
+
+  return (
+    <div className="space-y-2">
+      {allGroups.map((g) => (
+        <div key={g.id} className="flex items-start gap-3">
+          <Switch
+            checked={linkedIds.has(g.id)}
+            onCheckedChange={(v) => toggle(g.id, v)}
+            className="mt-0.5"
+          />
+          <div className="min-w-0">
+            <div className="text-sm font-medium leading-tight">{g.name}</div>
+            {g.kitchen_name && (
+              <div className="text-xs text-muted-foreground">Kitchen: {g.kitchen_name}</div>
+            )}
+            <div className="text-xs text-muted-foreground">
+              {g.addon_options.map((o) => `${o.name} ฿${Number(o.price).toFixed(0)}`).join(" · ")}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── MenuTab ───────────────────────────────────────────────────────────────────
 function MenuTab() {
   const { t } = useI18n();
@@ -490,25 +718,33 @@ function MenuTab() {
   const [edit, setEdit] = useState<Partial<Menu> | null>(null);
   // Ingredient rows being edited for the current menu item
   const [editIngRows, setEditIngRows] = useState<MenuIngredientRow[]>([]);
+  // All addon groups (for the AddonsSection picker)
+  const [allAddonGroups, setAllAddonGroups] = useState<AddonGroup[]>([]);
+  // IDs of addon groups currently linked to the menu item being edited
+  const [linkedAddonIds, setLinkedAddonIds] = useState<Set<string>>(new Set());
+
+  const db = supabase as any;
 
   const load = async () => {
     const { data: m } = await supabase.from("menus").select("*").order("sort");
     const { data: c } = await supabase.from("categories").select("*").order("sort");
+    const { data: ag } = await db.from("addon_groups").select("*, addon_options(*)").order("name");
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     setMenus((m ?? []) as any as Menu[]); setCats((c ?? []) as Category[]);
+    setAllAddonGroups((ag ?? []) as AddonGroup[]);
   };
   useEffect(() => { load(); }, []);
 
-  // When opening edit for an existing menu item, load its ingredients
+  // When opening edit for an existing menu item, load its ingredients + linked addons
   const openEdit = async (m: Partial<Menu>) => {
     setEdit(m);
-    if (!m.id) { setEditIngRows([]); return; }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data } = await (supabase as any)
+    if (!m.id) { setEditIngRows([]); setLinkedAddonIds(new Set()); return; }
+    // Load ingredients
+    const { data: ingData } = await db
       .from("menu_ingredients")
       .select("id, ingredient_id, quantity, ingredients(id, name_thai, name_english, unit, cost_per_unit)")
       .eq("menu_id", m.id);
-    const rows: MenuIngredientRow[] = (data ?? []).map((row: any) => ({
+    const rows: MenuIngredientRow[] = (ingData ?? []).map((row: any) => ({
       id: row.id,
       ingredient_id: row.ingredient_id,
       quantity: row.quantity,
@@ -518,6 +754,12 @@ function MenuTab() {
       cost_per_unit: row.ingredients?.cost_per_unit ?? 0,
     }));
     setEditIngRows(rows);
+    // Load linked addon groups
+    const { data: addonData } = await db
+      .from("menu_addons")
+      .select("addon_group_id")
+      .eq("menu_id", m.id);
+    setLinkedAddonIds(new Set((addonData ?? []).map((r: any) => r.addon_group_id)));
   };
 
   // Compute auto-derived cost from visible ingredient rows
@@ -538,8 +780,6 @@ function MenuTab() {
       price: Number(edit.price ?? 0), cost: Number(edit.cost ?? 0),
       category_id: edit.category_id ?? null, available: edit.available ?? true,
     };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const db = supabase as any;
     let menuId = edit.id;
     if (menuId) {
       await db.from("menus").update(payload).eq("id", menuId);
@@ -565,12 +805,17 @@ function MenuTab() {
           }
         }
       }
+      // Sync menu_addons: replace all
+      await db.from("menu_addons").delete().eq("menu_id", menuId);
+      for (const groupId of linkedAddonIds) {
+        await db.from("menu_addons").insert({ menu_id: menuId, addon_group_id: groupId });
+      }
     }
 
-    setEdit(null); setEditIngRows([]); load();
+    setEdit(null); setEditIngRows([]); setLinkedAddonIds(new Set()); load();
   };
 
-  const closeEdit = () => { setEdit(null); setEditIngRows([]); };
+  const closeEdit = () => { setEdit(null); setEditIngRows([]); setLinkedAddonIds(new Set()); };
 
   const toggleAvail = async (m: Menu) => {
     await supabase.from("menus").update({ available: !m.available }).eq("id", m.id);
@@ -624,6 +869,16 @@ function MenuTab() {
                 menuId={edit?.id}
                 rows={editIngRows}
                 onChange={setEditIngRows}
+              />
+            </div>
+
+            {/* ── Add-ons section ── */}
+            <div className="border rounded-md p-3 bg-muted/30">
+              <Label className="text-sm font-semibold mb-2 block">{t("linked_addons")}</Label>
+              <AddonsSection
+                allGroups={allAddonGroups}
+                linkedIds={linkedAddonIds}
+                onChange={setLinkedAddonIds}
               />
             </div>
 

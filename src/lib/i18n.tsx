@@ -236,6 +236,16 @@ const dict: Dict = {
   no_ingredients:     { th: "ยังไม่มีวัตถุดิบ",            en: "No ingredients added"            },
   manage_ingredients: { th: "จัดการวัตถุดิบ",             en: "Manage Ingredients"              },
   auto_update:        { th: "คำนวณอัตโนมัติจาก",          en: "Auto-calculated from"            },
+  // add-ons
+  add_ons:            { th: "ตัวเสริม",                   en: "Add-ons"                         },
+  addon_group_name:   { th: "ชื่อกลุ่ม",                 en: "Group name"                      },
+  addon_kitchen_name: { th: "ชื่อครัว (เพิ่มเติม)",      en: "Kitchen name (optional)"         },
+  addon_options:      { th: "ตัวเลือก",                   en: "Options"                         },
+  add_group:          { th: "เพิ่มกลุ่ม",                en: "Add Group"                       },
+  add_option:         { th: "เพิ่มตัวเลือก",              en: "Add Option"                      },
+  no_addon_groups:    { th: "ยังไม่มีกลุ่มตัวเสริม",      en: "No add-on groups yet"            },
+  linked_addons:      { th: "กลุ่มตัวเสริม",              en: "Add-on Groups"                   },
+  option_name:        { th: "ชื่อตัวเลือก",               en: "Option name"                     },
   // misc
   loading: { th: "กำลังโหลด…", en: "Loading…" },
   qr_alert: { th: "ออเดอร์ QR ใหม่!", en: "New QR order!" },
