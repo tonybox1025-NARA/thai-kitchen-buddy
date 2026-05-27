@@ -18,7 +18,25 @@ export const Route = createFileRoute("/_app/settings")({ component: SettingsPage
 
 type RTable = { id: string; code: string; capacity: number };
 
-type Menu = { id: string; category_id: string | null; name_th: string; name_en: string; name_my: string; price: number; available: boolean };
+type Menu = { id: string; category_id: string | null; name_th: string; name_en: string; name_my: string; price: number; cost: number; available: boolean };
+
+function MarginIndicator({ price, cost }: { price: number; cost: number }) {
+  const margin = price > 0 ? ((price - cost) / price) * 100 : 0;
+  const clamped = Math.max(0, Math.min(100, margin));
+  const barColor = margin > 50 ? "bg-green-500" : margin >= 30 ? "bg-yellow-500" : "bg-red-500";
+  const textColor = margin > 50 ? "text-green-600" : margin >= 30 ? "text-yellow-600" : "text-red-600";
+  return (
+    <div className="space-y-1">
+      <div className="flex justify-between text-xs">
+        <span className="text-muted-foreground">Margin</span>
+        <span className={`font-medium ${textColor}`}>{margin.toFixed(2)}%</span>
+      </div>
+      <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+        <div className={`h-full ${barColor} transition-all`} style={{ width: `${clamped}%` }} />
+      </div>
+    </div>
+  );
+}
 type Category = { id: string; name_th: string; name_en: string; name_my: string };
 type Settings = { restaurant_name: string; vat_mode: "inclusive" | "exclusive"; vat_rate: number; printer_counter_ip: string | null; printer_kitchen_ip: string | null; starting_cash: number };
 type Staff = { id: string; name: string; role: "admin" | "manager" | "staff"; active: boolean };
@@ -168,7 +186,7 @@ function MenuTab() {
     if (!edit) return;
     const payload = {
       name_th: edit.name_th ?? "", name_en: edit.name_en ?? "", name_my: edit.name_my ?? "",
-      price: Number(edit.price ?? 0), category_id: edit.category_id ?? null, available: edit.available ?? true,
+      price: Number(edit.price ?? 0), cost: Number(edit.cost ?? 0), category_id: edit.category_id ?? null, available: edit.available ?? true,
     };
     if (edit.id) await supabase.from("menus").update(payload).eq("id", edit.id);
     else await supabase.from("menus").insert(payload);
@@ -196,7 +214,11 @@ function MenuTab() {
                 <div className="font-medium">{m.name_th} · {m.name_en}</div>
                 <div className="text-xs text-muted-foreground font-burmese">{m.name_my}</div>
               </div>
-              <div className="font-bold w-24 text-right">฿{Number(m.price).toFixed(2)}</div>
+              <div className="w-40 text-right">
+                <div className="font-bold">฿{Number(m.price).toFixed(2)}</div>
+                <div className="text-xs text-muted-foreground">Cost ฿{Number(m.cost ?? 0).toFixed(2)}</div>
+                <div className="mt-1"><MarginIndicator price={Number(m.price)} cost={Number(m.cost ?? 0)} /></div>
+              </div>
               <Switch checked={m.available} onCheckedChange={() => toggleAvail(m)} />
               <Button variant="outline" size="sm" onClick={() => setEdit(m)}>{t("edit")}</Button>
               <Button variant="ghost" size="sm" onClick={() => del(m)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
@@ -212,7 +234,11 @@ function MenuTab() {
             <div><Label>{t("name_th")}</Label><Input value={edit?.name_th ?? ""} onChange={(e) => setEdit({ ...edit, name_th: e.target.value })} /></div>
             <div><Label>{t("name_en")}</Label><Input value={edit?.name_en ?? ""} onChange={(e) => setEdit({ ...edit, name_en: e.target.value })} /></div>
             <div><Label>{t("name_my")}</Label><Input className="font-burmese" value={edit?.name_my ?? ""} onChange={(e) => setEdit({ ...edit, name_my: e.target.value })} /></div>
-            <div><Label>{t("price")}</Label><Input type="number" step="0.01" value={edit?.price ?? 0} onChange={(e) => setEdit({ ...edit, price: Number(e.target.value) })} /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>{t("price")} (฿)</Label><Input type="number" step="0.01" value={edit?.price ?? 0} onChange={(e) => setEdit({ ...edit, price: Number(e.target.value) })} /></div>
+              <div><Label>Cost (฿)</Label><Input type="number" step="0.01" value={edit?.cost ?? 0} onChange={(e) => setEdit({ ...edit, cost: Number(e.target.value) })} /></div>
+            </div>
+            <MarginIndicator price={Number(edit?.price ?? 0)} cost={Number(edit?.cost ?? 0)} />
             <div>
               <Label>{t("category")}</Label>
               <Select value={edit?.category_id ?? ""} onValueChange={(v) => setEdit({ ...edit, category_id: v })}>
