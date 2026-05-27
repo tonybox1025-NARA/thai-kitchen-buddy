@@ -791,7 +791,7 @@ function ItemSalesTab() {
       // 4. Categories
       const catIds = [...new Set((menus ?? []).map((m) => m.category_id).filter(Boolean))] as string[];
       const { data: cats } = catIds.length
-        ? await supabase.from("menu_categories").select("id,name_th,name_en").in("id", catIds)
+        ? await supabase.from("categories").select("id,name_th,name_en").in("id", catIds)
         : { data: [] as { id: string; name_th: string; name_en: string }[] };
 
       const menuCatMap = new Map((menus ?? []).map((m) => [m.id, m.category_id]));
