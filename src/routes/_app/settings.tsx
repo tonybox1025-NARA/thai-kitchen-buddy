@@ -18,7 +18,25 @@ export const Route = createFileRoute("/_app/settings")({ component: SettingsPage
 
 type RTable = { id: string; code: string; capacity: number };
 
-type Menu = { id: string; category_id: string | null; name_th: string; name_en: string; name_my: string; price: number; available: boolean };
+type Menu = { id: string; category_id: string | null; name_th: string; name_en: string; name_my: string; price: number; cost: number; available: boolean };
+
+function MarginIndicator({ price, cost }: { price: number; cost: number }) {
+  const margin = price > 0 ? ((price - cost) / price) * 100 : 0;
+  const clamped = Math.max(0, Math.min(100, margin));
+  const barColor = margin > 50 ? "bg-green-500" : margin >= 30 ? "bg-yellow-500" : "bg-red-500";
+  const textColor = margin > 50 ? "text-green-600" : margin >= 30 ? "text-yellow-600" : "text-red-600";
+  return (
+    <div className="space-y-1">
+      <div className="flex justify-between text-xs">
+        <span className="text-muted-foreground">Margin</span>
+        <span className={`font-medium ${textColor}`}>{margin.toFixed(2)}%</span>
+      </div>
+      <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+        <div className={`h-full ${barColor} transition-all`} style={{ width: `${clamped}%` }} />
+      </div>
+    </div>
+  );
+}
 type Category = { id: string; name_th: string; name_en: string; name_my: string };
 type Settings = { restaurant_name: string; vat_mode: "inclusive" | "exclusive"; vat_rate: number; printer_counter_ip: string | null; printer_kitchen_ip: string | null; starting_cash: number };
 type Staff = { id: string; name: string; role: "admin" | "manager" | "staff"; active: boolean };
