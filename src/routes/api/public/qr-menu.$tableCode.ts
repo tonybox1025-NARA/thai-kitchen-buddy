@@ -46,6 +46,7 @@ export const Route = createFileRoute("/api/public/qr-menu/$tableCode")({
         if (tableError) return new Response("Failed to load table", { status: 500 });
         if (!table) return new Response("Table not found", { status: 404 });
 
+        const db = supabase as any;
         const [{ data: cats, error: catsError }, { data: menus, error: menusError }, { data: settings, error: settingsError }] = await Promise.all([
           supabase.from("categories").select("id,name_th,name_en,sort").order("sort"),
           supabase
@@ -59,12 +60,27 @@ export const Route = createFileRoute("/api/public/qr-menu/$tableCode")({
           return new Response("Failed to load menu", { status: 500 });
         }
 
+        // Build addon groups per menu item
+        const menuIds = (menus ?? []).map((m: { id: string }) => m.id);
+        const addonsByMenuId: Record<string, unknown[]> = {};
+        if (menuIds.length > 0) {
+          const { data: menuAddons } = await db
+            .from("menu_addons")
+            .select("menu_id, addon_groups(id, name, kitchen_name, addon_options(id, name, price))")
+            .in("menu_id", menuIds);
+          for (const row of (menuAddons ?? []) as { menu_id: string; addon_groups: unknown }[]) {
+            if (!addonsByMenuId[row.menu_id]) addonsByMenuId[row.menu_id] = [];
+            if (row.addon_groups) addonsByMenuId[row.menu_id].push(row.addon_groups);
+          }
+        }
+
         return Response.json(
           {
             table,
             categories: cats ?? [],
             menus: menus ?? [],
             restaurant_name: settings?.restaurant_name ?? "Restaurant",
+            addonsByMenuId,
           },
           {
             headers: {

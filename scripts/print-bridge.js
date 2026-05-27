@@ -212,6 +212,13 @@ function buildKitchen(p) {
     const name = item.name_my || item.name_en || item.name_th || "-";
     parts.push(CMD.BOLD_ON, `${item.qty}  x  ${name}`, CMD.BOLD_OFF, lf());
     if (item.notes) parts.push(`     ** ${item.notes} **`, lf());
+    // Print selected add-ons (stored in modifiers array)
+    if (Array.isArray(item.modifiers) && item.modifiers.length > 0) {
+      for (const mod of item.modifiers) {
+        const priceStr = mod.price > 0 ? ` +${mod.price}` : "";
+        parts.push(`     + ${mod.option_name}${priceStr}`, lf());
+      }
+    }
   }
 
   parts.push(

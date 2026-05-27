@@ -35,6 +35,7 @@ const Schema = z.object({
         qty: z.number().int().min(1).max(50),
         notes: z.string().max(500).optional().nullable(),
         set_config: z.record(z.any()).optional().nullable(),
+        addons: z.array(z.object({ option_id: z.string().uuid() })).optional().default([]),
       })
     )
     .min(1)
@@ -71,6 +72,20 @@ export const Route = createFileRoute("/api/public/qr-order")({
           if (!m || !m.available) return new Response(`Item unavailable: ${it.menu_id}`, { status: 400 });
         }
 
+        // Validate addon options + fetch authoritative prices/names
+        const allOptionIds = items.flatMap((i) => i.addons ?? []).map((a) => a.option_id);
+        type AddonOptionRow = { id: string; name: string; price: number; addon_group_id: string; addon_groups: { name: string; kitchen_name: string | null } | null };
+        const optionMap = new Map<string, AddonOptionRow>();
+        if (allOptionIds.length > 0) {
+          const { data: options } = await (supabase as any)
+            .from("addon_options")
+            .select("id, name, price, addon_group_id, addon_groups(name, kitchen_name)")
+            .in("id", allOptionIds);
+          for (const opt of (options ?? []) as AddonOptionRow[]) {
+            optionMap.set(opt.id, opt);
+          }
+        }
+
         // Auto-open a shift if none is open (uses configured starting cash)
         let { data: shift } = await supabase
           .from("shifts").select("id").eq("status", "open").maybeSingle();
@@ -103,9 +118,25 @@ export const Route = createFileRoute("/api/public/qr-order")({
         const rows = items.map((it) => {
           const m = menuMap.get(it.menu_id)!;
           const sc = it.set_config as { main?: { th: string }; sides?: { th: string }[]; drink?: { th: string }; rice?: string } | null | undefined;
-          const notes = sc
+          const baseNotes = sc
             ? `หลัก: ${sc.main?.th ?? "—"} | ${(sc.sides ?? []).map((s) => s.th).join(", ")}${sc.drink ? ` | ${sc.drink.th}` : ""} | ${sc.rice === "porridge" ? "โจ๊ก" : "ข้าวสวย"}`
             : it.notes ?? null;
+
+          // Build modifiers list from selected addon options
+          const modifiers = (it.addons ?? []).map((a) => {
+            const opt = optionMap.get(a.option_id);
+            return {
+              option_id: a.option_id,
+              group_name: opt?.addon_groups?.kitchen_name ?? opt?.addon_groups?.name ?? "",
+              option_name: opt?.name ?? "",
+              price: opt?.price ?? 0,
+            };
+          });
+
+          // Authoritative total: base price + sum of selected addon prices
+          const addonTotal = modifiers.reduce((s, mod) => s + mod.price, 0);
+          const unit_price = Number(m.price) + addonTotal;
+
           return {
             order_id: order!.id,
             menu_id: it.menu_id,
@@ -113,8 +144,9 @@ export const Route = createFileRoute("/api/public/qr-order")({
             name_en: m.name_en,
             name_my: m.name_my,
             qty: it.qty,
-            unit_price: m.price,
-            notes,
+            unit_price,
+            notes: baseNotes,
+            modifiers: modifiers.length > 0 ? modifiers : null,
             status: "sent" as const,
             sent_at: sentAt,
             set_config: it.set_config ?? null,
@@ -130,6 +162,7 @@ export const Route = createFileRoute("/api/public/qr-order")({
           name_my: r.name_my,
           qty: r.qty,
           notes: r.notes,
+          modifiers: (r.modifiers as { option_name: string; price: number }[] | null),
         }));
         const ticketPayload = { kind: "order_ticket", table: table_code, source: "qr", lines, sent_at: sentAt };
         await supabase.from("print_jobs").insert([
