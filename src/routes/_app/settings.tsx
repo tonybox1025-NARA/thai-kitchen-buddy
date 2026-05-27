@@ -618,19 +618,6 @@ function MenuTab() {
               <div><Label>Cost (฿)</Label><Input type="number" step="0.01" value={edit?.cost ?? 0} onChange={(e) => setEdit({ ...edit, cost: Number(e.target.value) })} /></div>
             </div>
             <MarginIndicator price={Number(edit?.price ?? 0)} cost={Number(edit?.cost ?? 0)} />
-            <div>
-              <Label>{t("cost")} — {t("total_cost")}</Label>
-              <Input
-                type="number"
-                step="0.01"
-                value={edit?.cost ?? 0}
-                onChange={(e) => setEdit({ ...edit, cost: Number(e.target.value) })}
-                className="text-muted-foreground"
-              />
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {t("auto_update")} {t("ingredients").toLowerCase()}
-              </p>
-            </div>
             {/* ── Ingredients section ── */}
             <div className="border rounded-md p-3 bg-muted/30">
               <IngredientsSection
