@@ -14,6 +14,70 @@ export type Database = {
   }
   public: {
     Tables: {
+      bill_discounts: {
+        Row: {
+          amount: number
+          applied_at: string
+          applied_by: string | null
+          bill_id: string
+          created_at: string
+          fixed_value: number | null
+          free_item_id: string | null
+          free_item_name: string | null
+          id: string
+          percent_value: number | null
+          type: string
+        }
+        Insert: {
+          amount: number
+          applied_at?: string
+          applied_by?: string | null
+          bill_id: string
+          created_at?: string
+          fixed_value?: number | null
+          free_item_id?: string | null
+          free_item_name?: string | null
+          id?: string
+          percent_value?: number | null
+          type: string
+        }
+        Update: {
+          amount?: number
+          applied_at?: string
+          applied_by?: string | null
+          bill_id?: string
+          created_at?: string
+          fixed_value?: number | null
+          free_item_id?: string | null
+          free_item_name?: string | null
+          id?: string
+          percent_value?: number | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bill_discounts_applied_by_fkey"
+            columns: ["applied_by"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bill_discounts_applied_by_fkey"
+            columns: ["applied_by"]
+            isOneToOne: false
+            referencedRelation: "staff_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bill_discounts_bill_id_fkey"
+            columns: ["bill_id"]
+            isOneToOne: false
+            referencedRelation: "bills"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bills: {
         Row: {
           cashier_id: string | null
@@ -128,6 +192,7 @@ export type Database = {
         Row: {
           available: boolean
           category_id: string | null
+          cost: number | null
           created_at: string
           id: string
           image_url: string | null
@@ -140,6 +205,7 @@ export type Database = {
         Insert: {
           available?: boolean
           category_id?: string | null
+          cost?: number | null
           created_at?: string
           id?: string
           image_url?: string | null
@@ -152,6 +218,7 @@ export type Database = {
         Update: {
           available?: boolean
           category_id?: string | null
+          cost?: number | null
           created_at?: string
           id?: string
           image_url?: string | null
@@ -184,6 +251,7 @@ export type Database = {
           order_id: string
           qty: number
           sent_at: string | null
+          set_config: Json | null
           status: Database["public"]["Enums"]["order_item_status"]
           unit_price: number
           void_reason: string | null
@@ -202,6 +270,7 @@ export type Database = {
           order_id: string
           qty: number
           sent_at?: string | null
+          set_config?: Json | null
           status?: Database["public"]["Enums"]["order_item_status"]
           unit_price: number
           void_reason?: string | null
@@ -220,6 +289,7 @@ export type Database = {
           order_id?: string
           qty?: number
           sent_at?: string | null
+          set_config?: Json | null
           status?: Database["public"]["Enums"]["order_item_status"]
           unit_price?: number
           void_reason?: string | null
@@ -266,6 +336,7 @@ export type Database = {
           id: string
           opened_at: string
           opened_by: string | null
+          order_number: string | null
           shift_id: string | null
           source: Database["public"]["Enums"]["order_source"]
           status: Database["public"]["Enums"]["order_status"]
@@ -279,6 +350,7 @@ export type Database = {
           id?: string
           opened_at?: string
           opened_by?: string | null
+          order_number?: string | null
           shift_id?: string | null
           source?: Database["public"]["Enums"]["order_source"]
           status?: Database["public"]["Enums"]["order_status"]
@@ -292,6 +364,7 @@ export type Database = {
           id?: string
           opened_at?: string
           opened_by?: string | null
+          order_number?: string | null
           shift_id?: string | null
           source?: Database["public"]["Enums"]["order_source"]
           status?: Database["public"]["Enums"]["order_status"]
