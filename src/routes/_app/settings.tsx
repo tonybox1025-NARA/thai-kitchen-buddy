@@ -50,16 +50,95 @@ function SettingsPage() {
         <TabsList>
           <TabsTrigger value="general">{t("general")}</TabsTrigger>
           <TabsTrigger value="menu">{t("menu_management")}</TabsTrigger>
+          <TabsTrigger value="ingredients">Ingredients</TabsTrigger>
           <TabsTrigger value="printers">{t("printers")}</TabsTrigger>
           <TabsTrigger value="qr">{t("qr_codes")}</TabsTrigger>
           <TabsTrigger value="staff">{t("staff")}</TabsTrigger>
         </TabsList>
         <TabsContent value="general"><GeneralTab /></TabsContent>
         <TabsContent value="menu"><MenuTab /></TabsContent>
+        <TabsContent value="ingredients"><IngredientsTab /></TabsContent>
         <TabsContent value="printers"><PrintersTab /></TabsContent>
         <TabsContent value="qr"><QrCodesTab /></TabsContent>
         <TabsContent value="staff"><StaffTab /></TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+type Ingredient = { id: string; name_thai: string; name_english: string | null; unit: string; cost_per_unit: number };
+
+function IngredientsTab() {
+  const [list, setList] = useState<Ingredient[]>([]);
+  const [edit, setEdit] = useState<Partial<Ingredient> | null>(null);
+
+  const load = async () => {
+    const { data } = await supabase.from("ingredients").select("*").order("name_thai");
+    setList((data ?? []) as Ingredient[]);
+  };
+  useEffect(() => { load(); }, []);
+
+  const save = async () => {
+    if (!edit) return;
+    if (!edit.name_thai?.trim()) { toast.error("Thai name required"); return; }
+    const payload = {
+      name_thai: edit.name_thai.trim(),
+      name_english: edit.name_english?.trim() || null,
+      unit: (edit.unit ?? "").trim(),
+      cost_per_unit: Number(edit.cost_per_unit ?? 0),
+    };
+    const { error } = edit.id
+      ? await supabase.from("ingredients").update(payload).eq("id", edit.id)
+      : await supabase.from("ingredients").insert(payload);
+    if (error) { toast.error(error.message); return; }
+    setEdit(null); load(); toast.success("Saved");
+  };
+
+  const del = async (i: Ingredient) => {
+    if (!confirm(`Delete ${i.name_thai}?`)) return;
+    const { error } = await supabase.from("ingredients").delete().eq("id", i.id);
+    if (error) { toast.error(error.message); return; }
+    load();
+  };
+
+  return (
+    <div className="mt-4 space-y-4">
+      <Button onClick={() => setEdit({})}><Plus className="h-4 w-4 mr-1" />Add Ingredient</Button>
+      <div className="grid gap-2">
+        {list.map((i) => (
+          <Card key={i.id}>
+            <CardContent className="py-3 flex items-center gap-4">
+              <div className="flex-1 min-w-0">
+                <div className="font-medium">{i.name_thai}</div>
+                <div className="text-xs text-muted-foreground">{i.name_english ?? "—"}</div>
+              </div>
+              <div className="w-24 text-sm text-muted-foreground">{i.unit}</div>
+              <div className="w-28 text-right font-bold">฿{Number(i.cost_per_unit).toFixed(2)}</div>
+              <Button variant="outline" size="sm" onClick={() => setEdit(i)}>Edit</Button>
+              <Button variant="ghost" size="sm" onClick={() => del(i)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+            </CardContent>
+          </Card>
+        ))}
+        {list.length === 0 && <p className="text-sm text-muted-foreground">No ingredients yet.</p>}
+      </div>
+
+      <Dialog open={!!edit} onOpenChange={(o) => !o && setEdit(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>{edit?.id ? "Edit Ingredient" : "Add Ingredient"}</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div><Label>Thai name *</Label><Input value={edit?.name_thai ?? ""} onChange={(e) => setEdit({ ...edit, name_thai: e.target.value })} /></div>
+            <div><Label>English name</Label><Input value={edit?.name_english ?? ""} onChange={(e) => setEdit({ ...edit, name_english: e.target.value })} /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Unit</Label><Input placeholder="กก., กรัม, ลิตร, มล., ชิ้น" value={edit?.unit ?? ""} onChange={(e) => setEdit({ ...edit, unit: e.target.value })} /></div>
+              <div><Label>Cost per unit (฿)</Label><Input type="number" step="0.01" value={edit?.cost_per_unit ?? 0} onChange={(e) => setEdit({ ...edit, cost_per_unit: Number(e.target.value) })} /></div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEdit(null)}>Cancel</Button>
+            <Button onClick={save}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
