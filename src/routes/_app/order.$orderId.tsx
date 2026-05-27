@@ -105,7 +105,7 @@ function OrderPage() {
     const [{ data: m }, { data: c }, { data: it }, { data: ord }, { data: s }] = await Promise.all([
       supabase.from("menus").select("*").eq("available", true).order("sort"),
       supabase.from("categories").select("*").order("sort"),
-      supabase.from("order_items").select("*").eq("order_id", orderId).order("created_at"),
+      supabase.from("order_items").select("*").eq("order_id", orderId).order("sent_at", { ascending: true, nullsFirst: true }),
       supabase.from("orders").select("table_id,source,order_number").eq("id", orderId).single(),
       supabase.from("settings").select("vat_mode,vat_rate,restaurant_name").eq("id", 1).single(),
     ]);
@@ -188,8 +188,14 @@ function OrderPage() {
       .from("addon_groups")
       .select("id, name, kitchen_name, addon_options(id, name, price)")
       .in("id", groupIds);
-    if (groupErr) { console.error("addon_groups fetch:", groupErr.message); return; }
-    setAddonGroups((groups ?? []) as AddonGroup[]);
+    if (groupErr) { console.error("[addons] addon_groups fetch error:", groupErr.message); return; }
+    // Normalise: addon_options may be null if FK not wired in PostgREST
+    const fetched = ((groups ?? []) as any[]).map((g) => ({
+      ...g,
+      addon_options: (g.addon_options ?? []) as AddonOption[],
+    })) as AddonGroup[];
+    console.log("[addons] groupIds:", groupIds, "fetched groups:", fetched);
+    setAddonGroups(fetched);
   };
 
   const addToOrder = async () => {
@@ -634,7 +640,7 @@ function OrderPage() {
                         <div key={group.id}>
                           <p className="text-sm font-medium mb-1.5">{group.name}</p>
                           <div className="flex flex-wrap gap-2">
-                            {group.addon_options.map((opt) => {
+                            {(group.addon_options ?? []).map((opt) => {
                               const isSelected = chosen?.option_id === opt.id;
                               return (
                                 <button
