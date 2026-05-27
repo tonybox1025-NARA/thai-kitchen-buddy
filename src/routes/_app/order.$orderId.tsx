@@ -630,6 +630,11 @@ function OrderPage() {
                   </div>
                 </div>
 
+                {/* ── Addon debug ── */}
+                <div style={{ background: "red", color: "white", padding: "4px 8px", fontSize: 12, borderRadius: 4 }}>
+                  ADDONS: {addonGroups.length} groups found
+                </div>
+
                 {/* ── Add-on groups ── */}
                 {addonGroups.length > 0 && (
                   <div className="space-y-3">
