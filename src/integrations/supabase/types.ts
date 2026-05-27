@@ -14,6 +14,62 @@ export type Database = {
   }
   public: {
     Tables: {
+      addon_groups: {
+        Row: {
+          created_at: string | null
+          id: string
+          kitchen_name: string | null
+          name: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          kitchen_name?: string | null
+          name: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          kitchen_name?: string | null
+          name?: string
+        }
+        Relationships: []
+      }
+      addon_options: {
+        Row: {
+          addon_group_id: string | null
+          created_at: string | null
+          id: string
+          name: string
+          price: number
+          sort_order: number | null
+        }
+        Insert: {
+          addon_group_id?: string | null
+          created_at?: string | null
+          id?: string
+          name: string
+          price?: number
+          sort_order?: number | null
+        }
+        Update: {
+          addon_group_id?: string | null
+          created_at?: string | null
+          id?: string
+          name?: string
+          price?: number
+          sort_order?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "addon_options_group_id_fkey"
+            columns: ["addon_group_id"]
+            isOneToOne: false
+            referencedRelation: "addon_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bill_discounts: {
         Row: {
           amount: number
@@ -217,6 +273,49 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      menu_addons: {
+        Row: {
+          created_at: string | null
+          group_id: string | null
+          id: string
+          menu_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          group_id?: string | null
+          id?: string
+          menu_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          group_id?: string | null
+          id?: string
+          menu_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_addons_addon_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "addon_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "menu_addons_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "addon_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "menu_addons_menu_id_fkey"
+            columns: ["menu_id"]
+            isOneToOne: false
+            referencedRelation: "menus"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       menu_ingredients: {
         Row: {
