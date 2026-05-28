@@ -13,7 +13,7 @@ import { UtensilsCrossed } from "lucide-react";
 export const Route = createFileRoute("/login")({ component: LoginPage });
 
 function LoginPage() {
-  const { session, signIn, signUp } = useAuth();
+  const { loading, session, signIn, signUp } = useAuth();
   const { t } = useI18n();
   const nav = useNavigate();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
@@ -22,8 +22,16 @@ function LoginPage() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (session) nav({ to: "/pos" });
-  }, [session, nav]);
+    if (!loading && session) nav({ to: "/pos", replace: true });
+  }, [loading, session, nav]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen grid place-items-center bg-gradient-to-br from-background to-muted p-4 text-muted-foreground">
+        {t("loading")}
+      </div>
+    );
+  }
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
