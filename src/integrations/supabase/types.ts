@@ -421,6 +421,7 @@ export type Database = {
           sent_at: string | null
           set_config: Json | null
           status: Database["public"]["Enums"]["order_item_status"]
+          unit_cost: number | null
           unit_price: number
           void_reason: string | null
           voided_at: string | null
@@ -440,6 +441,7 @@ export type Database = {
           sent_at?: string | null
           set_config?: Json | null
           status?: Database["public"]["Enums"]["order_item_status"]
+          unit_cost?: number | null
           unit_price: number
           void_reason?: string | null
           voided_at?: string | null
@@ -459,6 +461,7 @@ export type Database = {
           sent_at?: string | null
           set_config?: Json | null
           status?: Database["public"]["Enums"]["order_item_status"]
+          unit_cost?: number | null
           unit_price?: number
           void_reason?: string | null
           voided_at?: string | null
