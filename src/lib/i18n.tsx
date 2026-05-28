@@ -233,6 +233,7 @@ const dict: Dict = {
   select_ingredient:  { th: "เลือกวัตถุดิบ…",             en: "Select ingredient…"              },
   qty_label:          { th: "ปริมาณ",                     en: "Quantity"                        },
   total_cost:         { th: "ต้นทุนรวม",                  en: "Total Cost"                      },
+  gross_profit:       { th: "กำไรขั้นต้น",                en: "Gross Profit"                    },
   no_ingredients:     { th: "ยังไม่มีวัตถุดิบ",            en: "No ingredients added"            },
   manage_ingredients: { th: "จัดการวัตถุดิบ",             en: "Manage Ingredients"              },
   auto_update:        { th: "คำนวณอัตโนมัติจาก",          en: "Auto-calculated from"            },

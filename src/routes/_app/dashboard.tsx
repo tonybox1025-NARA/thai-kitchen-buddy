@@ -15,10 +15,11 @@ function Dashboard() {
   const { t } = useI18n();
   const [range, setRange] = useState<DashRange>("today");
   const [custom, setCustom] = useState<DateRange | undefined>();
-  const [bills, setBills]     = useState<{ id: string; total: number; subtotal: number; discount_amount: number; member_discount_amount: number }[]>([]);
+  const [bills, setBills]     = useState<{ id: string; order_id: string | null; total: number; subtotal: number; discount_amount: number; member_discount_amount: number }[]>([]);
   const [payments, setPayments] = useState<{ method: string; amount: number; tip_amount: number; bill_id: string }[]>([]);
   const [voidsTotal, setVoidsTotal]   = useState(0);
   const [cancelledCt, setCancelledCt] = useState(0);
+  const [totalCost, setTotalCost] = useState(0);
 
   const bounds = useMemo<[Date, Date]>(() => {
     if (range === "custom" && custom?.from) {
@@ -34,11 +35,11 @@ function Dashboard() {
     (async () => {
       const shiftIds = await shiftIdsFor(range, bounds);
       if (!shiftIds.length) {
-        setBills([]); setPayments([]); setVoidsTotal(0); setCancelledCt(0);
+        setBills([]); setPayments([]); setVoidsTotal(0); setCancelledCt(0); setTotalCost(0);
         return;
       }
       const [{ data: b }, { data: voidRows }, { data: cancelledOrds }] = await Promise.all([
-        supabase.from("bills").select("id,total,subtotal,discount_amount,member_discount_amount")
+        supabase.from("bills").select("id,order_id,total,subtotal,discount_amount,member_discount_amount")
           .eq("status","paid").in("shift_id", shiftIds),
         supabase.from("voids").select("amount").in("shift_id", shiftIds),
         supabase.from("orders").select("id").in("shift_id", shiftIds).eq("status","cancelled"),
@@ -46,11 +47,22 @@ function Dashboard() {
       setBills((b ?? []) as typeof bills);
       setVoidsTotal((voidRows ?? []).reduce((s, v) => s + Number(v.amount), 0));
       setCancelledCt((cancelledOrds ?? []).length);
-      const ids = (b ?? []).map(x => x.id);
-      if (ids.length) {
-        const { data: p } = await supabase.from("payments").select("method,amount,tip_amount,bill_id").in("bill_id", ids);
-        setPayments((p ?? []) as typeof payments);
-      } else setPayments([]);
+      const ids      = (b ?? []).map(x => x.id);
+      const orderIds = (b ?? []).map(x => x.order_id).filter(Boolean) as string[];
+      // Fetch payments + cost items in parallel
+      const [paymentsRes, costRes] = await Promise.all([
+        ids.length
+          ? supabase.from("payments").select("method,amount,tip_amount,bill_id").in("bill_id", ids)
+          : Promise.resolve({ data: [] }),
+        orderIds.length
+          ? (supabase as any).from("order_items").select("unit_cost,qty").in("order_id", orderIds).is("voided_at", null)
+          : Promise.resolve({ data: [] }),
+      ]);
+      setPayments((paymentsRes.data ?? []) as typeof payments);
+      setTotalCost(
+        ((costRes.data ?? []) as { unit_cost: number; qty: number }[])
+          .reduce((s, r) => s + Number(r.unit_cost ?? 0) * Number(r.qty), 0)
+      );
     })();
   }, [bounds, range, custom]);
 
@@ -61,8 +73,11 @@ function Dashboard() {
     const byMethod: Record<string,number> = { cash:0, qr:0, card:0 };
     payments.forEach(p => { byMethod[p.method] = (byMethod[p.method]??0) + Number(p.amount); });
     const tipTotal = payments.filter(p => p.method==="qr").reduce((s,p) => s+Number(p.tip_amount??0), 0);
-    return { gross, net, discounts, byMethod, count: bills.length, tipTotal, qrGross: byMethod.qr+tipTotal };
-  }, [bills, payments]);
+    const grossProfit = gross - totalCost;
+    const costPct     = gross > 0 ? (totalCost  / gross) * 100 : 0;
+    const marginPct   = gross > 0 ? (grossProfit / gross) * 100 : 0;
+    return { gross, net, discounts, byMethod, count: bills.length, tipTotal, qrGross: byMethod.qr+tipTotal, grossProfit, costPct, marginPct };
+  }, [bills, payments, totalCost]);
 
   // Encode range into query string for detail pages
   const rangeQ = range === "custom" ? "" : `?range=${range}`;
@@ -84,6 +99,20 @@ function Dashboard() {
         <StatLink title={t("net_sales")}   value={thb(stats.net)}   />
         <StatLink title={t("discount")}    value={thb(stats.discounts)} to={`/detail-discounts${rangeQ}`} />
         <StatLink title={t("bills")}       value={String(stats.count)} />
+      </div>
+
+      {/* Cost & Margin */}
+      <div className="grid grid-cols-2 gap-4">
+        <StatCard
+          title={t("total_cost")}
+          value={thb(totalCost)}
+          sub={stats.gross > 0 ? `${stats.costPct.toFixed(1)}% of sales` : undefined}
+        />
+        <StatCard
+          title={t("gross_profit")}
+          value={thb(stats.grossProfit)}
+          sub={stats.gross > 0 ? `${stats.marginPct.toFixed(1)}% margin` : undefined}
+        />
       </div>
 
       {/* Voids & Cancellations */}
@@ -142,12 +171,13 @@ function StatLink({ title, value, sub, to, className }: { title: string; value: 
 }
 
 // Non-clickable stat box (same visual without hover)
-function StatCard({ title, value }: { title: string; value: string }) {
+function StatCard({ title, value, sub }: { title: string; value: string; sub?: string }) {
   return (
     <Card>
       <CardContent className="pt-6">
         <p className="text-xs uppercase tracking-wide text-muted-foreground">{title}</p>
         <p className="text-2xl font-bold mt-1">{value}</p>
+        {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
       </CardContent>
     </Card>
   );
