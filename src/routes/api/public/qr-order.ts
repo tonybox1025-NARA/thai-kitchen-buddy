@@ -64,7 +64,7 @@ export const Route = createFileRoute("/api/public/qr-order")({
         const menuIds = items.map((i) => i.menu_id);
         const { data: menus } = await supabase
           .from("menus")
-          .select("id,name_th,name_en,name_my,price,available")
+          .select("id,name_th,name_en,name_my,price,cost,available")
           .in("id", menuIds);
         const menuMap = new Map((menus ?? []).map((m) => [m.id, m]));
         for (const it of items) {
@@ -145,6 +145,7 @@ export const Route = createFileRoute("/api/public/qr-order")({
             name_my: m.name_my,
             qty: it.qty,
             unit_price,
+            unit_cost: Number((m as any).cost ?? 0),
             notes: baseNotes,
             modifiers: modifiers.length > 0 ? modifiers : null,
             status: "sent" as const,
@@ -152,7 +153,7 @@ export const Route = createFileRoute("/api/public/qr-order")({
             set_config: it.set_config ?? null,
           };
         });
-        const { error: itemsErr } = await supabase.from("order_items").insert(rows);
+        const { error: itemsErr } = await (supabase as any).from("order_items").insert(rows);
         if (itemsErr) return new Response(itemsErr.message, { status: 500 });
 
         // Queue kitchen + counter print jobs (same format as sendToKitchen in order.$orderId.tsx)

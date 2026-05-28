@@ -30,7 +30,7 @@ const CLOSE_PRESETS = [
   { key: "close_other",   th: "อื่นๆ",            en: "Other"          },
 ];
 
-type Menu = { id: string; category_id: string | null; name_th: string; name_en: string; name_my: string; price: number; available: boolean; image_url: string | null; sort: number };
+type Menu = { id: string; category_id: string | null; name_th: string; name_en: string; name_my: string; price: number; cost?: number; available: boolean; image_url: string | null; sort: number };
 type Category = { id: string; name_th: string; name_en: string; name_my: string; sort: number };
 type Item = {
   id: string; menu_id: string | null; name_th: string; name_en: string; name_my: string;
@@ -209,7 +209,7 @@ function OrderPage() {
     const { error } = await (supabase as any).from("order_items").insert({
       order_id: orderId, menu_id: selected.id,
       name_th: selected.name_th, name_en: selected.name_en, name_my: selected.name_my,
-      qty, unit_price, notes: notes || null, modifiers, status: "pending",
+      qty, unit_price, unit_cost: selected.cost ?? 0, notes: notes || null, modifiers, status: "pending",
     });
     if (error) toast.error(error.message);
     setSelected(null);
@@ -221,7 +221,7 @@ function OrderPage() {
     const drinkNote = config.drink ? ` | เครื่องดื่ม: ${config.drink.th}` : "";
     const riceNote = config.rice === "rice" ? "ข้าวสวย" : "โจ๊ก";
     const kitchenNotes = `หลัก: ${config.main.th} | เครื่อง: ${sideNames}${drinkNote} | ${riceNote}`;
-    const { error } = await supabase.from("order_items").insert({
+    const { error } = await (supabase as any).from("order_items").insert({
       order_id: orderId,
       menu_id: null,
       name_th: setDef.name_th,
@@ -229,9 +229,10 @@ function OrderPage() {
       name_my: setDef.name_en,
       qty: 1,
       unit_price: setDef.price,
+      unit_cost: 0,
       notes: kitchenNotes,
       status: "pending",
-      set_config: config as any,
+      set_config: config,
     });
     if (error) toast.error(error.message);
     setSelectedSet(null);
