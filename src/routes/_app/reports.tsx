@@ -729,6 +729,7 @@ type ItemSalesRow = {
   category_en: string;
   qty: number;
   unit_price: number;
+  unit_cost: number;
   revenue: number;
 };
 
@@ -774,16 +775,16 @@ function ItemSalesTab() {
       const orderIds = bills.map((b) => b.order_id).filter(Boolean) as string[];
 
       // 2. Non-voided order items for those orders
-      const { data: items } = await supabase
+      const { data: items } = await (supabase as any)
         .from("order_items")
-        .select("menu_id,name_th,name_en,qty,unit_price")
+        .select("menu_id,name_th,name_en,qty,unit_price,unit_cost")
         .in("order_id", orderIds)
         .neq("status", "voided");
 
       if (!items?.length) { setRows([]); setLoaded(true); return; }
 
       // 3. Menus → category IDs
-      const menuIds = [...new Set(items.map((i) => i.menu_id).filter(Boolean))] as string[];
+      const menuIds = [...new Set((items as any[]).map((i) => i.menu_id).filter(Boolean))] as string[];
       const { data: menus } = menuIds.length
         ? await supabase.from("menus").select("id,category_id").in("id", menuIds)
         : { data: [] as { id: string; category_id: string | null }[] };
@@ -812,6 +813,7 @@ function ItemSalesTab() {
             category_en: cat?.en ?? "—",
             qty: 0,
             unit_price: Number(item.unit_price),
+            unit_cost: Number((item as any).unit_cost ?? 0),
             revenue: 0,
           });
         }
@@ -857,6 +859,8 @@ function ItemSalesTab() {
 
   const totalQty = filtered.reduce((s, r) => s + r.qty, 0);
   const totalRevenue = filtered.reduce((s, r) => s + r.revenue, 0);
+  const totalCost = filtered.reduce((s, r) => s + r.unit_cost * r.qty, 0);
+  const totalProfit = totalRevenue - totalCost;
 
   const customLabel = custom?.from
     ? custom.to && custom.to.getTime() !== custom.from.getTime()
@@ -894,9 +898,17 @@ function ItemSalesTab() {
   <th class="num">${t("qty_sold")}</th>
   <th class="num">${t("unit_price")}</th>
   <th class="num">${t("revenue")}</th>
+  <th class="num">Unit Cost</th>
+  <th class="num">Total Cost</th>
+  <th class="num">Profit</th>
+  <th class="num">Margin %</th>
 </tr></thead>
 <tbody>
-${filtered.map((r, i) => `<tr>
+${filtered.map((r, i) => {
+  const tc = r.unit_cost * r.qty;
+  const profit = r.revenue - tc;
+  const margin = r.revenue > 0 ? (profit / r.revenue * 100).toFixed(1) : "—";
+  return `<tr>
   <td class="rank">${i + 1}</td>
   <td>${r.name_th}</td>
   <td>${r.name_en}</td>
@@ -904,13 +916,22 @@ ${filtered.map((r, i) => `<tr>
   <td class="num">${r.qty}</td>
   <td class="num">${thb(r.unit_price)}</td>
   <td class="num">${thb(r.revenue)}</td>
-</tr>`).join("")}
+  <td class="num">${thb(r.unit_cost)}</td>
+  <td class="num">${thb(tc)}</td>
+  <td class="num">${thb(profit)}</td>
+  <td class="num">${margin}${r.revenue > 0 ? "%" : ""}</td>
+</tr>`;
+}).join("")}
 </tbody>
 <tfoot><tr>
   <td colspan="4">${t("total")}</td>
   <td class="num">${totalQty}</td>
   <td></td>
   <td class="num">${thb(totalRevenue)}</td>
+  <td></td>
+  <td class="num">${thb(totalCost)}</td>
+  <td class="num">${thb(totalProfit)}</td>
+  <td class="num">${totalRevenue > 0 ? (totalProfit / totalRevenue * 100).toFixed(1) + "%" : "—"}</td>
 </tr></tfoot>
 </table>
 <script>window.onload=()=>setTimeout(()=>window.print(),100)</script>
@@ -1022,6 +1043,10 @@ ${filtered.map((r, i) => `<tr>
                       <th className="text-right px-3 py-3 text-xs uppercase tracking-wide text-muted-foreground">{t("qty_sold")}</th>
                       <th className="text-right px-3 py-3 text-xs uppercase tracking-wide text-muted-foreground hidden sm:table-cell">{t("unit_price")}</th>
                       <th className="text-right px-3 py-3 text-xs uppercase tracking-wide text-muted-foreground">{t("revenue")}</th>
+                      <th className="text-right px-3 py-3 text-xs uppercase tracking-wide text-muted-foreground hidden lg:table-cell">Unit Cost</th>
+                      <th className="text-right px-3 py-3 text-xs uppercase tracking-wide text-muted-foreground hidden lg:table-cell">Total Cost</th>
+                      <th className="text-right px-3 py-3 text-xs uppercase tracking-wide text-muted-foreground hidden lg:table-cell">Profit</th>
+                      <th className="text-right px-3 py-3 text-xs uppercase tracking-wide text-muted-foreground hidden lg:table-cell">Margin %</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1030,6 +1055,9 @@ ${filtered.map((r, i) => `<tr>
                                  : i === 1 ? "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
                                  : i === 2 ? "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300"
                                  : "bg-muted/60 text-muted-foreground";
+                      const rowTotalCost = r.unit_cost * r.qty;
+                      const rowProfit = r.revenue - rowTotalCost;
+                      const rowMargin = r.revenue > 0 ? (rowProfit / r.revenue * 100).toFixed(1) : null;
                       return (
                         <tr key={r.menu_id || i} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
                           <td className="px-3 py-3 text-xs text-muted-foreground">{i + 1}</td>
@@ -1047,6 +1075,10 @@ ${filtered.map((r, i) => `<tr>
                           </td>
                           <td className="px-3 py-3 text-right text-xs text-muted-foreground tabular-nums hidden sm:table-cell">{thb(r.unit_price)}</td>
                           <td className="px-3 py-3 text-right font-semibold tabular-nums">{thb(r.revenue)}</td>
+                          <td className="px-3 py-3 text-right text-xs text-muted-foreground tabular-nums hidden lg:table-cell">{thb(r.unit_cost)}</td>
+                          <td className="px-3 py-3 text-right text-xs tabular-nums hidden lg:table-cell">{thb(rowTotalCost)}</td>
+                          <td className={`px-3 py-3 text-right text-xs tabular-nums hidden lg:table-cell ${rowProfit >= 0 ? "text-green-600 dark:text-green-400" : "text-red-500"}`}>{thb(rowProfit)}</td>
+                          <td className="px-3 py-3 text-right text-xs tabular-nums hidden lg:table-cell text-muted-foreground">{rowMargin !== null ? `${rowMargin}%` : "—"}</td>
                         </tr>
                       );
                     })}
@@ -1058,6 +1090,10 @@ ${filtered.map((r, i) => `<tr>
                         <td className="px-3 py-3 text-right tabular-nums">{totalQty.toLocaleString()}</td>
                         <td className="hidden sm:table-cell" />
                         <td className="px-3 py-3 text-right tabular-nums">{thb(totalRevenue)}</td>
+                        <td className="hidden lg:table-cell" />
+                        <td className="px-3 py-3 text-right tabular-nums hidden lg:table-cell">{thb(totalCost)}</td>
+                        <td className={`px-3 py-3 text-right tabular-nums hidden lg:table-cell ${totalProfit >= 0 ? "text-green-600 dark:text-green-400" : "text-red-500"}`}>{thb(totalProfit)}</td>
+                        <td className="px-3 py-3 text-right tabular-nums hidden lg:table-cell text-muted-foreground">{totalRevenue > 0 ? `${(totalProfit / totalRevenue * 100).toFixed(1)}%` : "—"}</td>
                       </tr>
                     </tfoot>
                   )}
