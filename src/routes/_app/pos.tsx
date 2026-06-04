@@ -277,7 +277,7 @@ function PosPage() {
           <button
             key={tbl.id}
             onClick={() => onTableClick(tbl)}
-            className={`relative aspect-square rounded-xl shadow-sm hover:shadow-md transition-all ${tbl.has_qr_alert ? "alert-flash" : colorFor(tbl.status)} flex flex-col items-center justify-center gap-1 p-2`}
+            className={`relative aspect-square rounded-xl shadow-sm hover:shadow-md transition-all ${tbl.has_qr_alert ? "alert-flash" : tbl.code === "TEST" ? "bg-amber-500 text-white ring-2 ring-amber-300" : colorFor(tbl.status)} flex flex-col items-center justify-center gap-1 p-2`}
           >
             {tbl.has_qr_alert && (
               <>
