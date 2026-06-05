@@ -336,6 +336,11 @@ function BrowserPrintTestCard() {
           </Button>
         </div>
 
+        <p className="text-xs text-muted-foreground border-l-2 border-primary/40 pl-2">
+          For Chrome print preview, choose the thermal printer and set paper size to 72mm/80mm if available.
+        </p>
+
+
         <Dialog open={preview !== null} onOpenChange={(o) => !o && setPreview(null)}>
           <DialogContent className="max-w-md">
             <DialogHeader>

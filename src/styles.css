@@ -140,10 +140,35 @@
 }
 .alert-banner { animation: banner-slide 0.25s ease-out; }
 
-/* Browser print: hide app, show only #__print_area__ */
+/* Browser print: hide app, show only #__print_area__ (72mm thermal) */
+@page { size: 72mm auto; margin: 0; }
+
 @media print {
+  html, body {
+    width: 72mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
   body.printing > *:not(#__print_area__) { display: none !important; }
-  #__print_area__ { display: block !important; }
+  #__print_area__ {
+    display: block !important;
+    width: 72mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  /* Strip dialog-preview centering/padding when actually printing */
+  #__print_area__ .receipt-72,
+  #__print_area__ .kitchen-72,
+  #__print_area__ > div {
+    width: 72mm !important;
+    margin: 0 !important;
+    padding: 3mm 3mm !important;
+    font-size: 12px;
+    color: #000 !important;
+    background: #fff !important;
+  }
 }
 #__print_area__ { display: none; }
+
 

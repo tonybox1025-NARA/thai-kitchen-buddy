@@ -2,7 +2,7 @@ import type { KitchenTicketData } from "@/lib/print/types";
 
 export function KitchenTicketPreview72({ data }: { data: KitchenTicketData }) {
   return (
-    <div className="mx-auto bg-white text-black font-mono p-2" style={{ width: "72mm" }}>
+    <div className="kitchen-72 mx-auto bg-white text-black font-mono p-2" style={{ width: "72mm" }}>
       <div className="text-center font-bold text-[18px]">*** KITCHEN ***</div>
       {data.station && <div className="text-center text-[13px]">{data.station}</div>}
       <div className="border-t-2 border-black my-1" />
