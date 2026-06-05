@@ -16,7 +16,7 @@ import { makeDriver, type DriverId } from "@/lib/print/PrintService";
 import type { PrintJob } from "@/lib/print/types";
 import { ReceiptPreview72, receiptToHtml } from "@/components/print/ReceiptPreview72";
 import { KitchenTicketPreview72, kitchenToHtml } from "@/components/print/KitchenTicketPreview72";
-import { sampleReceipt, sampleKitchen } from "@/lib/print/sampleData";
+import { sampleReceipt, sampleKitchen, sampleDepartmentOrder, splitOrderByDepartment } from "@/lib/print/sampleData";
 // qrcode is dynamically imported inside QrCodesTab to avoid Node deps at SSR module-eval
 
 export const Route = createFileRoute("/_app/settings")({ component: SettingsPage });
@@ -286,16 +286,33 @@ function PrintersTab() {
 function BrowserPrintTestCard() {
   const [driver, setDriver] = useState<DriverId>("browser");
   const [preview, setPreview] = useState<null | "receipt" | "kitchen">(null);
+  const [splitPreview, setSplitPreview] = useState(false);
+
+  const splitTickets = splitOrderByDepartment(sampleDepartmentOrder);
+
+  const renderHtml = (job: PrintJob) =>
+    job.kind === "receipt" ? receiptToHtml(job.data) : kitchenToHtml(job.data);
 
   const run = async (kind: "receipt" | "kitchen_ticket") => {
     try {
-      const renderHtml = (job: PrintJob) =>
-        job.kind === "receipt" ? receiptToHtml(job.data) : kitchenToHtml(job.data);
       const drv = makeDriver(driver, renderHtml);
       const job: PrintJob = kind === "receipt"
         ? { kind: "receipt", target: "counter", data: sampleReceipt }
         : { kind: "kitchen_ticket", target: "kitchen", data: sampleKitchen };
       await drv.print(job);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+
+  const runSplit = async () => {
+    try {
+      const drv = makeDriver(driver, renderHtml);
+      for (const t of splitTickets) {
+        await drv.print({ kind: "kitchen_ticket", target: "kitchen", data: t });
+        // small gap so the browser print dialog isn't called concurrently
+        await new Promise((r) => setTimeout(r, 300));
+      }
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -334,6 +351,12 @@ function BrowserPrintTestCard() {
           <Button onClick={() => run("kitchen_ticket")}>
             <Printer className="h-4 w-4 mr-2" /> Test Kitchen Ticket
           </Button>
+          <Button variant="outline" onClick={() => setSplitPreview(true)}>
+            Preview Department Split Tickets
+          </Button>
+          <Button onClick={runSplit}>
+            <Printer className="h-4 w-4 mr-2" /> Test Department Split Tickets
+          </Button>
         </div>
 
         <p className="text-xs text-muted-foreground border-l-2 border-primary/40 pl-2">
@@ -363,7 +386,6 @@ function BrowserPrintTestCard() {
                 onClick={async () => {
                   const kind = preview === "receipt" ? "receipt" : "kitchen_ticket";
                   setPreview(null);
-                  // wait for dialog to unmount so it doesn't appear in the print output
                   await new Promise((r) => setTimeout(r, 100));
                   await run(kind);
                 }}
@@ -373,10 +395,43 @@ function BrowserPrintTestCard() {
             </div>
           </DialogContent>
         </Dialog>
+
+        <Dialog open={splitPreview} onOpenChange={setSplitPreview}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>
+                Department Split Tickets — Table {sampleDepartmentOrder.table} · {sampleDepartmentOrder.orderNo}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="bg-muted/30 p-3 rounded max-h-[65vh] overflow-auto flex flex-wrap gap-4 justify-center">
+              {splitTickets.map((t, i) => (
+                <div key={i} className="border border-dashed border-border bg-white p-2 rounded">
+                  <KitchenTicketPreview72 data={t} />
+                </div>
+              ))}
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Each department prints its own 72mm ticket. Phase 1 uses sample data only — not connected to real orders.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setSplitPreview(false)}>Close</Button>
+              <Button
+                onClick={async () => {
+                  setSplitPreview(false);
+                  await new Promise((r) => setTimeout(r, 100));
+                  await runSplit();
+                }}
+              >
+                <Printer className="h-4 w-4 mr-2" /> Print all ({splitTickets.length})
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );
 }
+
 
 
 // ── Ingredients section inside the menu edit dialog ──────────────────────────

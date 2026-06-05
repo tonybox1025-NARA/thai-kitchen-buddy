@@ -1,6 +1,8 @@
 export type PrintTarget = "counter" | "kitchen";
 export type PrintJobKind = "receipt" | "kitchen_ticket";
 
+export type Department = "hot_kitchen" | "bar" | "dessert" | "cold_kitchen" | string;
+
 export type ReceiptItem = {
   name: string;
   qty: number;
@@ -28,13 +30,31 @@ export type ReceiptData = {
   change?: number;
 };
 
-export type KitchenItem = { name: string; qty: number; note?: string };
+export type KitchenItem = {
+  name: string;
+  qty: number;
+  note?: string;
+  /** Optional localized names — Phase 1 placeholders. */
+  name_th?: string;
+  name_en?: string;
+  name_my?: string;
+  /** Optional modifiers/options (e.g. "Extra spicy", "No peanuts"). */
+  modifiers?: string[];
+  /** Optional department routing. */
+  department?: Department;
+};
 
 export type KitchenTicketData = {
   table?: string;
   orderNo: string;
   printedAt: string;
   station?: string;
+  /** Department label printed large at top (e.g. "HOT KITCHEN"). */
+  department?: string;
+  /** Ticket index within a split print run (1-based). */
+  ticketIndex?: number;
+  /** Total number of tickets in this split run. */
+  ticketTotal?: number;
   items: KitchenItem[];
 };
 
