@@ -12,6 +12,11 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Trash2, Plus, Printer, QrCode, Wifi, WifiOff, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
+import { makeDriver, type DriverId } from "@/lib/print/PrintService";
+import type { PrintJob } from "@/lib/print/types";
+import { ReceiptPreview72, receiptToHtml } from "@/components/print/ReceiptPreview72";
+import { KitchenTicketPreview72, kitchenToHtml } from "@/components/print/KitchenTicketPreview72";
+import { sampleReceipt, sampleKitchen } from "@/lib/print/sampleData";
 // qrcode is dynamically imported inside QrCodesTab to avoid Node deps at SSR module-eval
 
 export const Route = createFileRoute("/_app/settings")({ component: SettingsPage });
