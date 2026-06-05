@@ -12,7 +12,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Trash2, Plus, Printer, QrCode, Wifi, WifiOff, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
-import { makeDriver, type DriverId } from "@/lib/print/PrintService";
+import { makeDriver, browserPrintHtml, type DriverId } from "@/lib/print/PrintService";
 import type { PrintJob } from "@/lib/print/types";
 import { ReceiptPreview72, receiptToHtml } from "@/components/print/ReceiptPreview72";
 import { KitchenTicketPreview72, kitchenToHtml } from "@/components/print/KitchenTicketPreview72";
@@ -318,6 +318,24 @@ function BrowserPrintTestCard() {
     }
   };
 
+  const printAllSplit = async () => {
+    try {
+      // Concatenate all department tickets into a single print job with page breaks
+      const html = splitTickets
+        .map((t, i) => {
+          const inner = kitchenToHtml(t);
+          const breakStyle = i < splitTickets.length - 1
+            ? `<div style="page-break-after: always; break-after: page;"></div>`
+            : "";
+          return inner + breakStyle;
+        })
+        .join("");
+      await browserPrintHtml(html);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+
   return (
     <Card className="max-w-xl">
       <CardHeader>
@@ -365,6 +383,9 @@ function BrowserPrintTestCard() {
         <p className="text-xs text-muted-foreground border-l-2 border-amber-500/60 pl-2">
           Desktop PDF preview may show the receipt on A4. On SUNMI/thermal printer, choose the 72mm/80mm paper size if available.
         </p>
+        <p className="text-xs text-muted-foreground border-l-2 border-blue-500/60 pl-2">
+          "Test Department Split Tickets" opens one browser print dialog per department in sequence. This simulates the future Android/Network bridge that will dispatch one job per station printer.
+        </p>
 
         <Dialog open={preview !== null} onOpenChange={(o) => !o && setPreview(null)}>
           <DialogContent className="max-w-md">
@@ -397,21 +418,29 @@ function BrowserPrintTestCard() {
         </Dialog>
 
         <Dialog open={splitPreview} onOpenChange={setSplitPreview}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>
                 Department Split Tickets — Table {sampleDepartmentOrder.table} · {sampleDepartmentOrder.orderNo}
               </DialogTitle>
             </DialogHeader>
-            <div className="bg-muted/30 p-3 rounded max-h-[65vh] overflow-auto flex flex-wrap gap-4 justify-center">
+            <div className="bg-muted/30 p-3 rounded max-h-[65vh] overflow-auto flex flex-col items-center gap-6">
               {splitTickets.map((t, i) => (
-                <div key={i} className="border border-dashed border-border bg-white p-2 rounded">
-                  <KitchenTicketPreview72 data={t} />
+                <div key={i} className="flex flex-col items-center gap-2 w-full">
+                  <div className="print:hidden text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    {t.department} — Ticket {t.ticketIndex}/{t.ticketTotal}
+                  </div>
+                  <div className="border border-dashed border-border bg-white p-2 rounded">
+                    <KitchenTicketPreview72 data={t} />
+                  </div>
+                  {i < splitTickets.length - 1 && (
+                    <div className="print:hidden w-full border-t border-dashed border-border mt-2" />
+                  )}
                 </div>
               ))}
             </div>
             <p className="text-[11px] text-muted-foreground">
-              Each department prints its own 72mm ticket. Phase 1 uses sample data only — not connected to real orders.
+              All {splitTickets.length} department tickets stacked for inspection. "Print All" sends them as one browser print job with page breaks between tickets, so the thermal printer cuts/separates per ticket. Labels above each ticket are hidden during print.
             </p>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setSplitPreview(false)}>Close</Button>
@@ -419,10 +448,10 @@ function BrowserPrintTestCard() {
                 onClick={async () => {
                   setSplitPreview(false);
                   await new Promise((r) => setTimeout(r, 100));
-                  await runSplit();
+                  await printAllSplit();
                 }}
               >
-                <Printer className="h-4 w-4 mr-2" /> Print all ({splitTickets.length})
+                <Printer className="h-4 w-4 mr-2" /> Print All ({splitTickets.length})
               </Button>
             </div>
           </DialogContent>
