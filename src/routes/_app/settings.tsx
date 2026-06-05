@@ -339,7 +339,9 @@ function BrowserPrintTestCard() {
         <p className="text-xs text-muted-foreground border-l-2 border-primary/40 pl-2">
           For Chrome print preview, choose the thermal printer and set paper size to 72mm/80mm if available.
         </p>
-
+        <p className="text-xs text-muted-foreground border-l-2 border-amber-500/60 pl-2">
+          Desktop PDF preview may show the receipt on A4. On SUNMI/thermal printer, choose the 72mm/80mm paper size if available.
+        </p>
 
         <Dialog open={preview !== null} onOpenChange={(o) => !o && setPreview(null)}>
           <DialogContent className="max-w-md">
@@ -348,12 +350,24 @@ function BrowserPrintTestCard() {
                 {preview === "receipt" ? "Counter Receipt — 72mm preview" : "Kitchen Ticket — 72mm preview"}
               </DialogTitle>
             </DialogHeader>
-            <div className="bg-muted/30 p-3 rounded">
+            <div className="bg-muted/30 p-3 rounded max-h-[60vh] overflow-auto">
               {preview === "receipt" && <ReceiptPreview72 data={sampleReceipt} />}
               {preview === "kitchen" && <KitchenTicketPreview72 data={sampleKitchen} />}
             </div>
-            <div className="flex justify-end">
-              <Button onClick={() => preview && run(preview === "receipt" ? "receipt" : "kitchen_ticket")}>
+            <p className="text-[11px] text-muted-foreground">
+              Shown at actual 72mm width. Desktop PDF preview may still render on A4 — pick a 72mm/80mm paper size on a thermal printer.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setPreview(null)}>Close</Button>
+              <Button
+                onClick={async () => {
+                  const kind = preview === "receipt" ? "receipt" : "kitchen_ticket";
+                  setPreview(null);
+                  // wait for dialog to unmount so it doesn't appear in the print output
+                  await new Promise((r) => setTimeout(r, 100));
+                  await run(kind);
+                }}
+              >
                 <Printer className="h-4 w-4 mr-2" /> Print
               </Button>
             </div>
