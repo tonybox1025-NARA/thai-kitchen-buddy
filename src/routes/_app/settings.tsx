@@ -383,24 +383,6 @@ function BrowserPrintTestCard() {
         <p className="text-xs text-muted-foreground border-l-2 border-amber-500/60 pl-2">
           Desktop PDF preview may show the receipt on A4. On SUNMI/thermal printer, choose the 72mm/80mm paper size if available.
         </p>
-
-        <Dialog open={preview !== null} onOpenChange={(o) => !o && setPreview(null)}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-          <Button variant="outline" onClick={() => setSplitPreview(true)}>
-            Preview Department Split Tickets
-          </Button>
-          <Button onClick={runSplit}>
-            <Printer className="h-4 w-4 mr-2" /> Test Department Split Tickets
-          </Button>
-        </div>
-
-        <p className="text-xs text-muted-foreground border-l-2 border-primary/40 pl-2">
-          For Chrome print preview, choose the thermal printer and set paper size to 72mm/80mm if available.
-        </p>
-        <p className="text-xs text-muted-foreground border-l-2 border-amber-500/60 pl-2">
-          Desktop PDF preview may show the receipt on A4. On SUNMI/thermal printer, choose the 72mm/80mm paper size if available.
-        </p>
         <p className="text-xs text-muted-foreground border-l-2 border-blue-500/60 pl-2">
           "Test Department Split Tickets" opens one browser print dialog per department in sequence. This simulates the future Android/Network bridge that will dispatch one job per station printer.
         </p>
