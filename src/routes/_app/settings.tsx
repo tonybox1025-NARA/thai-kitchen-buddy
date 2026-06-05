@@ -318,6 +318,24 @@ function BrowserPrintTestCard() {
     }
   };
 
+  const printAllSplit = async () => {
+    try {
+      // Concatenate all department tickets into a single print job with page breaks
+      const html = splitTickets
+        .map((t, i) => {
+          const inner = kitchenToHtml(t);
+          const breakStyle = i < splitTickets.length - 1
+            ? `<div style="page-break-after: always; break-after: page;"></div>`
+            : "";
+          return inner + breakStyle;
+        })
+        .join("");
+      await browserPrintHtml(html);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+
   return (
     <Card className="max-w-xl">
       <CardHeader>
