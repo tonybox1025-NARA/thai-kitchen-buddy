@@ -139,3 +139,11 @@
   to   { transform: translateY(0); opacity: 1; }
 }
 .alert-banner { animation: banner-slide 0.25s ease-out; }
+
+/* Browser print: hide app, show only #__print_area__ */
+@media print {
+  body.printing > *:not(#__print_area__) { display: none !important; }
+  #__print_area__ { display: block !important; }
+}
+#__print_area__ { display: none; }
+

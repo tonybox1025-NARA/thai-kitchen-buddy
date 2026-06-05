@@ -12,6 +12,11 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Trash2, Plus, Printer, QrCode, Wifi, WifiOff, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
+import { makeDriver, type DriverId } from "@/lib/print/PrintService";
+import type { PrintJob } from "@/lib/print/types";
+import { ReceiptPreview72, receiptToHtml } from "@/components/print/ReceiptPreview72";
+import { KitchenTicketPreview72, kitchenToHtml } from "@/components/print/KitchenTicketPreview72";
+import { sampleReceipt, sampleKitchen } from "@/lib/print/sampleData";
 // qrcode is dynamically imported inside QrCodesTab to avoid Node deps at SSR module-eval
 
 export const Route = createFileRoute("/_app/settings")({ component: SettingsPage });
@@ -233,46 +238,127 @@ function PrintersTab() {
   const bridgeAlive = recentJob && new Date(recentJob.printed_at ?? 0).getTime() > Date.now() - 60_000;
 
   return (
-    <Card className="max-w-xl mt-4">
+    <div className="space-y-4 mt-4">
+      <Card className="max-w-xl">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Printer className="h-4 w-4" /> Printer Settings — ESC/POS (port 9100)
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <Label>{t("printer_counter_ip")} — Receipt (Q80A)</Label>
+            <Input placeholder="192.168.1.220" value={s.printer_counter_ip ?? ""} onChange={(e) => setS({ ...s, printer_counter_ip: e.target.value })} />
+          </div>
+          <div>
+            <Label>{t("printer_kitchen_ip")} — Kitchen ticket</Label>
+            <Input placeholder="192.168.1.221" value={s.printer_kitchen_ip ?? ""} onChange={(e) => setS({ ...s, printer_kitchen_ip: e.target.value })} />
+          </div>
+
+          <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-1">
+            <div className="flex items-center gap-2 font-medium">
+              {bridgeAlive
+                ? <><Wifi className="h-4 w-4 text-green-500" /><span className="text-green-600">Print bridge online</span></>
+                : <><WifiOff className="h-4 w-4 text-muted-foreground" /><span className="text-muted-foreground">Print bridge not detected</span></>}
+            </div>
+            <p className="text-muted-foreground">
+              Run the bridge on any device on the same LAN as the printer:
+            </p>
+            <code className="block bg-muted rounded px-2 py-1 text-xs select-all">
+              npm run print-bridge
+            </code>
+          </div>
+
+          <div className="flex gap-2">
+            <Button onClick={save}>{t("save")}</Button>
+            <Button variant="outline" onClick={sendTestPrint}>
+              <Printer className="h-4 w-4 mr-2" /> Test print
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <BrowserPrintTestCard />
+    </div>
+  );
+}
+
+function BrowserPrintTestCard() {
+  const [driver, setDriver] = useState<DriverId>("browser");
+  const [preview, setPreview] = useState<null | "receipt" | "kitchen">(null);
+
+  const run = async (kind: "receipt" | "kitchen_ticket") => {
+    try {
+      const renderHtml = (job: PrintJob) =>
+        job.kind === "receipt" ? receiptToHtml(job.data) : kitchenToHtml(job.data);
+      const drv = makeDriver(driver, renderHtml);
+      const job: PrintJob = kind === "receipt"
+        ? { kind: "receipt", target: "counter", data: sampleReceipt }
+        : { kind: "kitchen_ticket", target: "kitchen", data: sampleKitchen };
+      await drv.print(job);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+
+  return (
+    <Card className="max-w-xl">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          <Printer className="h-4 w-4" /> Printer Settings — ESC/POS (port 9100)
+          <Printer className="h-4 w-4" /> Browser Print Test (Phase 1)
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div>
-          <Label>{t("printer_counter_ip")} — Receipt (Q80A)</Label>
-          <Input placeholder="192.168.1.220" value={s.printer_counter_ip ?? ""} onChange={(e) => setS({ ...s, printer_counter_ip: e.target.value })} />
-        </div>
-        <div>
-          <Label>{t("printer_kitchen_ip")} — Kitchen ticket</Label>
-          <Input placeholder="192.168.1.221" value={s.printer_kitchen_ip ?? ""} onChange={(e) => setS({ ...s, printer_kitchen_ip: e.target.value })} />
-        </div>
-
-        <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-1">
-          <div className="flex items-center gap-2 font-medium">
-            {bridgeAlive
-              ? <><Wifi className="h-4 w-4 text-green-500" /><span className="text-green-600">Print bridge online</span></>
-              : <><WifiOff className="h-4 w-4 text-muted-foreground" /><span className="text-muted-foreground">Print bridge not detected</span></>}
-          </div>
-          <p className="text-muted-foreground">
-            Run the bridge on any device on the same LAN as the printer:
+          <Label>Driver</Label>
+          <Select value={driver} onValueChange={(v) => setDriver(v as DriverId)}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="browser">Browser (window.print)</SelectItem>
+              <SelectItem value="queue">Queue (print_jobs) — stub</SelectItem>
+              <SelectItem value="android">Android bridge — stub</SelectItem>
+              <SelectItem value="network">Network ESC/POS — stub</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground mt-1">
+            Only the Browser driver is implemented in Phase 1. Other drivers will throw.
           </p>
-          <code className="block bg-muted rounded px-2 py-1 text-xs select-all">
-            npm run print-bridge
-          </code>
         </div>
 
-        <div className="flex gap-2">
-          <Button onClick={save}>{t("save")}</Button>
-          <Button variant="outline" onClick={sendTestPrint}>
-            <Printer className="h-4 w-4 mr-2" /> Test print
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="outline" onClick={() => setPreview("receipt")}>Preview Counter Receipt (72mm)</Button>
+          <Button variant="outline" onClick={() => setPreview("kitchen")}>Preview Kitchen Ticket (72mm)</Button>
+          <Button onClick={() => run("receipt")}>
+            <Printer className="h-4 w-4 mr-2" /> Test Counter Receipt
+          </Button>
+          <Button onClick={() => run("kitchen_ticket")}>
+            <Printer className="h-4 w-4 mr-2" /> Test Kitchen Ticket
           </Button>
         </div>
+
+        <Dialog open={preview !== null} onOpenChange={(o) => !o && setPreview(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>
+                {preview === "receipt" ? "Counter Receipt — 72mm preview" : "Kitchen Ticket — 72mm preview"}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="bg-muted/30 p-3 rounded">
+              {preview === "receipt" && <ReceiptPreview72 data={sampleReceipt} />}
+              {preview === "kitchen" && <KitchenTicketPreview72 data={sampleKitchen} />}
+            </div>
+            <div className="flex justify-end">
+              <Button onClick={() => preview && run(preview === "receipt" ? "receipt" : "kitchen_ticket")}>
+                <Printer className="h-4 w-4 mr-2" /> Print
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );
 }
+
 
 // ── Ingredients section inside the menu edit dialog ──────────────────────────
 function IngredientsSection({
