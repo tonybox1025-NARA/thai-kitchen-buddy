@@ -12,7 +12,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Trash2, Plus, Printer, QrCode, Wifi, WifiOff, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
-import { makeDriver, browserPrintHtml, printInDedicatedDocument, type DriverId } from "@/lib/print/PrintService";
+import { makeDriver, printInDedicatedDocument, type DriverId } from "@/lib/print/PrintService";
 import type { PrintJob } from "@/lib/print/types";
 import { ReceiptPreview72, receiptToHtml } from "@/components/print/ReceiptPreview72";
 import { KitchenTicketPreview72, kitchenToHtml } from "@/components/print/KitchenTicketPreview72";
