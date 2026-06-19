@@ -12,7 +12,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Trash2, Plus, Printer, QrCode, Wifi, WifiOff, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
-import { makeDriver, browserPrintHtml, type DriverId } from "@/lib/print/PrintService";
+import { makeDriver, printInDedicatedDocument, type DriverId } from "@/lib/print/PrintService";
 import type { PrintJob } from "@/lib/print/types";
 import { ReceiptPreview72, receiptToHtml } from "@/components/print/ReceiptPreview72";
 import { KitchenTicketPreview72, kitchenToHtml } from "@/components/print/KitchenTicketPreview72";
@@ -293,13 +293,28 @@ function BrowserPrintTestCard() {
   const renderHtml = (job: PrintJob) =>
     job.kind === "receipt" ? receiptToHtml(job.data) : kitchenToHtml(job.data);
 
+  // NOTE: Test buttons below bypass the "browser" driver (which prints the
+  // current page DOM via window.print() and is unreliable on SUNMI Android
+  // Chrome) and instead use `printInDedicatedDocument` — a dedicated off-screen
+  // iframe whose document contains ONLY the receipt/ticket HTML.
   const run = async (kind: "receipt" | "kitchen_ticket") => {
     try {
-      const drv = makeDriver(driver, renderHtml);
-      const job: PrintJob = kind === "receipt"
-        ? { kind: "receipt", target: "counter", data: sampleReceipt }
-        : { kind: "kitchen_ticket", target: "kitchen", data: sampleKitchen };
-      await drv.print(job);
+      if (driver !== "browser") {
+        // Non-browser drivers are stubs; surface their error as before.
+        const drv = makeDriver(driver, renderHtml);
+        const job: PrintJob = kind === "receipt"
+          ? { kind: "receipt", target: "counter", data: sampleReceipt }
+          : { kind: "kitchen_ticket", target: "kitchen", data: sampleKitchen };
+        await drv.print(job);
+        return;
+      }
+      const html = kind === "receipt"
+        ? receiptToHtml(sampleReceipt)
+        : kitchenToHtml(sampleKitchen);
+      await printInDedicatedDocument(html, {
+        title: kind === "receipt" ? "Test Counter Receipt" : "Test Kitchen Ticket",
+        testBanner: true,
+      });
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -307,10 +322,20 @@ function BrowserPrintTestCard() {
 
   const runSplit = async () => {
     try {
-      const drv = makeDriver(driver, renderHtml);
+      if (driver !== "browser") {
+        const drv = makeDriver(driver, renderHtml);
+        for (const t of splitTickets) {
+          await drv.print({ kind: "kitchen_ticket", target: "kitchen", data: t });
+          await new Promise((r) => setTimeout(r, 300));
+        }
+        return;
+      }
+      // Sequential dedicated-document prints, one per department.
       for (const t of splitTickets) {
-        await drv.print({ kind: "kitchen_ticket", target: "kitchen", data: t });
-        // small gap so the browser print dialog isn't called concurrently
+        await printInDedicatedDocument(kitchenToHtml(t), {
+          title: `Test ${t.department} Ticket`,
+          testBanner: true,
+        });
         await new Promise((r) => setTimeout(r, 300));
       }
     } catch (e) {
@@ -320,17 +345,17 @@ function BrowserPrintTestCard() {
 
   const printAllSplit = async () => {
     try {
-      // Concatenate all department tickets into a single print job with page breaks
       const html = splitTickets
         .map((t, i) => {
           const inner = kitchenToHtml(t);
-          const breakStyle = i < splitTickets.length - 1
-            ? `<div style="page-break-after: always; break-after: page;"></div>`
-            : "";
-          return inner + breakStyle;
+          const br = i < splitTickets.length - 1 ? `<div class="page-break"></div>` : "";
+          return inner + br;
         })
         .join("");
-      await browserPrintHtml(html);
+      await printInDedicatedDocument(html, {
+        title: "Test Department Split Tickets",
+        testBanner: true,
+      });
     } catch (e) {
       toast.error((e as Error).message);
     }

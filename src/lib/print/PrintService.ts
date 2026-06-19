@@ -35,6 +35,80 @@ export function browserPrintHtml(html: string): Promise<void> {
   });
 }
 
+/**
+ * Print arbitrary HTML in a DEDICATED off-screen iframe document.
+ * This avoids the SUNMI/Android Chrome bug where window.print() captures
+ * the entire current page DOM even with @media print visibility hacks.
+ *
+ * `bodyHtml` should be the inner body content (may include its own <style> tags).
+ * A complete HTML document is constructed and loaded via srcdoc.
+ */
+export function printInDedicatedDocument(
+  bodyHtml: string,
+  opts: { title?: string; testBanner?: boolean } = {},
+): Promise<void> {
+  return new Promise((resolve) => {
+    const title = opts.title ?? "Print";
+    const banner = opts.testBanner
+      ? `<div class="test-banner">*** TEST PRINT ***</div>`
+      : "";
+    const doc = `<!doctype html>
+<html><head><meta charset="utf-8"><title>${title}</title>
+<style>
+  @page { size: 72mm auto; margin: 0; }
+  html, body { margin: 0; padding: 0; background: #fff; color: #000;
+    font-family: ui-monospace, "Menlo", "Consolas", monospace; }
+  body { width: 72mm; }
+  .test-banner {
+    text-align: center; font-weight: 800; font-size: 13px;
+    padding: 4px 0; border: 1px dashed #000; margin: 4px 3mm;
+    letter-spacing: 1px;
+  }
+  .page-break { page-break-after: always; break-after: page; }
+  @media print {
+    html, body { width: 72mm; }
+  }
+</style>
+</head><body>${banner}${bodyHtml}</body></html>`;
+
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("aria-hidden", "true");
+    iframe.style.cssText =
+      "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;";
+    iframe.srcdoc = doc;
+
+    let done = false;
+    const cleanup = () => {
+      if (done) return;
+      done = true;
+      try { iframe.remove(); } catch {}
+      resolve();
+    };
+
+    iframe.onload = () => {
+      const w = iframe.contentWindow;
+      if (!w) { cleanup(); return; }
+      try {
+        w.addEventListener("afterprint", () => setTimeout(cleanup, 100));
+      } catch {}
+      // Give the doc a tick to lay out, then print from the dedicated document.
+      setTimeout(() => {
+        try {
+          w.focus();
+          w.print();
+        } catch {
+          cleanup();
+          return;
+        }
+        // Fallback cleanup in case afterprint never fires (some Android builds).
+        setTimeout(cleanup, 8000);
+      }, 100);
+    };
+
+    document.body.appendChild(iframe);
+  });
+}
+
 export class BrowserPrintDriver implements PrintDriver {
   name = "browser";
   constructor(private renderHtml: (job: PrintJob) => string) {}
