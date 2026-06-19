@@ -143,6 +143,8 @@
 /* Browser print: hide app, show only #__print_area__ (72mm thermal) */
 @page { size: 72mm auto; margin: 0; }
 
+#__print_area__ { display: none; }
+
 @media print {
   html, body {
     width: 72mm !important;
@@ -150,17 +152,25 @@
     padding: 0 !important;
     background: #fff !important;
   }
-  body.printing > *:not(#__print_area__) { display: none !important; }
-  #__print_area__ {
+  /* Visibility-based hiding is more robust on Android Chrome / SUNMI than
+     display:none on body children, because portals/dialogs/toasts often
+     attach directly to <body> and would otherwise leak into the printout. */
+  body.printing * { visibility: hidden !important; }
+  body.printing #__print_area__,
+  body.printing #__print_area__ * { visibility: visible !important; }
+  body.printing #__print_area__ {
     display: block !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
     width: 72mm !important;
     margin: 0 !important;
     padding: 0 !important;
+    background: #fff !important;
   }
-  /* Strip dialog-preview centering/padding when actually printing */
-  #__print_area__ .receipt-72,
-  #__print_area__ .kitchen-72,
-  #__print_area__ > div {
+  body.printing #__print_area__ .receipt-72,
+  body.printing #__print_area__ .kitchen-72,
+  body.printing #__print_area__ > div {
     width: 72mm !important;
     margin: 0 !important;
     padding: 3mm 3mm !important;
@@ -169,6 +179,5 @@
     background: #fff !important;
   }
 }
-#__print_area__ { display: none; }
 
 
