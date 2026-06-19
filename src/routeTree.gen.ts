@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as PrintTestKindRouteImport } from './routes/print-test.$kind'
 import { Route as MenuTableCodeRouteImport } from './routes/menu.$tableCode'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppReportsRouteImport } from './routes/_app/reports'
@@ -39,6 +40,11 @@ const AppRoute = AppRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrintTestKindRoute = PrintTestKindRouteImport.update({
+  id: '/print-test/$kind',
+  path: '/print-test/$kind',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MenuTableCodeRoute = MenuTableCodeRouteImport.update({
@@ -126,6 +132,7 @@ export interface FileRoutesByFullPath {
   '/reports': typeof AppReportsRoute
   '/settings': typeof AppSettingsRoute
   '/menu/$tableCode': typeof MenuTableCodeRoute
+  '/print-test/$kind': typeof PrintTestKindRoute
   '/order/$orderId': typeof AppOrderOrderIdRoute
   '/payment/$billId': typeof AppPaymentBillIdRoute
   '/api/public/qr-order': typeof ApiPublicQrOrderRoute
@@ -144,6 +151,7 @@ export interface FileRoutesByTo {
   '/reports': typeof AppReportsRoute
   '/settings': typeof AppSettingsRoute
   '/menu/$tableCode': typeof MenuTableCodeRoute
+  '/print-test/$kind': typeof PrintTestKindRoute
   '/order/$orderId': typeof AppOrderOrderIdRoute
   '/payment/$billId': typeof AppPaymentBillIdRoute
   '/api/public/qr-order': typeof ApiPublicQrOrderRoute
@@ -164,6 +172,7 @@ export interface FileRoutesById {
   '/_app/reports': typeof AppReportsRoute
   '/_app/settings': typeof AppSettingsRoute
   '/menu/$tableCode': typeof MenuTableCodeRoute
+  '/print-test/$kind': typeof PrintTestKindRoute
   '/_app/order/$orderId': typeof AppOrderOrderIdRoute
   '/_app/payment/$billId': typeof AppPaymentBillIdRoute
   '/api/public/qr-order': typeof ApiPublicQrOrderRoute
@@ -184,6 +193,7 @@ export interface FileRouteTypes {
     | '/reports'
     | '/settings'
     | '/menu/$tableCode'
+    | '/print-test/$kind'
     | '/order/$orderId'
     | '/payment/$billId'
     | '/api/public/qr-order'
@@ -202,6 +212,7 @@ export interface FileRouteTypes {
     | '/reports'
     | '/settings'
     | '/menu/$tableCode'
+    | '/print-test/$kind'
     | '/order/$orderId'
     | '/payment/$billId'
     | '/api/public/qr-order'
@@ -221,6 +232,7 @@ export interface FileRouteTypes {
     | '/_app/reports'
     | '/_app/settings'
     | '/menu/$tableCode'
+    | '/print-test/$kind'
     | '/_app/order/$orderId'
     | '/_app/payment/$billId'
     | '/api/public/qr-order'
@@ -232,6 +244,7 @@ export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
   MenuTableCodeRoute: typeof MenuTableCodeRoute
+  PrintTestKindRoute: typeof PrintTestKindRoute
   ApiPublicQrOrderRoute: typeof ApiPublicQrOrderRoute
   ApiPublicQrMenuTableCodeRoute: typeof ApiPublicQrMenuTableCodeRoute
 }
@@ -257,6 +270,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/print-test/$kind': {
+      id: '/print-test/$kind'
+      path: '/print-test/$kind'
+      fullPath: '/print-test/$kind'
+      preLoaderRoute: typeof PrintTestKindRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/menu/$tableCode': {
@@ -395,6 +415,7 @@ const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRoute,
   MenuTableCodeRoute: MenuTableCodeRoute,
+  PrintTestKindRoute: PrintTestKindRoute,
   ApiPublicQrOrderRoute: ApiPublicQrOrderRoute,
   ApiPublicQrMenuTableCodeRoute: ApiPublicQrMenuTableCodeRoute,
 }
