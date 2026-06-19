@@ -287,79 +287,49 @@ function BrowserPrintTestCard() {
   const [driver, setDriver] = useState<DriverId>("browser");
   const [preview, setPreview] = useState<null | "receipt" | "kitchen">(null);
   const [splitPreview, setSplitPreview] = useState(false);
+  const nav = useNavigate();
 
   const splitTickets = splitOrderByDepartment(sampleDepartmentOrder);
 
   const renderHtml = (job: PrintJob) =>
     job.kind === "receipt" ? receiptToHtml(job.data) : kitchenToHtml(job.data);
 
-  // NOTE: Test buttons below bypass the "browser" driver (which prints the
-  // current page DOM via window.print() and is unreliable on SUNMI Android
-  // Chrome) and instead use `printInDedicatedDocument` — a dedicated off-screen
-  // iframe whose document contains ONLY the receipt/ticket HTML.
-  const run = async (kind: "receipt" | "kitchen_ticket") => {
+  // SUNMI Android Chrome captures the current page DOM when window.print() is
+  // called — even from a hidden iframe. Test buttons now NAVIGATE to a
+  // dedicated print-only route (/print-test/...) so window.print() only sees
+  // the receipt/ticket content.
+  const openTest = (
+    kind: "receipt" | "kitchen-ticket" | "department-split",
+    mode: string,
+  ) => {
     try {
       if (driver !== "browser") {
-        // Non-browser drivers are stubs; surface their error as before.
         const drv = makeDriver(driver, renderHtml);
         const job: PrintJob = kind === "receipt"
           ? { kind: "receipt", target: "counter", data: sampleReceipt }
           : { kind: "kitchen_ticket", target: "kitchen", data: sampleKitchen };
-        await drv.print(job);
+        void drv.print(job);
         return;
       }
-      const html = kind === "receipt"
-        ? receiptToHtml(sampleReceipt)
-        : kitchenToHtml(sampleKitchen);
-      await printInDedicatedDocument(html, {
-        title: kind === "receipt" ? "Test Counter Receipt" : "Test Kitchen Ticket",
-        testBanner: true,
+      nav({
+        to: "/print-test/$kind",
+        params: { kind },
+        search: { mode, auto: false },
       });
     } catch (e) {
       toast.error((e as Error).message);
     }
   };
 
-  const runSplit = async () => {
-    try {
-      if (driver !== "browser") {
-        const drv = makeDriver(driver, renderHtml);
-        for (const t of splitTickets) {
-          await drv.print({ kind: "kitchen_ticket", target: "kitchen", data: t });
-          await new Promise((r) => setTimeout(r, 300));
-        }
-        return;
-      }
-      // Sequential dedicated-document prints, one per department.
-      for (const t of splitTickets) {
-        await printInDedicatedDocument(kitchenToHtml(t), {
-          title: `Test ${t.department} Ticket`,
-          testBanner: true,
-        });
-        await new Promise((r) => setTimeout(r, 300));
-      }
-    } catch (e) {
-      toast.error((e as Error).message);
-    }
-  };
+  const run = (kind: "receipt" | "kitchen_ticket") =>
+    openTest(
+      kind === "receipt" ? "receipt" : "kitchen-ticket",
+      kind === "receipt" ? "counter-test" : "kitchen-test",
+    );
 
-  const printAllSplit = async () => {
-    try {
-      const html = splitTickets
-        .map((t, i) => {
-          const inner = kitchenToHtml(t);
-          const br = i < splitTickets.length - 1 ? `<div class="page-break"></div>` : "";
-          return inner + br;
-        })
-        .join("");
-      await printInDedicatedDocument(html, {
-        title: "Test Department Split Tickets",
-        testBanner: true,
-      });
-    } catch (e) {
-      toast.error((e as Error).message);
-    }
-  };
+  const runSplit = () => openTest("department-split", "test");
+  const printAllSplit = () => openTest("department-split", "test");
+
 
   return (
     <Card className="max-w-xl">
