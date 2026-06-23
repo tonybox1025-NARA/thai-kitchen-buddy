@@ -13,6 +13,7 @@ import { Plus, Minus, Trash2, ChefHat, Receipt, ArrowLeft, AlertTriangle, ArrowL
 import { ManagerPinDialog } from "@/components/ManagerPinDialog";
 import { SetMenuDialog } from "@/components/SetMenuDialog";
 import { SETS, type SetConfig } from "@/lib/set-menu";
+import { printCounter } from "@/lib/counter-printer";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/order/$orderId")({ component: OrderPage });
@@ -268,10 +269,8 @@ function OrderPage() {
     });
     const displayLabel = orderSource === "takeout" ? `Takeout ${orderNumber ?? ""}` : orderSource === "staff_meal" ? `Staff ${orderNumber ?? ""}` : tableCode;
     const ticketPayload = { kind: "order_ticket", table: displayLabel, lines, sent_at: sentAt };
-    await supabase.from("print_jobs").insert([
-      { printer: "kitchen", payload: { ...ticketPayload, language: "my" } },
-      { printer: "counter", payload: { ...ticketPayload, language: "th" } },
-    ]);
+    await supabase.from("print_jobs").insert({ printer: "kitchen", payload: { ...ticketPayload, language: "my" } });
+    await printCounter({ ...ticketPayload, language: "th" });
     toast.success(t("send_to_kitchen") + " ✓");
   };
 
@@ -423,14 +422,11 @@ function OrderPage() {
 
   const printBillPreview = async () => {
     if (liveItems.length === 0) { toast.error(t("empty_order")); return; }
-    await supabase.from("print_jobs").insert({
-      printer: "counter",
-      payload: {
-        kind: "receipt", table: tableCode, restaurant: restaurantName,
-        items: liveItems, total: billTotal,
-        vatAmount: settingsVatMode === "exclusive" ? billVatAmount : 0,
-        vat_mode: settingsVatMode, payments: [], language: lang,
-      } as any,
+    await printCounter({
+      kind: "receipt", table: tableCode, restaurant: restaurantName,
+      items: liveItems, total: billTotal,
+      vatAmount: settingsVatMode === "exclusive" ? billVatAmount : 0,
+      vat_mode: settingsVatMode, payments: [], language: lang,
     });
     toast.success("Bill sent to printer");
   };

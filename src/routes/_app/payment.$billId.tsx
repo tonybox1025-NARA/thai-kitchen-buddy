@@ -14,6 +14,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { ManagerPinDialog } from "@/components/ManagerPinDialog";
+import { printCounter } from "@/lib/counter-printer";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/payment/$billId")({ component: PaymentPage });
@@ -277,14 +278,13 @@ function PaymentPage() {
     if (ord?.table_id) {
       await supabase.from("restaurant_tables").update({ status: "available", guests: 0, has_qr_alert: false }).eq("id", ord.table_id);
     }
-    await supabase.from("print_jobs").insert({
-      printer: "counter",
-      payload: {
-        kind: "receipt", bill_id: bill.id, restaurant: restName, table: tableCode,
-        items, total, vatAmount: settingsVatMode === "exclusive" ? vatAmount : 0,
-        vat_mode: settingsVatMode, payments: [...payments], language: lang,
-        discount: appliedDiscount ? { type: appliedDiscount.type, label: discTypeLabel(appliedDiscount), amount: appliedDiscount.amount } : null,
-      },
+    await printCounter({
+      kind: "receipt", bill_id: bill.id, restaurant: restName, table: tableCode,
+      items, total, vatAmount: settingsVatMode === "exclusive" ? vatAmount : 0,
+      vat_mode: settingsVatMode, payments: [...payments], language: lang,
+      discountAmount: appliedDiscount?.amount ?? 0,
+      memberDiscountAmount: memberDisc,
+      discount: appliedDiscount ? { type: appliedDiscount.type, label: discTypeLabel(appliedDiscount), amount: appliedDiscount.amount } : null,
     });
     toast.success(t("paid"));
     await load();
