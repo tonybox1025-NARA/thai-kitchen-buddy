@@ -1,7 +1,8 @@
 import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { receiptToHtml } from "@/components/print/ReceiptPreview72";
 import { kitchenToHtml } from "@/components/print/KitchenTicketPreview72";
+import { printCounterViaAndroidBridge, type CounterPrintPayload } from "@/lib/counter-printer";
 import {
   sampleReceipt,
   sampleKitchen,
@@ -36,23 +37,76 @@ function buildHtml(kind: Kind): { title: string; html: string } {
   return { title: "Test Department Split Tickets", html };
 }
 
+function buildAndroidPayload(kind: Kind): CounterPrintPayload {
+  if (kind === "receipt") {
+    return {
+      kind: "receipt",
+      restaurant: sampleReceipt.restaurant,
+      table: sampleReceipt.table,
+      items: sampleReceipt.items.map((item) => ({
+        name_en: item.name,
+        qty: item.qty,
+        unit_price: item.unitPrice,
+      })),
+      total: sampleReceipt.total,
+      vatAmount: sampleReceipt.vatAmount,
+      vat_mode: sampleReceipt.vatMode,
+      payments: sampleReceipt.payments,
+    };
+  }
+
+  const source = kind === "department-split"
+    ? splitOrderByDepartment(sampleDepartmentOrder)[0]
+    : sampleKitchen;
+
+  return {
+    kind: "order_ticket",
+    table: source.table ?? "T05",
+    sent_at: source.printedAt,
+    lines: source.items.map((item) => ({
+      name_en: item.name_en ?? item.name,
+      name_th: item.name_th ?? item.name,
+      name_my: item.name_my ?? item.name,
+      qty: item.qty,
+      notes: item.note ?? item.modifiers?.join(", ") ?? null,
+      modifiers: item.modifiers?.map((name) => ({ option_name: name, price: 0 })) ?? null,
+    })),
+  };
+}
+
 function PrintTestPage() {
   const { kind } = Route.useParams() as { kind: Kind };
-  const { auto } = Route.useSearch();
+  const { auto, mode } = Route.useSearch();
   const nav = useNavigate();
   const router = useRouter();
+  const [androidStatus, setAndroidStatus] = useState<string>("");
 
   const valid: Kind[] = ["receipt", "kitchen-ticket", "department-split"];
   const safeKind = (valid.includes(kind) ? kind : "receipt") as Kind;
   const { title, html } = buildHtml(safeKind);
+  const androidPayload = useMemo(() => buildAndroidPayload(safeKind), [safeKind]);
+
+  const printAndroid = async () => {
+    setAndroidStatus("Sending to Android bridge...");
+    try {
+      await printCounterViaAndroidBridge(androidPayload);
+      setAndroidStatus("Android bridge print sent OK.");
+    } catch (error) {
+      setAndroidStatus(error instanceof Error ? error.message : String(error));
+    }
+  };
 
   useEffect(() => {
     document.title = title;
     if (auto) {
-      const id = setTimeout(() => window.print(), 250);
+      const id = setTimeout(() => {
+        if (mode === "android") void printAndroid();
+        else window.print();
+      }, 250);
       return () => clearTimeout(id);
     }
-  }, [title, auto]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [title, auto, mode]);
 
   const goBack = () => {
     if (window.history.length > 1) router.history.back();
@@ -92,7 +146,16 @@ function PrintTestPage() {
         <button className="pt-btn primary" onClick={() => window.print()}>
           🖨 Print
         </button>
+        <button className="pt-btn primary" onClick={printAndroid}>
+          Android Bridge
+        </button>
       </div>
+
+      {androidStatus && (
+        <div style={{ maxWidth: "72mm", fontSize: 13, color: androidStatus.includes("OK") ? "#047857" : "#b91c1c" }}>
+          {androidStatus}
+        </div>
+      )}
 
       <div className="pt-paper">
         <div className="pt-banner">*** TEST PRINT ***</div>

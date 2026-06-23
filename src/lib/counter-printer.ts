@@ -20,7 +20,7 @@ export async function printCounter(payload: CounterPrintPayload) {
   }
 }
 
-async function printCounterViaAndroidBridge(payload: CounterPrintPayload) {
+export async function printCounterViaAndroidBridge(payload: CounterPrintPayload) {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 5_000);
   try {
