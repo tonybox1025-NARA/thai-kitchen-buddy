@@ -24,17 +24,36 @@ export async function printCounterViaAndroidBridge(payload: CounterPrintPayload)
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 5_000);
   try {
-    const res = await fetch(COUNTER_BRIDGE_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
-    if (!res.ok) {
-      const message = await res.text().catch(() => "");
-      throw new Error(`Counter bridge HTTP ${res.status}${message ? `: ${message}` : ""}`);
+    await postJson(payload, controller.signal);
+  } catch (error) {
+    if (error instanceof TypeError) {
+      await postNoCors(payload);
+      return;
     }
+    throw error;
   } finally {
     window.clearTimeout(timeout);
   }
+}
+
+async function postJson(payload: CounterPrintPayload, signal: AbortSignal) {
+  const res = await fetch(COUNTER_BRIDGE_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    signal,
+  });
+  if (!res.ok) {
+    const message = await res.text().catch(() => "");
+    throw new Error(`Counter bridge HTTP ${res.status}${message ? `: ${message}` : ""}`);
+  }
+}
+
+async function postNoCors(payload: CounterPrintPayload) {
+  await fetch(COUNTER_BRIDGE_URL, {
+    method: "POST",
+    mode: "no-cors",
+    headers: { "Content-Type": "text/plain" },
+    body: JSON.stringify(payload),
+  });
 }
