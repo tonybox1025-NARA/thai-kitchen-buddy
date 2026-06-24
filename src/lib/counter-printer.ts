@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 
 const COUNTER_BRIDGE_URL = "http://127.0.0.1:9001/print/counter";
+const COUNTER_BRIDGE_IMAGE_URL = "http://127.0.0.1:9001/print/counter-img";
 
 export type CounterPrintPayload = Record<string, unknown> & {
   kind: "receipt" | "order_ticket";
@@ -27,7 +28,11 @@ export async function printCounterViaAndroidBridge(payload: CounterPrintPayload)
     await postJson(payload, controller.signal);
   } catch (error) {
     if (error instanceof TypeError) {
-      await postNoCors(payload);
+      try {
+        await postNoCors(payload);
+      } catch {
+        await printViaImageRequest(payload);
+      }
       return;
     }
     throw error;
@@ -56,4 +61,28 @@ async function postNoCors(payload: CounterPrintPayload) {
     headers: { "Content-Type": "text/plain" },
     body: JSON.stringify(payload),
   });
+}
+
+function printViaImageRequest(payload: CounterPrintPayload) {
+  return new Promise<void>((resolve) => {
+    const img = new Image();
+    const cleanup = () => {
+      img.onload = null;
+      img.onerror = null;
+      resolve();
+    };
+    img.onload = cleanup;
+    img.onerror = cleanup;
+    window.setTimeout(cleanup, 3_000);
+    img.src = `${COUNTER_BRIDGE_IMAGE_URL}?payload=${encodeURIComponent(base64UrlEncode(JSON.stringify(payload)))}&t=${Date.now()}`;
+  });
+}
+
+function base64UrlEncode(value: string) {
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
