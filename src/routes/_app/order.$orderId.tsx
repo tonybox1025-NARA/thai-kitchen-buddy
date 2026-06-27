@@ -13,7 +13,7 @@ import { Plus, Minus, Trash2, ChefHat, Receipt, ArrowLeft, AlertTriangle, ArrowL
 import { ManagerPinDialog } from "@/components/ManagerPinDialog";
 import { SetMenuDialog } from "@/components/SetMenuDialog";
 import { SETS, type SetConfig } from "@/lib/set-menu";
-import { printCounter } from "@/lib/counter-printer";
+import { printCounter, type CounterPrintPayload } from "@/lib/counter-printer";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/order/$orderId")({ component: OrderPage });
@@ -272,7 +272,7 @@ function OrderPage() {
       return { name_my: p.name_my, name_en: p.name_en, name_th: p.name_th, qty: p.qty, notes: p.notes, modifiers: (p.modifiers as Modifier[] | null) ?? null };
     });
     const displayLabel = orderSource === "takeout" ? `Takeout ${orderNumber ?? ""}` : orderSource === "staff_meal" ? `Staff ${orderNumber ?? ""}` : tableCode;
-    const ticketPayload = { kind: "order_ticket", table: displayLabel, lines, sent_at: sentAt };
+    const ticketPayload: CounterPrintPayload = { kind: "order_ticket", table: displayLabel, lines, sent_at: sentAt };
     await supabase.from("print_jobs").insert({ printer: "kitchen", payload: { ...ticketPayload, language: "my" } });
     await printCounter({ ...ticketPayload, language: "th" });
     toast.success(t("send_to_kitchen") + " ✓");
