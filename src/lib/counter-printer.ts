@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 
 const COUNTER_BRIDGE_URL = "http://127.0.0.1:9001/print/counter";
 const COUNTER_BRIDGE_IMAGE_URL = "http://127.0.0.1:9001/print/counter-img";
@@ -15,7 +16,7 @@ export async function printCounter(payload: CounterPrintPayload) {
     console.warn("[counter-printer] Android bridge failed, queueing print_jobs fallback", error);
     await supabase.from("print_jobs").insert({
       printer: "counter",
-      payload,
+      payload: payload as Json,
     });
     return { ok: false, via: "print_jobs-fallback" as const, error };
   }
