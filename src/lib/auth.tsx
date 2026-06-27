@@ -28,25 +28,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
+    let settled = false;
+
+    const finishLoading = (nextSession: Session | null) => {
+      if (!mounted) return;
+      settled = true;
+      setSession(nextSession);
+      setLoading(false);
+    };
+
+    const fallback = window.setTimeout(() => {
+      if (!settled) {
+        console.warn("Auth session check timed out; continuing without a session.");
+        finishLoading(null);
+      }
+    }, 1800);
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
-      if (!mounted) return;
-      setSession(s);
-      setLoading(false);
+      finishLoading(s);
     });
 
     const initSession = async () => {
       try {
         const { data, error } = await supabase.auth.getSession();
         if (error) throw error;
-        if (!mounted) return;
-        setSession(data.session ?? null);
+        finishLoading(data.session ?? null);
       } catch (error) {
         console.error("Failed to initialize auth session", error);
-        if (!mounted) return;
-        setSession(null);
-      } finally {
-        if (mounted) setLoading(false);
+        finishLoading(null);
       }
     };
 
@@ -59,6 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => {
       mounted = false;
+      window.clearTimeout(fallback);
       subscription.unsubscribe();
     };
   }, []);
