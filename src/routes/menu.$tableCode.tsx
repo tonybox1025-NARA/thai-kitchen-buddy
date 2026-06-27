@@ -316,7 +316,6 @@ function CustomerMenu() {
   const [addNotes, setAddNotes] = useState("");
   // selectedAddons: key = group_id, value = the chosen option for that group
   const [selectedAddons, setSelectedAddons] = useState<Map<string, SelectedAddon>>(new Map());
-  const [confirmOpen, setConfirmOpen] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   // Set menu state
@@ -445,7 +444,6 @@ function CustomerMenu() {
       });
       if (!res.ok) throw new Error(await res.text());
       setCart([]);
-      setConfirmOpen(false);
       setSubmitted(true);
     } catch (e) {
       toast.error(String((e as Error).message));
@@ -492,11 +490,11 @@ function CustomerMenu() {
         {/* Category tabs — scrollable, active tab snaps to center */}
         <div ref={catBarRef} className="max-w-2xl mx-auto px-2 pb-2 overflow-x-auto scrollbar-none">
           <div className="flex gap-2 px-2 w-max">
-            <Button data-cat="all" size="sm" variant={activeCat === "all" ? "default" : "outline"} onClick={() => switchCat("all")} className="rounded-full">
+            <Button data-cat="all" variant={activeCat === "all" ? "default" : "outline"} onClick={() => switchCat("all")} className="h-10 rounded-full px-4 text-sm font-semibold">
               {tr.all}
             </Button>
             {data.categories.map((c) => (
-              <Button data-cat={c.id} key={c.id} size="sm" variant={activeCat === c.id ? "default" : "outline"} onClick={() => switchCat(c.id)} className="whitespace-nowrap rounded-full">
+              <Button data-cat={c.id} key={c.id} variant={activeCat === c.id ? "default" : "outline"} onClick={() => switchCat(c.id)} className="h-10 whitespace-nowrap rounded-full px-4 text-sm font-semibold">
                 {name(c)}
               </Button>
             ))}
@@ -588,8 +586,8 @@ function CustomerMenu() {
               <div className="flex justify-between font-bold text-lg">
                 <span>{tr.total}</span><span>฿{cartTotal.toFixed(0)}</span>
               </div>
-              <Button className="w-full" size="lg" onClick={() => setConfirmOpen(true)}>
-                <Check className="h-4 w-4 mr-1" />{tr.submit}
+              <Button className="w-full" size="lg" onClick={submit} disabled={submitting}>
+                <Check className="h-4 w-4 mr-1" />{submitting ? "…" : tr.submit}
               </Button>
             </div>
           )}
@@ -705,48 +703,6 @@ function CustomerMenu() {
           onConfirm={addSetToCart}
         />
       )}
-
-      {/* ── Confirm order dialog ── */}
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>{tr.confirm}</DialogTitle></DialogHeader>
-          <div className="space-y-1 text-sm max-h-60 overflow-y-auto">
-            {cart.map((c, i) => {
-              const sc = c.set_config;
-              return (
-                <div key={i} className="flex justify-between gap-2">
-                  <span className="min-w-0">
-                    {sc && <Layers className="inline h-3.5 w-3.5 mr-1 text-amber-600" />}
-                    {name(c)} × {c.qty}
-                    {sc && (
-                      <span className="block text-xs text-muted-foreground pl-5">
-                        {sc.main.th} · {sc.sides.map(s => s.th).join(", ")}
-                        {sc.drink ? ` · ${sc.drink.th}` : ""}
-                        {" · "}{sc.rice === "rice" ? "ข้าวสวย" : "โจ๊ก"}
-                      </span>
-                    )}
-                    {!sc && c.addons && c.addons.length > 0 && (
-                      <span className="block text-xs text-muted-foreground">
-                        {c.addons.map((a) => `+ ${a.option_name}`).join(" · ")}
-                      </span>
-                    )}
-                  </span>
-                  <span className="shrink-0">฿{(c.price * c.qty).toFixed(0)}</span>
-                </div>
-              );
-            })}
-          </div>
-          <div className="flex justify-between font-bold text-lg border-t pt-2">
-            <span>{tr.total}</span><span>฿{cartTotal.toFixed(0)}</span>
-          </div>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" className="flex-1" onClick={() => setConfirmOpen(false)} disabled={submitting}>{tr.cancel}</Button>
-            <Button className="flex-1" onClick={submit} disabled={submitting}>
-              {submitting ? "…" : tr.confirm}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* ── Order sent dialog ── */}
       <Dialog open={submitted} onOpenChange={setSubmitted}>
