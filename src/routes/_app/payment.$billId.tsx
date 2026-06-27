@@ -657,6 +657,9 @@ function PaymentPage() {
           <p className="text-xs text-muted-foreground -mt-2">
             {lang === "th" ? "มีส่วนลดได้ครั้งละ 1 รายการ ใส่ใหม่จะแทนที่รายการเดิม" : "One discount per order — applying a new one replaces the existing."}
           </p>
+          <p className="text-xs text-muted-foreground -mt-1">
+            {lang === "th" ? `ส่วนลดสูงสุดต่อบิล: ${settingsMaxDiscountPercent}%` : `Maximum discount per bill: ${settingsMaxDiscountPercent}%`}
+          </p>
 
           <Tabs value={discDlgTab} onValueChange={(v) => setDiscDlgTab(v as typeof discDlgTab)}>
             <TabsList className="grid grid-cols-3 w-full">
@@ -671,9 +674,9 @@ function PaymentPage() {
                 <Label>{lang === "th" ? "ลดกี่ %" : "Percentage off"}</Label>
                 <div className="flex items-center gap-2 mt-1">
                   <Input
-                    type="number" min={0} max={100} step={1}
+                    type="number" min={0} max={settingsMaxDiscountPercent} step={1}
                     value={discPctInput}
-                    onChange={(e) => setDiscPctInput(Math.max(0, Math.min(100, Number(e.target.value))))}
+                    onChange={(e) => setDiscPctInput(Math.max(0, Math.min(settingsMaxDiscountPercent, Number(e.target.value))))}
                     className="text-center text-lg font-bold"
                     placeholder="0"
                   />
@@ -681,7 +684,7 @@ function PaymentPage() {
                 </div>
                 {/* Quick picks */}
                 <div className="flex gap-1.5 mt-2 flex-wrap">
-                  {[5, 10, 15, 20, 25, 50].map((p) => (
+                  {[5, 10, 15, 20, 25, 50].filter((p) => p <= settingsMaxDiscountPercent).map((p) => (
                     <button key={p} onClick={() => setDiscPctInput(p)}
                       className={`px-2.5 py-1 rounded-md border text-sm font-medium transition-colors ${discPctInput === p ? "bg-primary text-primary-foreground border-primary" : "hover:bg-accent"}`}>
                       {p}%

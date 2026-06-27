@@ -265,8 +265,19 @@ function GeneralTab() {
           <div className="rounded-lg border p-3 space-y-2">
             <Label>Using discounts</Label>
             <div className="grid grid-cols-[1fr_9rem] gap-3 items-center">
-              <span className="text-sm text-muted-foreground">Maximum discount per bill</span>
-              <Input type="number" min={0} max={100} step="0.01" value={s.max_discount_percent ?? 100} onChange={(e) => setS({ ...s, max_discount_percent: Number(e.target.value) })} />
+              <span className="text-sm text-muted-foreground">Maximum discount per bill (%)</span>
+              <div className="relative">
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step="0.01"
+                  value={s.max_discount_percent ?? 100}
+                  onChange={(e) => setS({ ...s, max_discount_percent: Math.max(0, Math.min(100, Number(e.target.value))) })}
+                  className="pr-8"
+                />
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
+              </div>
             </div>
           </div>
 
