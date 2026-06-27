@@ -54,7 +54,19 @@ type MenuIngredientRow = {
   quantity: number;
   _deleted?: boolean;    // marked for removal on save
 };
-type Settings = { restaurant_name: string; vat_mode: "inclusive" | "exclusive"; vat_rate: number; printer_counter_ip: string | null; printer_kitchen_ip: string | null; starting_cash: number };
+type RoundingMode = "none" | "nearest_whole" | "up_whole" | "down_whole";
+type Settings = {
+  restaurant_name: string;
+  vat_enabled: boolean;
+  vat_mode: "inclusive" | "exclusive";
+  vat_rate: number;
+  service_fee_rate: number;
+  rounding_mode: RoundingMode;
+  max_discount_percent: number;
+  printer_counter_ip: string | null;
+  printer_kitchen_ip: string | null;
+  starting_cash: number;
+};
 type Staff = { id: string; name: string; role: "admin" | "manager" | "staff"; active: boolean };
 // Add-ons
 type AddonOption = { id?: string; name: string; price: number; _deleted?: boolean };
@@ -180,32 +192,88 @@ function GeneralTab() {
   useEffect(() => { supabase.from("settings").select("*").eq("id", 1).single().then(({ data }) => setS(data as Settings)); }, []);
   if (!s) return null;
   const save = async () => {
-    await supabase.from("settings").update(s).eq("id", 1);
+    const { error } = await supabase.from("settings").update(s).eq("id", 1);
+    if (error) { toast.error(error.message); return; }
     toast.success("Saved");
   };
   return (
-    <Card className="max-w-xl mt-4">
-      <CardContent className="space-y-4 pt-6">
-        <div><Label>{t("restaurant_name")}</Label><Input value={s.restaurant_name} onChange={(e) => setS({ ...s, restaurant_name: e.target.value })} /></div>
-        <div>
-          <Label>{t("vat_mode")}</Label>
-          <Select value={s.vat_mode} onValueChange={(v) => setS({ ...s, vat_mode: v as Settings["vat_mode"] })}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="inclusive">{t("vat_inclusive")}</SelectItem>
-              <SelectItem value="exclusive">{t("vat_exclusive")}</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div><Label>{t("vat_rate")}</Label><Input type="number" step="0.01" value={s.vat_rate} onChange={(e) => setS({ ...s, vat_rate: Number(e.target.value) })} /></div>
-        <div>
-          <Label>{t("starting_cash")}</Label>
-          <Input type="number" step="1" value={s.starting_cash ?? 0} onChange={(e) => setS({ ...s, starting_cash: Number(e.target.value) })} />
-          <p className="text-xs text-muted-foreground mt-1">{t("starting_cash_help")}</p>
-        </div>
-        <Button onClick={save}>{t("save")}</Button>
-      </CardContent>
-    </Card>
+    <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,32rem)_minmax(0,36rem)]">
+      <Card>
+        <CardHeader><CardTitle className="text-base">Store information</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <div><Label>{t("restaurant_name")}</Label><Input value={s.restaurant_name} onChange={(e) => setS({ ...s, restaurant_name: e.target.value })} /></div>
+          <div>
+            <Label>{t("starting_cash")}</Label>
+            <Input type="number" step="1" value={s.starting_cash ?? 0} onChange={(e) => setS({ ...s, starting_cash: Number(e.target.value) })} />
+            <p className="text-xs text-muted-foreground mt-1">{t("starting_cash_help")}</p>
+          </div>
+          <Button onClick={save}>{t("save")}</Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Receipt setup</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="rounded-lg border p-3 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <Label>Value Added Tax (VAT)</Label>
+                <p className="text-xs text-muted-foreground">Enable or hide VAT on bills and receipts.</p>
+              </div>
+              <Switch checked={s.vat_enabled} onCheckedChange={(checked) => setS({ ...s, vat_enabled: checked })} />
+            </div>
+            {s.vat_enabled && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>{t("vat_mode")}</Label>
+                  <Select value={s.vat_mode} onValueChange={(v) => setS({ ...s, vat_mode: v as Settings["vat_mode"] })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="inclusive">{t("vat_inclusive")}</SelectItem>
+                      <SelectItem value="exclusive">{t("vat_exclusive")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div><Label>{t("vat_rate")}</Label><Input type="number" min={0} max={100} step="0.01" value={s.vat_rate} onChange={(e) => setS({ ...s, vat_rate: Number(e.target.value) })} /></div>
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-lg border p-3 space-y-2">
+            <Label>Service fee</Label>
+            <div className="grid grid-cols-[1fr_9rem] gap-3 items-center">
+              <span className="text-sm text-muted-foreground">Service rate</span>
+              <Input type="number" min={0} max={100} step="0.01" value={s.service_fee_rate ?? 0} onChange={(e) => setS({ ...s, service_fee_rate: Number(e.target.value) })} />
+            </div>
+          </div>
+
+          <div className="rounded-lg border p-3 space-y-2">
+            <Label>Rounding</Label>
+            <Select value={s.rounding_mode ?? "none"} onValueChange={(v) => setS({ ...s, rounding_mode: v as RoundingMode })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No rounding</SelectItem>
+                <SelectItem value="nearest_whole">Round to nearest ฿1</SelectItem>
+                <SelectItem value="up_whole">Round up to ฿1</SelectItem>
+                <SelectItem value="down_whole">Round down to ฿1</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="rounded-lg border p-3 space-y-2">
+            <Label>Using discounts</Label>
+            <div className="grid grid-cols-[1fr_9rem] gap-3 items-center">
+              <span className="text-sm text-muted-foreground">Maximum discount per bill</span>
+              <Input type="number" min={0} max={100} step="0.01" value={s.max_discount_percent ?? 100} onChange={(e) => setS({ ...s, max_discount_percent: Number(e.target.value) })} />
+            </div>
+          </div>
+
+          <Button onClick={save}>{t("save")}</Button>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 

@@ -30,6 +30,7 @@ export function ReceiptPreview72({ data }: { data: ReceiptData }) {
       <div className="flex justify-between">
         <span>VAT {data.vatRate}% ({data.vatMode})</span><span>{fmt(data.vatAmount)}</span>
       </div>
+      {data.roundingAdjustment ? <div className="flex justify-between"><span>Rounding</span><span>{data.roundingAdjustment > 0 ? "+" : ""}{fmt(data.roundingAdjustment)}</span></div> : null}
       <div className="flex justify-between font-bold text-[14px] mt-1">
         <span>TOTAL</span><span>{fmt(data.total)}</span>
       </div>
@@ -83,6 +84,7 @@ export function receiptToHtml(data: ReceiptData): string {
     ${data.discount ? `<div class="row"><span>Discount</span><span>-${fmt(data.discount)}</span></div>` : ""}
     ${data.serviceCharge ? `<div class="row"><span>Service</span><span>${fmt(data.serviceCharge)}</span></div>` : ""}
     <div class="row"><span>VAT ${data.vatRate}% (${data.vatMode})</span><span>${fmt(data.vatAmount)}</span></div>
+    ${data.roundingAdjustment ? `<div class="row"><span>Rounding</span><span>${data.roundingAdjustment > 0 ? "+" : ""}${fmt(data.roundingAdjustment)}</span></div>` : ""}
     <div class="row b lg"><span>TOTAL</span><span>${fmt(data.total)}</span></div>
     <div class="hr"></div>
     ${pays}

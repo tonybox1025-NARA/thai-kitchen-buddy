@@ -22,6 +22,7 @@ export const Route = createFileRoute("/_app/payment/$billId")({ component: Payme
 type Bill = {
   id: string; order_id: string; subtotal: number; discount_amount: number;
   member_discount_amount: number; vat_mode: "inclusive" | "exclusive"; vat_rate: number;
+  service_fee_rate: number; service_fee_amount: number; rounding_mode: RoundingMode; rounding_adjustment: number;
   vat_amount: number; total: number; status: string; paid_at: string | null;
 };
 type Item = { id: string; name_th: string; name_en: string; qty: number; unit_price: number; status: string };
@@ -42,15 +43,46 @@ type BillDiscount = {
 };
 
 const DENOMS = [1000, 500, 100, 50, 20, 10, 5, 1];
+type RoundingMode = "none" | "nearest_whole" | "up_whole" | "down_whole";
 
 /** Compute VAT and final total from after-discount subtotal */
-function computeTotals(afterDisc: number, vatMode: "inclusive" | "exclusive", vatRate: number) {
-  const rate = vatRate / 100;
-  if (vatMode === "exclusive") {
-    const vatAmount = afterDisc * rate;
-    return { vatAmount, total: afterDisc + vatAmount };
+function roundMoney(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+function applyRounding(value: number, mode: RoundingMode) {
+  if (mode === "nearest_whole") return Math.round(value);
+  if (mode === "up_whole") return Math.ceil(value);
+  if (mode === "down_whole") return Math.floor(value);
+  return roundMoney(value);
+}
+
+function computeTotals(
+  afterDisc: number,
+  vatEnabled: boolean,
+  vatMode: "inclusive" | "exclusive",
+  vatRate: number,
+  serviceFeeRate: number,
+  roundingMode: RoundingMode,
+) {
+  const serviceFeeAmount = roundMoney(afterDisc * (serviceFeeRate / 100));
+  const taxableBase = afterDisc + serviceFeeAmount;
+  let vatAmount = 0;
+  let beforeRounding = taxableBase;
+
+  if (vatEnabled) {
+    const rate = vatRate / 100;
+    if (vatMode === "exclusive") {
+      vatAmount = roundMoney(taxableBase * rate);
+      beforeRounding = taxableBase + vatAmount;
+    } else {
+      vatAmount = roundMoney(taxableBase - taxableBase / (1 + rate));
+    }
   }
-  return { vatAmount: afterDisc - afterDisc / (1 + rate), total: afterDisc };
+
+  const total = applyRounding(beforeRounding, roundingMode);
+  const roundingAdjustment = roundMoney(total - beforeRounding);
+  return { serviceFeeAmount, vatAmount, roundingAdjustment, total };
 }
 
 function PaymentPage() {
@@ -66,7 +98,11 @@ function PaymentPage() {
   const [memberDisc, setMemberDisc] = useState(0);
   const [tableCode, setTableCode] = useState("");
   const [restName, setRestName] = useState("");
+  const [settingsVatEnabled, setSettingsVatEnabled] = useState(true);
   const [settingsVatMode, setSettingsVatMode] = useState<"inclusive" | "exclusive">("inclusive");
+  const [settingsServiceFeeRate, setSettingsServiceFeeRate] = useState(0);
+  const [settingsRoundingMode, setSettingsRoundingMode] = useState<RoundingMode>("none");
+  const [settingsMaxDiscountPercent, setSettingsMaxDiscountPercent] = useState(100);
 
   // QR payment state
   const [qrAmt, setQrAmt] = useState(0);
@@ -106,7 +142,7 @@ function PaymentPage() {
     const [{ data: b }, { data: ps }, { data: s }] = await Promise.all([
       supabase.from("bills").select("*").eq("id", billId).single(),
       supabase.from("payments").select("*").eq("bill_id", billId),
-      supabase.from("settings").select("restaurant_name, vat_mode, vat_rate").eq("id", 1).single(),
+      supabase.from("settings").select("restaurant_name, vat_enabled, vat_mode, vat_rate, service_fee_rate, rounding_mode, max_discount_percent").eq("id", 1).single(),
     ]);
     if (b) {
       setBill(b as Bill);
@@ -142,7 +178,15 @@ function PaymentPage() {
       }
     }
     if (ps) setPayments(ps as Payment[]);
-    if (s) { setRestName(s.restaurant_name); setSettingsVatMode((s.vat_mode as "inclusive" | "exclusive") || "inclusive"); }
+    if (s) {
+      const row = s as any;
+      setRestName(row.restaurant_name);
+      setSettingsVatEnabled(row.vat_enabled ?? true);
+      setSettingsVatMode((row.vat_mode as "inclusive" | "exclusive") || "inclusive");
+      setSettingsServiceFeeRate(Number(row.service_fee_rate ?? 0));
+      setSettingsRoundingMode((row.rounding_mode as RoundingMode) || "none");
+      setSettingsMaxDiscountPercent(Number(row.max_discount_percent ?? 100));
+    }
   };
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [billId]);
@@ -151,9 +195,16 @@ function PaymentPage() {
   const subtotal = items.reduce((s, i) => s + i.qty * Number(i.unit_price), 0);
   const totalDisc = appliedDiscount?.amount ?? 0;
   const afterDisc = Math.max(0, subtotal - totalDisc - memberDisc);
-  const { vatAmount, total } = bill
-    ? computeTotals(afterDisc, settingsVatMode, Number(bill.vat_rate))
-    : { vatAmount: 0, total: afterDisc };
+  const { serviceFeeAmount, vatAmount, roundingAdjustment, total } = bill
+    ? computeTotals(
+      afterDisc,
+      settingsVatEnabled,
+      settingsVatMode,
+      Number(bill.vat_rate),
+      settingsServiceFeeRate,
+      settingsRoundingMode,
+    )
+    : { serviceFeeAmount: 0, vatAmount: 0, roundingAdjustment: 0, total: afterDisc };
 
   const paid = payments.reduce((s, p) => s + Number(p.amount), 0);
   const remaining = Math.max(0, total - paid);
@@ -164,12 +215,16 @@ function PaymentPage() {
     await supabase.from("bills").update({
       subtotal,
       member_discount_amount: memberDisc,
+      service_fee_rate: settingsServiceFeeRate,
+      service_fee_amount: serviceFeeAmount,
+      rounding_mode: settingsRoundingMode,
+      rounding_adjustment: roundingAdjustment,
       vat_amount: vatAmount,
       total,
     }).eq("id", bill.id);
   };
 
-  useEffect(() => { persistBill(); /* eslint-disable-next-line */ }, [memberDisc, bill?.id, subtotal]);
+  useEffect(() => { persistBill(); /* eslint-disable-next-line */ }, [memberDisc, bill?.id, subtotal, settingsVatEnabled, settingsVatMode, settingsServiceFeeRate, settingsRoundingMode]);
 
   // Sync QR field with remaining balance
   useEffect(() => { setQrAmt(remaining); }, [remaining]);
@@ -178,11 +233,22 @@ function PaymentPage() {
 
   // Live preview amount for the dialog
   const discPreviewAmt = (() => {
-    if (discDlgTab === "percent") return Math.round(((subtotal * discPctInput) / 100) * 100) / 100;
-    if (discDlgTab === "fixed") return Math.min(discFixedInput, subtotal);
+    const maxDiscountAmount = roundMoney(subtotal * (settingsMaxDiscountPercent / 100));
+    if (discDlgTab === "percent") return Math.min(roundMoney((subtotal * discPctInput) / 100), maxDiscountAmount);
+    if (discDlgTab === "fixed") return Math.min(discFixedInput, subtotal, maxDiscountAmount);
     const fi = items.find((i) => i.id === discFreeItemId);
-    return fi ? fi.qty * Number(fi.unit_price) : 0;
+    return fi ? Math.min(fi.qty * Number(fi.unit_price), maxDiscountAmount) : 0;
   })();
+  const discPreviewTotal = bill
+    ? computeTotals(
+      Math.max(0, subtotal - discPreviewAmt - memberDisc),
+      settingsVatEnabled,
+      settingsVatMode,
+      Number(bill.vat_rate),
+      settingsServiceFeeRate,
+      settingsRoundingMode,
+    ).total
+    : Math.max(0, subtotal - discPreviewAmt - memberDisc);
 
   const applyDiscount = async () => {
     if (!bill || !staff) return;
@@ -190,12 +256,15 @@ function PaymentPage() {
     const extras: Record<string, unknown> = {};
 
     if (discDlgTab === "percent") {
-      if (discPctInput <= 0 || discPctInput > 100) { toast.error(lang === "th" ? "ใส่ % ที่ถูกต้อง" : "Enter a valid %"); return; }
-      amount = Math.round(((subtotal * discPctInput) / 100) * 100) / 100;
+      if (discPctInput <= 0 || discPctInput > settingsMaxDiscountPercent) {
+        toast.error(lang === "th" ? `ส่วนลดสูงสุด ${settingsMaxDiscountPercent}%` : `Maximum discount is ${settingsMaxDiscountPercent}%`);
+        return;
+      }
+      amount = roundMoney((subtotal * discPctInput) / 100);
       extras.percent_value = discPctInput;
     } else if (discDlgTab === "fixed") {
       if (discFixedInput <= 0) { toast.error(lang === "th" ? "ใส่จำนวนเงิน" : "Enter an amount"); return; }
-      amount = Math.min(discFixedInput, subtotal);
+      amount = Math.min(discFixedInput, subtotal, roundMoney(subtotal * (settingsMaxDiscountPercent / 100)));
       extras.fixed_value = discFixedInput;
     } else {
       const fi = items.find((i) => i.id === discFreeItemId);
@@ -203,6 +272,11 @@ function PaymentPage() {
       amount = fi.qty * Number(fi.unit_price);
       extras.free_item_id = fi.id;
       extras.free_item_name = lang === "th" ? fi.name_th : fi.name_en;
+    }
+    const maxDiscountAmount = roundMoney(subtotal * (settingsMaxDiscountPercent / 100));
+    if (amount > maxDiscountAmount) {
+      toast.error(lang === "th" ? `ส่วนลดสูงสุด ${settingsMaxDiscountPercent}%` : `Maximum discount is ${settingsMaxDiscountPercent}%`);
+      return;
     }
 
     // Delete any existing discount for this bill, then insert new one
@@ -217,9 +291,20 @@ function PaymentPage() {
 
     // Recompute totals with new discount and persist to bill
     const newAfterDisc = Math.max(0, subtotal - amount - memberDisc);
-    const { vatAmount: newVat, total: newTotal } = computeTotals(newAfterDisc, settingsVatMode, Number(bill.vat_rate));
+    const { serviceFeeAmount: newService, vatAmount: newVat, roundingAdjustment: newRounding, total: newTotal } = computeTotals(
+      newAfterDisc,
+      settingsVatEnabled,
+      settingsVatMode,
+      Number(bill.vat_rate),
+      settingsServiceFeeRate,
+      settingsRoundingMode,
+    );
     await supabase.from("bills").update({
       discount_amount: amount,
+      service_fee_rate: settingsServiceFeeRate,
+      service_fee_amount: newService,
+      rounding_mode: settingsRoundingMode,
+      rounding_adjustment: newRounding,
       vat_amount: newVat,
       total: newTotal,
     }).eq("id", bill.id);
@@ -233,8 +318,23 @@ function PaymentPage() {
     if (!bill) return;
     await (supabase as any).from("bill_discounts").delete().eq("bill_id", bill.id);
     const newAfterDisc = Math.max(0, subtotal - memberDisc);
-    const { vatAmount: newVat, total: newTotal } = computeTotals(newAfterDisc, settingsVatMode, Number(bill.vat_rate));
-    await supabase.from("bills").update({ discount_amount: 0, vat_amount: newVat, total: newTotal }).eq("id", bill.id);
+    const { serviceFeeAmount: newService, vatAmount: newVat, roundingAdjustment: newRounding, total: newTotal } = computeTotals(
+      newAfterDisc,
+      settingsVatEnabled,
+      settingsVatMode,
+      Number(bill.vat_rate),
+      settingsServiceFeeRate,
+      settingsRoundingMode,
+    );
+    await supabase.from("bills").update({
+      discount_amount: 0,
+      service_fee_rate: settingsServiceFeeRate,
+      service_fee_amount: newService,
+      rounding_mode: settingsRoundingMode,
+      rounding_adjustment: newRounding,
+      vat_amount: newVat,
+      total: newTotal,
+    }).eq("id", bill.id);
     await load();
     toast.success(lang === "th" ? "ยกเลิกส่วนลดแล้ว" : "Discount removed");
   };
@@ -280,10 +380,12 @@ function PaymentPage() {
     }
     await printCounter({
       kind: "receipt", bill_id: bill.id, restaurant: restName, table: tableCode,
-      items, total, vatAmount: settingsVatMode === "exclusive" ? vatAmount : 0,
+      items, total, vatAmount: settingsVatEnabled && settingsVatMode === "exclusive" ? vatAmount : 0,
       vat_mode: settingsVatMode, payments: [...payments], language: lang,
       discountAmount: appliedDiscount?.amount ?? 0,
       memberDiscountAmount: memberDisc,
+      serviceFeeAmount,
+      roundingAdjustment,
       discount: appliedDiscount ? { type: appliedDiscount.type, label: discTypeLabel(appliedDiscount), amount: appliedDiscount.amount } : null,
     });
     toast.success(t("paid"));
@@ -390,7 +492,9 @@ function PaymentPage() {
               )}
 
               {memberDisc > 0 && <Row label={t("member_discount")} value={`- ${thb(memberDisc)}`} />}
-              {settingsVatMode === "exclusive" && <Row label={`${t("vat")} ${bill.vat_rate}%`} value={thb(vatAmount)} />}
+              {serviceFeeAmount > 0 && <Row label={`Service ${settingsServiceFeeRate}%`} value={thb(serviceFeeAmount)} />}
+              {settingsVatEnabled && settingsVatMode === "exclusive" && <Row label={`${t("vat")} ${bill.vat_rate}%`} value={thb(vatAmount)} />}
+              {roundingAdjustment !== 0 && <Row label="Rounding" value={`${roundingAdjustment > 0 ? "+" : ""}${thb(roundingAdjustment)}`} />}
               <div className="border-t pt-2 mt-2 flex justify-between text-lg font-bold">
                 <span>{t("total")}</span><span className="tabular-nums">{thb(total)}</span>
               </div>
@@ -589,7 +693,7 @@ function PaymentPage() {
                 <div className="rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-3 text-center">
                   <p className="text-xs text-muted-foreground">{t("disc_saves")}</p>
                   <p className="text-2xl font-black text-green-600 dark:text-green-400 tabular-nums">- {thb(discPreviewAmt)}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{lang === "th" ? "ยอดที่ต้องชำระ" : "New total"}: {thb(Math.max(0, total - discPreviewAmt + totalDisc))}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{lang === "th" ? "ยอดที่ต้องชำระ" : "New total"}: {thb(discPreviewTotal)}</p>
                 </div>
               )}
             </TabsContent>
@@ -618,7 +722,7 @@ function PaymentPage() {
                 <div className="rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-3 text-center">
                   <p className="text-xs text-muted-foreground">{t("disc_saves")}</p>
                   <p className="text-2xl font-black text-green-600 dark:text-green-400 tabular-nums">- {thb(discPreviewAmt)}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{lang === "th" ? "ยอดที่ต้องชำระ" : "New total"}: {thb(Math.max(0, total - discPreviewAmt + totalDisc))}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{lang === "th" ? "ยอดที่ต้องชำระ" : "New total"}: {thb(discPreviewTotal)}</p>
                 </div>
               )}
             </TabsContent>
@@ -780,8 +884,10 @@ function PaymentPage() {
                 <span className="tabular-nums">- {thb(appliedDiscount.amount)}</span>
               </div>
             )}
-            {memberDisc > 0 && <div className="flex justify-between"><span>{t("member_discount")}</span><span>- {thb(memberDisc)}</span></div>}
-            {settingsVatMode === "exclusive" && <div className="flex justify-between"><span>VAT {bill?.vat_rate}%</span><span>{thb(vatAmount)}</span></div>}
+              {memberDisc > 0 && <div className="flex justify-between"><span>{t("member_discount")}</span><span>- {thb(memberDisc)}</span></div>}
+            {serviceFeeAmount > 0 && <div className="flex justify-between"><span>Service {settingsServiceFeeRate}%</span><span>{thb(serviceFeeAmount)}</span></div>}
+            {settingsVatEnabled && settingsVatMode === "exclusive" && <div className="flex justify-between"><span>VAT {bill?.vat_rate}%</span><span>{thb(vatAmount)}</span></div>}
+            {roundingAdjustment !== 0 && <div className="flex justify-between"><span>Rounding</span><span>{roundingAdjustment > 0 ? "+" : ""}{thb(roundingAdjustment)}</span></div>}
           </div>
           <div className="border-t w-full max-w-xs pt-6 text-center mt-4">
             <p className="text-muted-foreground text-lg">{t("total")}</p>

@@ -144,6 +144,10 @@ export type Database = {
           member_discount_amount: number
           order_id: string
           paid_at: string | null
+          rounding_adjustment: number
+          rounding_mode: string
+          service_fee_amount: number
+          service_fee_rate: number
           shift_id: string | null
           status: Database["public"]["Enums"]["bill_status"]
           subtotal: number
@@ -161,6 +165,10 @@ export type Database = {
           member_discount_amount?: number
           order_id: string
           paid_at?: string | null
+          rounding_adjustment?: number
+          rounding_mode?: string
+          service_fee_amount?: number
+          service_fee_rate?: number
           shift_id?: string | null
           status?: Database["public"]["Enums"]["bill_status"]
           subtotal?: number
@@ -178,6 +186,10 @@ export type Database = {
           member_discount_amount?: number
           order_id?: string
           paid_at?: string | null
+          rounding_adjustment?: number
+          rounding_mode?: string
+          service_fee_amount?: number
+          service_fee_rate?: number
           shift_id?: string | null
           status?: Database["public"]["Enums"]["bill_status"]
           subtotal?: number
@@ -765,8 +777,12 @@ export type Database = {
           printer_counter_ip: string | null
           printer_kitchen_ip: string | null
           restaurant_name: string
+          max_discount_percent: number
+          rounding_mode: string
+          service_fee_rate: number
           starting_cash: number
           updated_at: string
+          vat_enabled: boolean
           vat_mode: Database["public"]["Enums"]["vat_mode"]
           vat_rate: number
         }
@@ -776,8 +792,12 @@ export type Database = {
           printer_counter_ip?: string | null
           printer_kitchen_ip?: string | null
           restaurant_name?: string
+          max_discount_percent?: number
+          rounding_mode?: string
+          service_fee_rate?: number
           starting_cash?: number
           updated_at?: string
+          vat_enabled?: boolean
           vat_mode?: Database["public"]["Enums"]["vat_mode"]
           vat_rate?: number
         }
@@ -787,8 +807,12 @@ export type Database = {
           printer_counter_ip?: string | null
           printer_kitchen_ip?: string | null
           restaurant_name?: string
+          max_discount_percent?: number
+          rounding_mode?: string
+          service_fee_rate?: number
           starting_cash?: number
           updated_at?: string
+          vat_enabled?: boolean
           vat_mode?: Database["public"]["Enums"]["vat_mode"]
           vat_rate?: number
         }

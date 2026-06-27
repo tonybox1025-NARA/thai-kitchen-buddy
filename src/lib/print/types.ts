@@ -22,6 +22,7 @@ export type ReceiptData = {
   subtotal: number;
   discount?: number;
   serviceCharge?: number;
+  roundingAdjustment?: number;
   vatMode: "inclusive" | "exclusive";
   vatRate: number;
   vatAmount: number;
