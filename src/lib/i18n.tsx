@@ -253,7 +253,7 @@ const dict: Dict = {
   no_data: { th: "ไม่มีข้อมูล", en: "No data" },
   back: { th: "กลับ", en: "Back" },
   qr_codes: { th: "QR โต๊ะ", en: "Table QR" },
-  qr_help: { th: "พิมพ์ QR วางบนโต๊ะ ลูกค้าสแกนแล้วสั่งจากมือถือ พนักงานยืนยันก่อนส่งครัว", en: "Print and place on tables. Customers scan to order from their phone; staff confirms before sending to kitchen." },
+  qr_help: { th: "พิมพ์ QR วางบนโต๊ะ ลูกค้าสแกนแล้วสั่งจากมือถือ ออเดอร์จะส่งเข้าครัวทันทีและแจ้งเตือนที่หน้า POS", en: "Print and place on tables. Customers scan to order; orders go to the kitchen immediately and alert the POS." },
   print_all: { th: "พิมพ์ทั้งหมด", en: "Print all" },
   print: { th: "พิมพ์", en: "Print" },
 };

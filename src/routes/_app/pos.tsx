@@ -53,20 +53,22 @@ function PosPage() {
   useEffect(() => {
     load();
     loadSpecialOrders();
+    const showQrAlert = (tableCode: string) => {
+      toast.success(`${t("qr_alert")} — ${t("table")} ${tableCode}`);
+      playAlertBeep();
+      setBanner({ tableCode, key: Date.now() });
+    };
     const ch = supabase
       .channel("tables-rt")
-      .on("postgres_changes", { event: "*", schema: "public", table: "restaurant_tables" }, () => load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => loadSpecialOrders())
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "orders", filter: "source=eq.qr" }, async (payload) => {
-        toast.success(t("qr_alert"));
-        playAlertBeep();
-        const tableId = (payload.new as { table_id?: string } | null)?.table_id;
-        if (tableId) {
-          await supabase.from("restaurant_tables").update({ has_qr_alert: true }).eq("id", tableId);
-          const { data: tbl } = await supabase.from("restaurant_tables").select("code").eq("id", tableId).maybeSingle();
-          setBanner({ tableCode: tbl?.code ?? "?", key: Date.now() });
+      .on("postgres_changes", { event: "*", schema: "public", table: "restaurant_tables" }, (payload) => {
+        load();
+        const next = payload.new as Partial<RTable> | null;
+        const prev = payload.old as Partial<RTable> | null;
+        if (next?.has_qr_alert && !prev?.has_qr_alert) {
+          showQrAlert(next.code ?? "?");
         }
       })
+      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => loadSpecialOrders())
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [t]);
@@ -99,7 +101,6 @@ function PosPage() {
       }
       const order = orders?.[0] ?? null;
       if (order) {
-        if (tbl.has_qr_alert) await supabase.from("restaurant_tables").update({ has_qr_alert: false }).eq("id", tbl.id);
         nav({ to: "/order/$orderId", params: { orderId: order.id } });
       } else {
         toast.error(t("no_open_order"));

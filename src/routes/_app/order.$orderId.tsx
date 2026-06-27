@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Minus, Trash2, ChefHat, Receipt, ArrowLeft, AlertTriangle, ArrowLeftRight, X, Printer, Eye, Layers } from "lucide-react";
+import { Plus, Minus, Trash2, ChefHat, Receipt, ArrowLeft, AlertTriangle, ArrowLeftRight, X, Printer, Eye, Layers, Bell } from "lucide-react";
 import { ManagerPinDialog } from "@/components/ManagerPinDialog";
 import { SetMenuDialog } from "@/components/SetMenuDialog";
 import { SETS, type SetConfig } from "@/lib/set-menu";
@@ -86,6 +86,7 @@ function OrderPage() {
   const [managerAction, setManagerAction] = useState<"void" | "close_table" | "move_table" | null>(null);
   const [tableCode, setTableCode] = useState<string>("");
   const [tableId, setTableId] = useState<string>("");
+  const [tableHasQrAlert, setTableHasQrAlert] = useState(false);
   const [orderSource, setOrderSource] = useState<string>("pos");
   const [orderNumber, setOrderNumber] = useState<string | null>(null);
   const [closeTableOpen, setCloseTableOpen] = useState(false);
@@ -120,8 +121,11 @@ function OrderPage() {
     }
     if (ord?.table_id) {
       setTableId(ord.table_id);
-      const { data: tbl } = await supabase.from("restaurant_tables").select("code").eq("id", ord.table_id).single();
-      if (tbl) setTableCode(tbl.code);
+      const { data: tbl } = await supabase.from("restaurant_tables").select("code,has_qr_alert").eq("id", ord.table_id).single();
+      if (tbl) {
+        setTableCode(tbl.code);
+        setTableHasQrAlert(Boolean((tbl as any).has_qr_alert));
+      }
     }
   };
 
@@ -338,6 +342,13 @@ function OrderPage() {
     setMoveTableOpen(true);
   };
 
+  const acknowledgeQrAlert = async () => {
+    if (!tableId) return;
+    await supabase.from("restaurant_tables").update({ has_qr_alert: false }).eq("id", tableId);
+    setTableHasQrAlert(false);
+    toast.success(lang === "th" ? "รับทราบออเดอร์ QR แล้ว" : "QR order checked");
+  };
+
   const doCloseTable = async () => {
     // For table orders, tableId is required; for takeout/staff meal it can be absent
     const isTableOrder = orderSource === "pos" || orderSource === "qr";
@@ -449,7 +460,14 @@ function OrderPage() {
               {orderNumber && <span className="text-base font-mono bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded">{orderNumber}</span>}
             </h1>
           ) : (
-            <h1 className="text-xl font-bold">{t("table")} {tableCode}</h1>
+            <h1 className="text-xl font-bold flex items-center gap-2">
+              {t("table")} {tableCode}
+              {orderSource === "qr" && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-destructive px-2 py-0.5 text-xs font-semibold text-destructive-foreground">
+                  <Bell className="h-3 w-3" />QR
+                </span>
+              )}
+            </h1>
           )}
           <div className="ml-auto flex gap-2">
             {(orderSource === "pos" || orderSource === "qr") && (
@@ -462,6 +480,21 @@ function OrderPage() {
             </Button>
           </div>
         </div>
+
+        {tableHasQrAlert && (
+          <div className="mx-4 mb-3 rounded-xl border border-destructive bg-destructive/10 p-3 text-sm flex items-center gap-3">
+            <Bell className="h-5 w-5 text-destructive animate-pulse shrink-0" />
+            <div className="min-w-0">
+              <div className="font-semibold text-destructive">{t("qr_alert")}</div>
+              <div className="text-muted-foreground">
+                {lang === "th" ? "ตรวจรายการ QR ที่เพิ่งเข้ามา แล้วกดรับทราบ" : "Review the latest QR order, then mark it checked."}
+              </div>
+            </div>
+            <Button size="sm" className="ml-auto shrink-0" onClick={acknowledgeQrAlert}>
+              {lang === "th" ? "รับทราบ" : "Checked"}
+            </Button>
+          </div>
+        )}
 
         {/* Category filter bar — sticks to top when scrolling */}
         <div className="sticky top-0 z-10 bg-background border-b px-4 py-2 flex gap-2 flex-wrap">
