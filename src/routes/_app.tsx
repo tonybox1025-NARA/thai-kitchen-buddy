@@ -5,7 +5,10 @@ import { useI18n } from "@/lib/i18n";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { PinKeypad } from "@/components/PinKeypad";
 import { Button } from "@/components/ui/button";
-import { LayoutGrid, BarChart3, FileText, Settings, LogOut, UserCircle2, Heart } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { LayoutGrid, BarChart3, FileText, Settings, LogOut, UserCircle2, Heart, UtensilsCrossed } from "lucide-react";
 import { installAudioUnlockListeners, unlockAudio } from "@/lib/audio-alert";
 import { useQrAlertCount } from "@/lib/qr-alert-count";
 
@@ -28,19 +31,10 @@ function AppLayout() {
     }
   }, [loading, session, nav, setStaff]);
 
-  if (loading) {
-    return <div className="min-h-screen grid place-items-center text-muted-foreground">{t("loading")}</div>;
-  }
+  if (loading) return <LoginFallback onLogin={() => nav({ to: "/login", replace: true })} />;
 
   if (!session) {
-    return (
-      <div className="min-h-screen grid place-items-center gap-3 p-4 text-center text-muted-foreground">
-        <p>{t("loading")}</p>
-        <Button asChild variant="outline">
-          <Link to="/login">{t("sign_in")}</Link>
-        </Button>
-      </div>
-    );
+    return <LoginFallback onLogin={() => nav({ to: "/login", replace: true })} />;
   }
 
   // Staff PIN gate
@@ -113,6 +107,35 @@ function AppLayout() {
       <main className="flex-1">
         <Outlet />
       </main>
+    </div>
+  );
+}
+
+function LoginFallback({ onLogin }: { onLogin: () => void }) {
+  return (
+    <div className="min-h-screen grid place-items-center bg-gradient-to-br from-background to-muted p-4">
+      <div className="absolute top-4 right-4"><LanguageToggle /></div>
+      <Card className="w-full max-w-md shadow-xl">
+        <CardHeader className="text-center">
+          <div className="mx-auto h-14 w-14 rounded-2xl bg-primary text-primary-foreground grid place-items-center mb-2">
+            <UtensilsCrossed className="h-7 w-7" />
+          </div>
+          <CardTitle className="text-2xl">เข้าใช้งานเครื่อง</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="app-preview-email">อีเมล</Label>
+              <Input id="app-preview-email" type="email" autoComplete="email" readOnly />
+            </div>
+            <div>
+              <Label htmlFor="app-preview-password">รหัสผ่าน</Label>
+              <Input id="app-preview-password" type="password" autoComplete="current-password" readOnly />
+            </div>
+            <Button className="w-full" size="lg" onClick={onLogin}>เข้าสู่ระบบ</Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
