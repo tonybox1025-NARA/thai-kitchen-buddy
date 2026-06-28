@@ -145,7 +145,7 @@ function PaymentPage() {
       supabase.from("settings").select("restaurant_name, vat_enabled, vat_mode, vat_rate, service_fee_rate, rounding_mode, max_discount_percent").eq("id", 1).single(),
     ]);
     if (b) {
-      setBill(b as Bill);
+      setBill(b as unknown as Bill);
       setMemberDisc(Number(b.member_discount_amount));
 
       const { data: it } = await supabase.from("order_items").select("*").eq("order_id", b.order_id).neq("status", "voided");
@@ -212,7 +212,7 @@ function PaymentPage() {
   // Persist member discount + VAT + total to bill (discount_amount owned by applyDiscount/removeDiscount)
   const persistBill = async () => {
     if (!bill) return;
-    await supabase.from("bills").update({
+    await (supabase as any).from("bills").update({
       subtotal,
       member_discount_amount: memberDisc,
       service_fee_rate: settingsServiceFeeRate,
@@ -299,7 +299,7 @@ function PaymentPage() {
       settingsServiceFeeRate,
       settingsRoundingMode,
     );
-    await supabase.from("bills").update({
+    await (supabase as any).from("bills").update({
       discount_amount: amount,
       service_fee_rate: settingsServiceFeeRate,
       service_fee_amount: newService,
@@ -326,7 +326,7 @@ function PaymentPage() {
       settingsServiceFeeRate,
       settingsRoundingMode,
     );
-    await supabase.from("bills").update({
+    await (supabase as any).from("bills").update({
       discount_amount: 0,
       service_fee_rate: settingsServiceFeeRate,
       service_fee_amount: newService,

@@ -192,10 +192,10 @@ function IngredientsTab() {
 function GeneralTab() {
   const { t } = useI18n();
   const [s, setS] = useState<Settings | null>(null);
-  useEffect(() => { supabase.from("settings").select("*").eq("id", 1).single().then(({ data }) => setS(data as Settings)); }, []);
+  useEffect(() => { supabase.from("settings").select("*").eq("id", 1).single().then(({ data }) => setS(data as unknown as Settings)); }, []);
   if (!s) return null;
   const save = async () => {
-    const { error } = await supabase.from("settings").update(s).eq("id", 1);
+    const { error } = await (supabase as any).from("settings").update(s).eq("id", 1);
     if (error) { toast.error(error.message); return; }
     toast.success("Saved");
   };
@@ -297,7 +297,7 @@ function PrintersTab() {
   const [recentJob, setRecentJob] = useState<{ status: string; printed_at: string | null; created_at: string } | null>(null);
 
   useEffect(() => {
-    supabase.from("settings").select("*").eq("id", 1).single().then(({ data }) => setS(data as Settings));
+    supabase.from("settings").select("*").eq("id", 1).single().then(({ data }) => setS(data as unknown as Settings));
     supabase.from("print_jobs").select("status,printed_at,created_at").order("created_at", { ascending: false }).limit(1).maybeSingle()
       .then(({ data }) => setRecentJob(data as typeof recentJob));
   }, []);
