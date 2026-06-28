@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { ArrowLeft, Banknote, QrCode, CreditCard, Printer, RotateCcw, PencilLine, Eye, Tag, X, Percent, DollarSign, Gift, Scissors, Check } from "lucide-react";
+import { ArrowLeft, Banknote, QrCode, CreditCard, Printer, RotateCcw, PencilLine, Eye, Tag, X, Percent, DollarSign, Gift, Scissors, Check, Heart, Search } from "lucide-react";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -21,12 +21,21 @@ export const Route = createFileRoute("/_app/payment/$billId")({ component: Payme
 
 type Bill = {
   id: string; order_id: string; subtotal: number; discount_amount: number;
+  member_id: string | null;
   member_discount_amount: number; vat_mode: "inclusive" | "exclusive"; vat_rate: number;
   service_fee_rate: number; service_fee_amount: number; rounding_mode: RoundingMode; rounding_adjustment: number;
   vat_amount: number; total: number; status: string; paid_at: string | null;
 };
 type Item = { id: string; name_th: string; name_en: string; qty: number; unit_price: number; status: string };
 type Payment = { id: string; method: "qr" | "cash" | "card"; amount: number; cash_received: number | null; change_due: number | null; tip_amount: number };
+type MemberLookup = {
+  id: string;
+  full_name: string;
+  nickname: string | null;
+  phone: string | null;
+  current_points: number;
+  member_group_en: string | null;
+};
 
 type BillDiscount = {
   id: string;
@@ -103,6 +112,12 @@ function PaymentPage() {
   const [settingsServiceFeeRate, setSettingsServiceFeeRate] = useState(0);
   const [settingsRoundingMode, setSettingsRoundingMode] = useState<RoundingMode>("none");
   const [settingsMaxDiscountPercent, setSettingsMaxDiscountPercent] = useState(100);
+  const [loyaltyEnabled, setLoyaltyEnabled] = useState(true);
+  const [loyaltyPointsPerBaht, setLoyaltyPointsPerBaht] = useState(1);
+  const [selectedMember, setSelectedMember] = useState<MemberLookup | null>(null);
+  const [memberSearchOpen, setMemberSearchOpen] = useState(false);
+  const [memberQuery, setMemberQuery] = useState("");
+  const [memberResults, setMemberResults] = useState<MemberLookup[]>([]);
 
   // QR payment state
   const [qrAmt, setQrAmt] = useState(0);
@@ -142,11 +157,21 @@ function PaymentPage() {
     const [{ data: b }, { data: ps }, { data: s }] = await Promise.all([
       supabase.from("bills").select("*").eq("id", billId).single(),
       supabase.from("payments").select("*").eq("bill_id", billId),
-      supabase.from("settings").select("restaurant_name, vat_enabled, vat_mode, vat_rate, service_fee_rate, rounding_mode, max_discount_percent").eq("id", 1).single(),
+      supabase.from("settings").select("restaurant_name, vat_enabled, vat_mode, vat_rate, service_fee_rate, rounding_mode, max_discount_percent, loyalty_enabled, loyalty_points_per_baht").eq("id", 1).single(),
     ]);
     if (b) {
       setBill(b as unknown as Bill);
       setMemberDisc(Number(b.member_discount_amount));
+      if ((b as any).member_id) {
+        const { data: memberRow } = await supabase
+          .from("members")
+          .select("id,full_name,nickname,phone,current_points,member_group_en")
+          .eq("id", (b as any).member_id)
+          .maybeSingle();
+        setSelectedMember((memberRow as MemberLookup | null) ?? null);
+      } else {
+        setSelectedMember(null);
+      }
 
       const { data: it } = await supabase.from("order_items").select("*").eq("order_id", b.order_id).neq("status", "voided");
       if (it) setItems(it as Item[]);
@@ -186,6 +211,8 @@ function PaymentPage() {
       setSettingsServiceFeeRate(Number(row.service_fee_rate ?? 0));
       setSettingsRoundingMode((row.rounding_mode as RoundingMode) || "none");
       setSettingsMaxDiscountPercent(Number(row.max_discount_percent ?? 100));
+      setLoyaltyEnabled(row.loyalty_enabled ?? true);
+      setLoyaltyPointsPerBaht(Number(row.loyalty_points_per_baht ?? 1));
     }
   };
 
@@ -208,6 +235,7 @@ function PaymentPage() {
 
   const paid = payments.reduce((s, p) => s + Number(p.amount), 0);
   const remaining = Math.max(0, total - paid);
+  const earnPoints = loyaltyEnabled && selectedMember ? Math.max(0, Math.floor(total * loyaltyPointsPerBaht)) : 0;
 
   // Persist member discount + VAT + total to bill (discount_amount owned by applyDiscount/removeDiscount)
   const persistBill = async () => {
@@ -370,6 +398,76 @@ function PaymentPage() {
     if (paid + amount + 0.001 >= total) await finalize();
   };
 
+  const searchMembers = async () => {
+    const term = memberQuery.trim().replace(/[%,()]/g, "");
+    let query = supabase
+      .from("members")
+      .select("id,full_name,nickname,phone,current_points,member_group_en")
+      .order("current_points", { ascending: false })
+      .limit(50);
+    if (term) {
+      query = query.or(`full_name.ilike.%${term}%,nickname.ilike.%${term}%,phone.ilike.%${term}%`);
+    }
+    const { data, error } = await query;
+    if (error) { toast.error(error.message); return; }
+    setMemberResults((data ?? []) as MemberLookup[]);
+  };
+
+  const selectMember = async (member: MemberLookup) => {
+    if (!bill) return;
+    const { error } = await supabase.from("bills").update({ member_id: member.id }).eq("id", bill.id);
+    if (error) { toast.error(error.message); return; }
+    setSelectedMember(member);
+    setMemberSearchOpen(false);
+    toast.success("Member selected");
+  };
+
+  const clearMember = async () => {
+    if (!bill) return;
+    const { error } = await supabase.from("bills").update({ member_id: null }).eq("id", bill.id);
+    if (error) { toast.error(error.message); return; }
+    setSelectedMember(null);
+  };
+
+  const awardLoyaltyPoints = async () => {
+    if (!bill || !selectedMember || !loyaltyEnabled || earnPoints <= 0) return;
+    const { data: existing } = await supabase
+      .from("member_point_ledger")
+      .select("id")
+      .eq("bill_id", bill.id)
+      .eq("type", "earn")
+      .maybeSingle();
+    if (existing) return;
+
+    const { data: freshMember, error: memberErr } = await supabase
+      .from("members")
+      .select("current_points")
+      .eq("id", selectedMember.id)
+      .single();
+    if (memberErr || !freshMember) {
+      toast.error(memberErr?.message ?? "Could not load member points");
+      return;
+    }
+
+    const balanceAfter = Number((freshMember as any).current_points ?? 0) + earnPoints;
+    const { error: updateErr } = await supabase
+      .from("members")
+      .update({ current_points: balanceAfter, updated_at: new Date().toISOString() })
+      .eq("id", selectedMember.id);
+    if (updateErr) { toast.error(updateErr.message); return; }
+
+    const { error: ledgerErr } = await supabase.from("member_point_ledger").insert({
+      member_id: selectedMember.id,
+      bill_id: bill.id,
+      type: "earn",
+      points: earnPoints,
+      balance_after: balanceAfter,
+      description: `Earned from bill ${bill.id}`,
+    });
+    if (ledgerErr) { toast.error(ledgerErr.message); return; }
+    setSelectedMember({ ...selectedMember, current_points: balanceAfter });
+  };
+
   const finalize = async () => {
     if (!bill) return;
     await supabase.from("bills").update({ status: "paid", paid_at: new Date().toISOString(), cashier_id: staff?.id }).eq("id", bill.id);
@@ -378,6 +476,7 @@ function PaymentPage() {
     if (ord?.table_id) {
       await supabase.from("restaurant_tables").update({ status: "available", guests: 0, has_qr_alert: false }).eq("id", ord.table_id);
     }
+    await awardLoyaltyPoints();
     await printCounter({
       kind: "receipt", bill_id: bill.id, restaurant: restName, table: tableCode,
       items, total, vatAmount: settingsVatEnabled && settingsVatMode === "exclusive" ? vatAmount : 0,
@@ -561,9 +660,39 @@ function PaymentPage() {
             </div>
 
             {/* Member discount */}
-            <div className="mb-4">
-              <Label className="text-xs">{t("member_discount")}</Label>
-              <Input type="number" min={0} value={memberDisc} onChange={(e) => setMemberDisc(Math.max(0, Number(e.target.value)))} />
+            <div className="mb-4 space-y-2 rounded-lg border p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 font-semibold text-sm">
+                  <Heart className="h-4 w-4 text-primary" />Member
+                </div>
+                {selectedMember ? (
+                  <Button variant="ghost" size="sm" className="h-7 px-2" onClick={clearMember}>Clear</Button>
+                ) : (
+                  <Button variant="outline" size="sm" className="h-7 px-2" onClick={() => { setMemberSearchOpen(true); void searchMembers(); }}>
+                    Find
+                  </Button>
+                )}
+              </div>
+              {selectedMember ? (
+                <div className="rounded-md bg-muted/60 p-2 text-sm">
+                  <div className="font-semibold">{selectedMember.full_name}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {selectedMember.phone ?? "No phone"} · {Number(selectedMember.current_points ?? 0).toLocaleString()} pts
+                    {selectedMember.member_group_en ? ` · ${selectedMember.member_group_en}` : ""}
+                  </div>
+                  {earnPoints > 0 && (
+                    <div className="mt-1 text-xs font-medium text-primary">
+                      Earn after payment: +{earnPoints.toLocaleString()} points
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">Select a member to earn points on this bill.</p>
+              )}
+              <div>
+                <Label className="text-xs">{t("member_discount")}</Label>
+                <Input type="number" min={0} value={memberDisc} onChange={(e) => setMemberDisc(Math.max(0, Number(e.target.value)))} />
+              </div>
             </div>
 
             {/* Split Bill */}
@@ -759,6 +888,58 @@ function PaymentPage() {
               <Tag className="h-4 w-4 mr-1.5" />
               {appliedDiscount ? t("change_discount") : t("apply_discount")} {discPreviewAmt > 0 ? `· - ${thb(discPreviewAmt)}` : ""}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Member search dialog ────────────────────────────────────────────── */}
+      <Dialog open={memberSearchOpen} onOpenChange={setMemberSearchOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Heart className="h-4 w-4" />Find member
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                className="pl-8"
+                placeholder="Search name, nickname, phone..."
+                value={memberQuery}
+                onChange={(e) => setMemberQuery(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") void searchMembers(); }}
+              />
+            </div>
+            <Button onClick={searchMembers}>Search</Button>
+          </div>
+          <div className="max-h-80 overflow-y-auto space-y-2">
+            {memberResults.map((m) => (
+              <button
+                key={m.id}
+                onClick={() => selectMember(m)}
+                className="w-full rounded-lg border p-3 text-left hover:bg-accent transition-colors"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-semibold truncate">{m.full_name}</div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {m.nickname ? `${m.nickname} · ` : ""}{m.phone ?? "No phone"}{m.member_group_en ? ` · ${m.member_group_en}` : ""}
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className="font-bold tabular-nums">{Number(m.current_points ?? 0).toLocaleString()}</div>
+                    <div className="text-xs text-muted-foreground">points</div>
+                  </div>
+                </div>
+              </button>
+            ))}
+            {memberResults.length === 0 && (
+              <p className="py-8 text-center text-sm text-muted-foreground">No members found.</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMemberSearchOpen(false)}>{t("cancel")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

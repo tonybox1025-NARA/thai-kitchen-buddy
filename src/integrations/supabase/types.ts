@@ -141,6 +141,7 @@ export type Database = {
           discount_amount: number
           discount_note: string | null
           id: string
+          member_id: string | null
           member_discount_amount: number
           order_id: string
           paid_at: string | null
@@ -158,6 +159,7 @@ export type Database = {
           discount_amount?: number
           discount_note?: string | null
           id?: string
+          member_id?: string | null
           member_discount_amount?: number
           order_id: string
           paid_at?: string | null
@@ -175,6 +177,7 @@ export type Database = {
           discount_amount?: number
           discount_note?: string | null
           id?: string
+          member_id?: string | null
           member_discount_amount?: number
           order_id?: string
           paid_at?: string | null
@@ -199,6 +202,13 @@ export type Database = {
             columns: ["cashier_id"]
             isOneToOne: false
             referencedRelation: "staff_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bills_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
             referencedColumns: ["id"]
           },
           {
