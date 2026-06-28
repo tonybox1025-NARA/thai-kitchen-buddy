@@ -187,11 +187,12 @@ export const Route = createFileRoute("/api/public/qr-order")({
           modifiers: (entry.row.modifiers as { option_name: string; price: number }[] | null),
         }));
         const counterLines = lines.map(({ zoneId: _zoneId, zoneLabel: _zoneLabel, printToKitchen: _printToKitchen, ...line }) => line);
+        type TicketLine = (typeof counterLines)[number];
         const ticketPayload = { kind: "order_ticket", table: table_code, source: "qr", lines: counterLines, sent_at: sentAt };
-        const grouped = new Map<string, { zoneLabel: string; lines: typeof counterLines }>();
+        const grouped = new Map<string, { zoneLabel: string; lines: TicketLine[] }>();
         for (const line of lines) {
           if (!line.printToKitchen) continue;
-          const entry = grouped.get(line.zoneId) ?? { zoneLabel: line.zoneLabel, lines: [] };
+          const entry = grouped.get(line.zoneId) ?? { zoneLabel: line.zoneLabel, lines: [] as TicketLine[] };
           const { zoneId: _zoneId, zoneLabel: _zoneLabel, printToKitchen: _printToKitchen, ...ticketLine } = line;
           entry.lines.push(ticketLine);
           grouped.set(line.zoneId, entry);
