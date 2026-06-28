@@ -260,11 +260,11 @@ function OrderPage() {
     const sentAt = new Date().toISOString();
     await supabase.from("order_items").update({ status: "sent", sent_at: sentAt }).in("id", ids);
     // Queue print jobs — kitchen (Burmese) + counter (order copy)
-    const zoneById = new Map<string, { id: string; name_th: string; name_en: string; sort: number }>();
+    const zoneById = new Map<string, { id: string; name_th: string; name_en: string; sort: number; print_to_kitchen: boolean }>();
     const categoryById = new Map(cats.map((cat) => [cat.id, cat]));
     const menuById = new Map(menus.map((menu) => [menu.id, menu]));
-    const { data: zones } = await supabase.from("kitchen_zones").select("id,name_th,name_en,sort").eq("active", true).order("sort");
-    for (const zone of (zones ?? []) as { id: string; name_th: string; name_en: string; sort: number }[]) zoneById.set(zone.id, zone);
+    const { data: zones } = await supabase.from("kitchen_zones").select("id,name_th,name_en,sort,print_to_kitchen").eq("active", true).order("sort");
+    for (const zone of (zones ?? []) as { id: string; name_th: string; name_en: string; sort: number; print_to_kitchen: boolean }[]) zoneById.set(zone.id, zone);
 
     const lines = pending.map((p) => {
       const sc = p.set_config as SetConfig | null | undefined;
@@ -273,22 +273,24 @@ function OrderPage() {
       const zone = category?.kitchen_zone_id ? zoneById.get(category.kitchen_zone_id) : null;
       const zoneLabel = zone ? (lang === "th" ? zone.name_th : zone.name_en) : "Main Kitchen";
       const zoneId = zone?.id ?? "__main__";
+      const printToKitchen = zone?.print_to_kitchen ?? true;
       if (sc) {
         const sideStr = sc.sides.map((s) => s.th).join(", ");
         const drinkStr = sc.drink ? ` | ${sc.drink.th}` : "";
         const riceStr = sc.rice === "rice" ? "ข้าวสวย" : "โจ๊ก";
         const setNotes = `หลัก: ${sc.main.th} | ${sideStr}${drinkStr} | ${riceStr}`;
-        return { name_my: p.name_en, name_en: p.name_en, name_th: p.name_th, qty: p.qty, notes: setNotes, modifiers: null, zoneId, zoneLabel };
+        return { name_my: p.name_en, name_en: p.name_en, name_th: p.name_th, qty: p.qty, notes: setNotes, modifiers: null, zoneId, zoneLabel, printToKitchen };
       }
-      return { name_my: p.name_my, name_en: p.name_en, name_th: p.name_th, qty: p.qty, notes: p.notes, modifiers: (p.modifiers as Modifier[] | null) ?? null, zoneId, zoneLabel };
+      return { name_my: p.name_my, name_en: p.name_en, name_th: p.name_th, qty: p.qty, notes: p.notes, modifiers: (p.modifiers as Modifier[] | null) ?? null, zoneId, zoneLabel, printToKitchen };
     });
     const displayLabel = orderSource === "takeout" ? `Takeout ${orderNumber ?? ""}` : orderSource === "staff_meal" ? `Staff ${orderNumber ?? ""}` : tableCode;
-    const counterLines = lines.map(({ zoneId: _zoneId, zoneLabel: _zoneLabel, ...line }) => line);
+    const counterLines = lines.map(({ zoneId: _zoneId, zoneLabel: _zoneLabel, printToKitchen: _printToKitchen, ...line }) => line);
     const ticketPayload: CounterPrintPayload = { kind: "order_ticket", table: displayLabel, lines: counterLines, sent_at: sentAt };
     const grouped = new Map<string, { zoneLabel: string; lines: typeof counterLines }>();
     for (const line of lines) {
+      if (!line.printToKitchen) continue;
       const entry = grouped.get(line.zoneId) ?? { zoneLabel: line.zoneLabel, lines: [] };
-      const { zoneId: _zoneId, zoneLabel: _zoneLabel, ...ticketLine } = line;
+      const { zoneId: _zoneId, zoneLabel: _zoneLabel, printToKitchen: _printToKitchen, ...ticketLine } = line;
       entry.lines.push(ticketLine);
       grouped.set(line.zoneId, entry);
     }

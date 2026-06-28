@@ -120,7 +120,7 @@ export const Route = createFileRoute("/api/public/qr-order")({
           categoryIds.length
             ? supabase.from("categories").select("id,kitchen_zone_id").in("id", categoryIds)
             : Promise.resolve({ data: [] }),
-          supabase.from("kitchen_zones").select("id,name_th,name_en,sort,active").eq("active", true).order("sort"),
+          supabase.from("kitchen_zones").select("id,name_th,name_en,sort,active,print_to_kitchen").eq("active", true).order("sort"),
         ]);
         const categoryMap = new Map(((categories ?? []) as any[]).map((c) => [c.id, c]));
         const zoneMap = new Map(((zones ?? []) as any[]).map((z) => [z.id, z]));
@@ -152,6 +152,7 @@ export const Route = createFileRoute("/api/public/qr-order")({
           return {
             zoneId: zone?.id ?? "__main__",
             zoneLabel: zone?.name_en ?? "Main Kitchen",
+            printToKitchen: zone?.print_to_kitchen ?? true,
             row: {
               order_id: order!.id,
               menu_id: it.menu_id,
@@ -177,6 +178,7 @@ export const Route = createFileRoute("/api/public/qr-order")({
         const lines = rowEntries.map((entry) => ({
           zoneId: entry.zoneId,
           zoneLabel: entry.zoneLabel,
+          printToKitchen: entry.printToKitchen,
           name_th: entry.row.name_th,
           name_en: entry.row.name_en,
           name_my: entry.row.name_my,
@@ -184,12 +186,13 @@ export const Route = createFileRoute("/api/public/qr-order")({
           notes: entry.row.notes,
           modifiers: (entry.row.modifiers as { option_name: string; price: number }[] | null),
         }));
-        const counterLines = lines.map(({ zoneId: _zoneId, zoneLabel: _zoneLabel, ...line }) => line);
+        const counterLines = lines.map(({ zoneId: _zoneId, zoneLabel: _zoneLabel, printToKitchen: _printToKitchen, ...line }) => line);
         const ticketPayload = { kind: "order_ticket", table: table_code, source: "qr", lines: counterLines, sent_at: sentAt };
         const grouped = new Map<string, { zoneLabel: string; lines: typeof counterLines }>();
         for (const line of lines) {
+          if (!line.printToKitchen) continue;
           const entry = grouped.get(line.zoneId) ?? { zoneLabel: line.zoneLabel, lines: [] };
-          const { zoneId: _zoneId, zoneLabel: _zoneLabel, ...ticketLine } = line;
+          const { zoneId: _zoneId, zoneLabel: _zoneLabel, printToKitchen: _printToKitchen, ...ticketLine } = line;
           entry.lines.push(ticketLine);
           grouped.set(line.zoneId, entry);
         }

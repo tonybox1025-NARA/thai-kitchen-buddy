@@ -43,7 +43,7 @@ function MarginIndicator({ price, cost }: { price: number; cost: number }) {
   );
 }
 type Category = { id: string; name_th: string; name_en: string; name_my: string; kitchen_zone_id?: string | null };
-type KitchenZone = { id: string; name_th: string; name_en: string; sort: number; active: boolean };
+type KitchenZone = { id: string; name_th: string; name_en: string; sort: number; active: boolean; print_to_kitchen: boolean };
 // MenuIngredient as stored in state during editing (uses real DB column names: name_thai / name_english)
 type MenuIngredientRow = {
   id?: string;           // undefined = newly added, not yet saved
@@ -392,6 +392,7 @@ function KitchenZonesTab() {
       name_en: edit.name_en.trim(),
       sort: Number(edit.sort ?? zones.length * 10 + 10),
       active: edit.active ?? true,
+      print_to_kitchen: edit.print_to_kitchen ?? true,
     };
     const { error } = edit.id
       ? await supabase.from("kitchen_zones").update(payload).eq("id", edit.id)
@@ -425,7 +426,7 @@ function KitchenZonesTab() {
         <CardHeader>
           <div className="flex items-center justify-between gap-3">
             <CardTitle className="text-base">Kitchen zones</CardTitle>
-            <Button size="sm" onClick={() => setEdit({ active: true, sort: zones.length * 10 + 10 })}>
+            <Button size="sm" onClick={() => setEdit({ active: true, print_to_kitchen: true, sort: zones.length * 10 + 10 })}>
               <Plus className="h-4 w-4 mr-1" />Add zone
             </Button>
           </div>
@@ -436,7 +437,9 @@ function KitchenZonesTab() {
             <div key={zone.id} className="flex items-center gap-3 rounded-lg border p-3">
               <div className="flex-1 min-w-0">
                 <div className="font-semibold truncate">{zoneName(zone)}</div>
-                <div className="text-xs text-muted-foreground truncate">{zone.name_th} · {zone.name_en} · sort {zone.sort}</div>
+                <div className="text-xs text-muted-foreground truncate">
+                  {zone.name_th} · {zone.name_en} · sort {zone.sort} · {zone.print_to_kitchen ? "prints to kitchen" : "counter only"}
+                </div>
               </div>
               <Button variant="outline" size="sm" onClick={() => setEdit(zone)}>Edit</Button>
               <Button variant="ghost" size="icon" onClick={() => deleteZone(zone)}>
@@ -480,6 +483,13 @@ function KitchenZonesTab() {
             <div className="flex items-center justify-between rounded-lg border p-3">
               <Label>Active</Label>
               <Switch checked={edit?.active ?? true} onCheckedChange={(checked) => setEdit({ ...edit, active: checked })} />
+            </div>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div>
+                <Label>Send to kitchen</Label>
+                <p className="text-xs text-muted-foreground">Turn off for drinks, alcohol, or counter-only items.</p>
+              </div>
+              <Switch checked={edit?.print_to_kitchen ?? true} onCheckedChange={(checked) => setEdit({ ...edit, print_to_kitchen: checked })} />
             </div>
           </div>
           <DialogFooter>

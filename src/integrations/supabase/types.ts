@@ -274,6 +274,7 @@ export type Database = {
           id: string
           name_en: string
           name_th: string
+          print_to_kitchen: boolean
           sort: number
         }
         Insert: {
@@ -282,6 +283,7 @@ export type Database = {
           id?: string
           name_en: string
           name_th: string
+          print_to_kitchen?: boolean
           sort?: number
         }
         Update: {
@@ -290,6 +292,7 @@ export type Database = {
           id?: string
           name_en?: string
           name_th?: string
+          print_to_kitchen?: boolean
           sort?: number
         }
         Relationships: []
