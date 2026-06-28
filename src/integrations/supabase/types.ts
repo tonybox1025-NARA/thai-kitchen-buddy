@@ -144,10 +144,6 @@ export type Database = {
           member_discount_amount: number
           order_id: string
           paid_at: string | null
-          rounding_adjustment: number
-          rounding_mode: string
-          service_fee_amount: number
-          service_fee_rate: number
           shift_id: string | null
           status: Database["public"]["Enums"]["bill_status"]
           subtotal: number
@@ -165,10 +161,6 @@ export type Database = {
           member_discount_amount?: number
           order_id: string
           paid_at?: string | null
-          rounding_adjustment?: number
-          rounding_mode?: string
-          service_fee_amount?: number
-          service_fee_rate?: number
           shift_id?: string | null
           status?: Database["public"]["Enums"]["bill_status"]
           subtotal?: number
@@ -186,10 +178,6 @@ export type Database = {
           member_discount_amount?: number
           order_id?: string
           paid_at?: string | null
-          rounding_adjustment?: number
-          rounding_mode?: string
-          service_fee_amount?: number
-          service_fee_rate?: number
           shift_id?: string | null
           status?: Database["public"]["Enums"]["bill_status"]
           subtotal?: number
@@ -266,6 +254,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      ingredients: {
+        Row: {
+          cost_per_unit: number
+          created_at: string | null
+          id: string
+          name_english: string | null
+          name_thai: string
+          unit: string
+          updated_at: string | null
+        }
+        Insert: {
+          cost_per_unit?: number
+          created_at?: string | null
+          id?: string
+          name_english?: string | null
+          name_thai: string
+          unit: string
+          updated_at?: string | null
+        }
+        Update: {
+          cost_per_unit?: number
+          created_at?: string | null
+          id?: string
+          name_english?: string | null
+          name_thai?: string
+          unit?: string
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       kitchen_zones: {
         Row: {
@@ -429,36 +447,6 @@ export type Database = {
           phone?: string | null
           status?: string
           updated_at?: string
-        }
-        Relationships: []
-      }
-      ingredients: {
-        Row: {
-          cost_per_unit: number
-          created_at: string | null
-          id: string
-          name_english: string | null
-          name_thai: string
-          unit: string
-          updated_at: string | null
-        }
-        Insert: {
-          cost_per_unit?: number
-          created_at?: string | null
-          id?: string
-          name_english?: string | null
-          name_thai: string
-          unit: string
-          updated_at?: string | null
-        }
-        Update: {
-          cost_per_unit?: number
-          created_at?: string | null
-          id?: string
-          name_english?: string | null
-          name_thai?: string
-          unit?: string
-          updated_at?: string | null
         }
         Relationships: []
       }
@@ -950,57 +938,45 @@ export type Database = {
         Row: {
           current_business_day: string
           id: number
-          printer_counter_ip: string | null
-          printer_kitchen_ip: string | null
-          restaurant_name: string
           loyalty_enabled: boolean
           loyalty_points_expire_months: number
           loyalty_points_per_baht: number
           loyalty_signup_bonus: number
-          max_discount_percent: number
-          rounding_mode: string
-          service_fee_rate: number
+          printer_counter_ip: string | null
+          printer_kitchen_ip: string | null
+          restaurant_name: string
           starting_cash: number
           updated_at: string
-          vat_enabled: boolean
           vat_mode: Database["public"]["Enums"]["vat_mode"]
           vat_rate: number
         }
         Insert: {
           current_business_day?: string
           id?: number
-          printer_counter_ip?: string | null
-          printer_kitchen_ip?: string | null
-          restaurant_name?: string
           loyalty_enabled?: boolean
           loyalty_points_expire_months?: number
           loyalty_points_per_baht?: number
           loyalty_signup_bonus?: number
-          max_discount_percent?: number
-          rounding_mode?: string
-          service_fee_rate?: number
+          printer_counter_ip?: string | null
+          printer_kitchen_ip?: string | null
+          restaurant_name?: string
           starting_cash?: number
           updated_at?: string
-          vat_enabled?: boolean
           vat_mode?: Database["public"]["Enums"]["vat_mode"]
           vat_rate?: number
         }
         Update: {
           current_business_day?: string
           id?: number
-          printer_counter_ip?: string | null
-          printer_kitchen_ip?: string | null
-          restaurant_name?: string
           loyalty_enabled?: boolean
           loyalty_points_expire_months?: number
           loyalty_points_per_baht?: number
           loyalty_signup_bonus?: number
-          max_discount_percent?: number
-          rounding_mode?: string
-          service_fee_rate?: number
+          printer_counter_ip?: string | null
+          printer_kitchen_ip?: string | null
+          restaurant_name?: string
           starting_cash?: number
           updated_at?: string
-          vat_enabled?: boolean
           vat_mode?: Database["public"]["Enums"]["vat_mode"]
           vat_rate?: number
         }
