@@ -182,8 +182,7 @@ function MembersPage() {
       supabase
         .from("members")
         .select("id,full_name,nickname,phone,member_group_en,member_level,current_points,legacy_visit_count,legacy_total_spend,legacy_last_visit_at,status")
-        .order("current_points", { ascending: false })
-        .limit(1000),
+        .order("current_points", { ascending: false }),
       supabase
         .from("settings")
         .select("loyalty_enabled,loyalty_points_per_baht,loyalty_signup_bonus,loyalty_points_expire_months")
