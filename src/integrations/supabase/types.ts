@@ -325,6 +325,60 @@ export type Database = {
         }
         Relationships: []
       }
+      loyalty_claim_tokens: {
+        Row: {
+          bill_id: string
+          claim_points: number
+          claimed_at: string | null
+          created_at: string
+          expires_at: string | null
+          id: string
+          member_id: string | null
+          status: string
+          token: string
+          total_amount: number
+        }
+        Insert: {
+          bill_id: string
+          claim_points?: number
+          claimed_at?: string | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          member_id?: string | null
+          status?: string
+          token: string
+          total_amount?: number
+        }
+        Update: {
+          bill_id?: string
+          claim_points?: number
+          claimed_at?: string | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          member_id?: string | null
+          status?: string
+          token?: string
+          total_amount?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loyalty_claim_tokens_bill_id_fkey"
+            columns: ["bill_id"]
+            isOneToOne: true
+            referencedRelation: "bills"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loyalty_claim_tokens_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       member_point_ledger: {
         Row: {
           balance_after: number
@@ -385,6 +439,7 @@ export type Database = {
           first_name: string | null
           full_name: string
           gender: string | null
+          guest_token: string | null
           id: string
           imported_from: string | null
           last_name: string | null
@@ -412,6 +467,7 @@ export type Database = {
           first_name?: string | null
           full_name: string
           gender?: string | null
+          guest_token?: string | null
           id?: string
           imported_from?: string | null
           last_name?: string | null
@@ -439,6 +495,7 @@ export type Database = {
           first_name?: string | null
           full_name?: string
           gender?: string | null
+          guest_token?: string | null
           id?: string
           imported_from?: string | null
           last_name?: string | null

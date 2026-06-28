@@ -29,6 +29,9 @@ export type ReceiptData = {
   total: number;
   payments: { method: string; amount: number }[];
   change?: number;
+  loyaltyClaimUrl?: string;
+  loyaltyClaimCode?: string;
+  loyaltyEarnPoints?: number;
 };
 
 export type KitchenItem = {

@@ -94,6 +94,12 @@ function computeTotals(
   return { serviceFeeAmount, vatAmount, roundingAdjustment, total };
 }
 
+function makeClaimToken() {
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 function PaymentPage() {
   const { billId } = Route.useParams();
   const { t, lang } = useI18n();
@@ -468,6 +474,42 @@ function PaymentPage() {
     setSelectedMember({ ...selectedMember, current_points: balanceAfter });
   };
 
+  const ensureLoyaltyClaim = async () => {
+    if (!bill || !loyaltyEnabled) return null;
+
+    const { data: existing } = await supabase
+      .from("loyalty_claim_tokens")
+      .select("token,claim_points,status")
+      .eq("bill_id", bill.id)
+      .maybeSingle();
+    if (existing) {
+      return {
+        token: existing.token,
+        url: `${window.location.origin}/loyalty/claim/${existing.token}`,
+        points: Number(existing.claim_points ?? 0),
+      };
+    }
+
+    const token = makeClaimToken();
+    const points = Math.max(0, Math.floor(total * loyaltyPointsPerBaht));
+    const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString();
+    const { error } = await supabase.from("loyalty_claim_tokens").insert({
+      token,
+      bill_id: bill.id,
+      member_id: selectedMember?.id ?? null,
+      status: selectedMember ? "claimed" : "open",
+      claim_points: points,
+      total_amount: total,
+      claimed_at: selectedMember ? new Date().toISOString() : null,
+      expires_at: expiresAt,
+    });
+    if (error) {
+      toast.error(error.message);
+      return null;
+    }
+    return { token, url: `${window.location.origin}/loyalty/claim/${token}`, points };
+  };
+
   const finalize = async () => {
     if (!bill) return;
     await supabase.from("bills").update({ status: "paid", paid_at: new Date().toISOString(), cashier_id: staff?.id }).eq("id", bill.id);
@@ -477,6 +519,7 @@ function PaymentPage() {
       await supabase.from("restaurant_tables").update({ status: "available", guests: 0, has_qr_alert: false }).eq("id", ord.table_id);
     }
     await awardLoyaltyPoints();
+    const loyaltyClaim = await ensureLoyaltyClaim();
     await printCounter({
       kind: "receipt", bill_id: bill.id, restaurant: restName, table: tableCode,
       items, total, vatAmount: settingsVatEnabled && settingsVatMode === "exclusive" ? vatAmount : 0,
@@ -486,6 +529,9 @@ function PaymentPage() {
       serviceFeeAmount,
       roundingAdjustment,
       discount: appliedDiscount ? { type: appliedDiscount.type, label: discTypeLabel(appliedDiscount), amount: appliedDiscount.amount } : null,
+      loyaltyClaimUrl: loyaltyClaim?.url,
+      loyaltyClaimCode: loyaltyClaim?.token,
+      loyaltyEarnPoints: loyaltyClaim?.points,
     });
     toast.success(t("paid"));
     await load();

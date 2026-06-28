@@ -42,6 +42,14 @@ export function ReceiptPreview72({ data }: { data: ReceiptData }) {
         <div className="flex justify-between"><span>Change</span><span>{fmt(data.change)}</span></div>
       )}
       <div className="border-t border-dashed border-black my-1" />
+      {data.loyaltyClaimUrl && (
+        <>
+          <div className="text-center text-[11px] font-bold">Scan to collect points</div>
+          <div className="break-all text-center text-[9px]">{data.loyaltyClaimUrl}</div>
+          {data.loyaltyEarnPoints ? <div className="text-center text-[10px]">+{data.loyaltyEarnPoints} points</div> : null}
+          <div className="border-t border-dashed border-black my-1" />
+        </>
+      )}
       <div className="text-center text-[11px]">Thank you / ขอบคุณค่ะ</div>
     </div>
   );
@@ -65,6 +73,7 @@ export function receiptToHtml(data: ReceiptData): string {
     .lg { font-size: 14px; }
     .row { display: flex; justify-content: space-between; }
     .sub { font-size: 10px; }
+    .small { font-size: 10px; overflow-wrap: anywhere; }
     .hr { border-top: 1px dashed #000; margin: 4px 0; }
     .name { padding-right: 4px; }
   </style>
@@ -90,6 +99,12 @@ export function receiptToHtml(data: ReceiptData): string {
     ${pays}
     ${data.change != null && data.change > 0 ? `<div class="row"><span>Change</span><span>${fmt(data.change)}</span></div>` : ""}
     <div class="hr"></div>
+    ${data.loyaltyClaimUrl ? `
+      <div class="center b">Scan to collect points</div>
+      <div class="center small">${escapeHtml(data.loyaltyClaimUrl)}</div>
+      ${data.loyaltyEarnPoints ? `<div class="center small">+${data.loyaltyEarnPoints} points</div>` : ""}
+      <div class="hr"></div>
+    ` : ""}
     <div class="center">Thank you / ขอบคุณค่ะ</div>
   </div>`;
 }
