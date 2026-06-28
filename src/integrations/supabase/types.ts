@@ -233,6 +233,7 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          kitchen_zone_id: string | null
           name_en: string
           name_my: string
           name_th: string
@@ -241,6 +242,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          kitchen_zone_id?: string | null
           name_en: string
           name_my: string
           name_th: string
@@ -249,8 +251,44 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          kitchen_zone_id?: string | null
           name_en?: string
           name_my?: string
+          name_th?: string
+          sort?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "categories_kitchen_zone_id_fkey"
+            columns: ["kitchen_zone_id"]
+            isOneToOne: false
+            referencedRelation: "kitchen_zones"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kitchen_zones: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          name_en: string
+          name_th: string
+          sort: number
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          name_en: string
+          name_th: string
+          sort?: number
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          name_en?: string
           name_th?: string
           sort?: number
         }

@@ -32,7 +32,7 @@ const CLOSE_PRESETS = [
 ];
 
 type Menu = { id: string; category_id: string | null; name_th: string; name_en: string; name_my: string; price: number; cost?: number; available: boolean; image_url: string | null; sort: number };
-type Category = { id: string; name_th: string; name_en: string; name_my: string; sort: number };
+type Category = { id: string; name_th: string; name_en: string; name_my: string; sort: number; kitchen_zone_id?: string | null };
 type Item = {
   id: string; menu_id: string | null; name_th: string; name_en: string; name_my: string;
   qty: number; unit_price: number; notes: string | null; modifiers: unknown;
@@ -260,20 +260,51 @@ function OrderPage() {
     const sentAt = new Date().toISOString();
     await supabase.from("order_items").update({ status: "sent", sent_at: sentAt }).in("id", ids);
     // Queue print jobs — kitchen (Burmese) + counter (order copy)
+    const zoneById = new Map<string, { id: string; name_th: string; name_en: string; sort: number }>();
+    const categoryById = new Map(cats.map((cat) => [cat.id, cat]));
+    const menuById = new Map(menus.map((menu) => [menu.id, menu]));
+    const { data: zones } = await supabase.from("kitchen_zones").select("id,name_th,name_en,sort").eq("active", true).order("sort");
+    for (const zone of (zones ?? []) as { id: string; name_th: string; name_en: string; sort: number }[]) zoneById.set(zone.id, zone);
+
     const lines = pending.map((p) => {
       const sc = p.set_config as SetConfig | null | undefined;
+      const menu = p.menu_id ? menuById.get(p.menu_id) : null;
+      const category = menu?.category_id ? categoryById.get(menu.category_id) : null;
+      const zone = category?.kitchen_zone_id ? zoneById.get(category.kitchen_zone_id) : null;
+      const zoneLabel = zone ? (lang === "th" ? zone.name_th : zone.name_en) : "Main Kitchen";
+      const zoneId = zone?.id ?? "__main__";
       if (sc) {
         const sideStr = sc.sides.map((s) => s.th).join(", ");
         const drinkStr = sc.drink ? ` | ${sc.drink.th}` : "";
         const riceStr = sc.rice === "rice" ? "ข้าวสวย" : "โจ๊ก";
         const setNotes = `หลัก: ${sc.main.th} | ${sideStr}${drinkStr} | ${riceStr}`;
-        return { name_my: p.name_en, name_en: p.name_en, name_th: p.name_th, qty: p.qty, notes: setNotes, modifiers: null };
+        return { name_my: p.name_en, name_en: p.name_en, name_th: p.name_th, qty: p.qty, notes: setNotes, modifiers: null, zoneId, zoneLabel };
       }
-      return { name_my: p.name_my, name_en: p.name_en, name_th: p.name_th, qty: p.qty, notes: p.notes, modifiers: (p.modifiers as Modifier[] | null) ?? null };
+      return { name_my: p.name_my, name_en: p.name_en, name_th: p.name_th, qty: p.qty, notes: p.notes, modifiers: (p.modifiers as Modifier[] | null) ?? null, zoneId, zoneLabel };
     });
     const displayLabel = orderSource === "takeout" ? `Takeout ${orderNumber ?? ""}` : orderSource === "staff_meal" ? `Staff ${orderNumber ?? ""}` : tableCode;
-    const ticketPayload: CounterPrintPayload = { kind: "order_ticket", table: displayLabel, lines, sent_at: sentAt };
-    await supabase.from("print_jobs").insert({ printer: "kitchen", payload: { ...ticketPayload, language: "my" } });
+    const counterLines = lines.map(({ zoneId: _zoneId, zoneLabel: _zoneLabel, ...line }) => line);
+    const ticketPayload: CounterPrintPayload = { kind: "order_ticket", table: displayLabel, lines: counterLines, sent_at: sentAt };
+    const grouped = new Map<string, { zoneLabel: string; lines: typeof counterLines }>();
+    for (const line of lines) {
+      const entry = grouped.get(line.zoneId) ?? { zoneLabel: line.zoneLabel, lines: [] };
+      const { zoneId: _zoneId, zoneLabel: _zoneLabel, ...ticketLine } = line;
+      entry.lines.push(ticketLine);
+      grouped.set(line.zoneId, entry);
+    }
+    const kitchenJobs = [...grouped.values()].map((group, index, all) => ({
+      printer: "kitchen" as const,
+      payload: {
+        ...ticketPayload,
+        lines: group.lines,
+        language: "my",
+        department: group.zoneLabel,
+        station: group.zoneLabel,
+        ticketIndex: index + 1,
+        ticketTotal: all.length,
+      },
+    }));
+    if (kitchenJobs.length > 0) await supabase.from("print_jobs").insert(kitchenJobs);
     await printCounter({ ...ticketPayload, language: "th" });
     toast.success(t("send_to_kitchen") + " ✓");
   };

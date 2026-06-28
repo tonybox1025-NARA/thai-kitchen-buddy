@@ -42,7 +42,8 @@ function MarginIndicator({ price, cost }: { price: number; cost: number }) {
     </div>
   );
 }
-type Category = { id: string; name_th: string; name_en: string; name_my: string };
+type Category = { id: string; name_th: string; name_en: string; name_my: string; kitchen_zone_id?: string | null };
+type KitchenZone = { id: string; name_th: string; name_en: string; sort: number; active: boolean };
 // MenuIngredient as stored in state during editing (uses real DB column names: name_thai / name_english)
 type MenuIngredientRow = {
   id?: string;           // undefined = newly added, not yet saved
@@ -93,6 +94,7 @@ function SettingsPage() {
           <TabsTrigger value="menu">{t("menu_management")}</TabsTrigger>
           <TabsTrigger value="ingredients">{t("ingredients")}</TabsTrigger>
           <TabsTrigger value="addons">{t("add_ons")}</TabsTrigger>
+          <TabsTrigger value="kitchen-zones">Kitchen zones</TabsTrigger>
           <TabsTrigger value="printers">{t("printers")}</TabsTrigger>
           <TabsTrigger value="qr">{t("qr_codes")}</TabsTrigger>
           <TabsTrigger value="staff">{t("staff")}</TabsTrigger>
@@ -101,6 +103,7 @@ function SettingsPage() {
         <TabsContent value="menu"><MenuTab /></TabsContent>
         <TabsContent value="ingredients"><IngredientsTab /></TabsContent>
         <TabsContent value="addons"><AddonsTab /></TabsContent>
+        <TabsContent value="kitchen-zones"><KitchenZonesTab /></TabsContent>
         <TabsContent value="printers"><PrintersTab /></TabsContent>
         <TabsContent value="qr"><QrCodesTab /></TabsContent>
         <TabsContent value="staff"><StaffTab /></TabsContent>
@@ -358,6 +361,133 @@ function PrintersTab() {
       </Card>
 
       <BrowserPrintTestCard />
+    </div>
+  );
+}
+
+function KitchenZonesTab() {
+  const { lang } = useI18n();
+  const [zones, setZones] = useState<KitchenZone[]>([]);
+  const [cats, setCats] = useState<Category[]>([]);
+  const [edit, setEdit] = useState<Partial<KitchenZone> | null>(null);
+
+  const load = async () => {
+    const [{ data: z }, { data: c }] = await Promise.all([
+      supabase.from("kitchen_zones").select("*").order("sort"),
+      supabase.from("categories").select("id,name_th,name_en,name_my,sort,kitchen_zone_id").order("sort"),
+    ]);
+    setZones((z ?? []) as KitchenZone[]);
+    setCats((c ?? []) as Category[]);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const saveZone = async () => {
+    if (!edit?.name_th?.trim() || !edit?.name_en?.trim()) {
+      toast.error("Zone name is required");
+      return;
+    }
+    const payload = {
+      name_th: edit.name_th.trim(),
+      name_en: edit.name_en.trim(),
+      sort: Number(edit.sort ?? zones.length * 10 + 10),
+      active: edit.active ?? true,
+    };
+    const { error } = edit.id
+      ? await supabase.from("kitchen_zones").update(payload).eq("id", edit.id)
+      : await supabase.from("kitchen_zones").insert(payload);
+    if (error) { toast.error(error.message); return; }
+    setEdit(null);
+    await load();
+    toast.success("Saved");
+  };
+
+  const deleteZone = async (zone: KitchenZone) => {
+    if (!confirm(`Delete ${zone.name_en}? Categories assigned to it will become unassigned.`)) return;
+    const { error } = await supabase.from("kitchen_zones").delete().eq("id", zone.id);
+    if (error) { toast.error(error.message); return; }
+    await load();
+  };
+
+  const assignCategory = async (categoryId: string, zoneId: string) => {
+    const value = zoneId === "__none__" ? null : zoneId;
+    const { error } = await supabase.from("categories").update({ kitchen_zone_id: value }).eq("id", categoryId);
+    if (error) { toast.error(error.message); return; }
+    setCats((prev) => prev.map((c) => c.id === categoryId ? { ...c, kitchen_zone_id: value } : c));
+  };
+
+  const zoneName = (z: KitchenZone) => lang === "th" ? z.name_th : z.name_en;
+  const catName = (c: Category) => lang === "th" ? c.name_th : c.name_en;
+
+  return (
+    <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,28rem)_minmax(0,1fr)]">
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between gap-3">
+            <CardTitle className="text-base">Kitchen zones</CardTitle>
+            <Button size="sm" onClick={() => setEdit({ active: true, sort: zones.length * 10 + 10 })}>
+              <Plus className="h-4 w-4 mr-1" />Add zone
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {zones.length === 0 && <p className="text-sm text-muted-foreground">No kitchen zones yet.</p>}
+          {zones.map((zone) => (
+            <div key={zone.id} className="flex items-center gap-3 rounded-lg border p-3">
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold truncate">{zoneName(zone)}</div>
+                <div className="text-xs text-muted-foreground truncate">{zone.name_th} · {zone.name_en} · sort {zone.sort}</div>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setEdit(zone)}>Edit</Button>
+              <Button variant="ghost" size="icon" onClick={() => deleteZone(zone)}>
+                <Trash2 className="h-4 w-4 text-destructive" />
+              </Button>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Assign categories to zones</CardTitle></CardHeader>
+        <CardContent className="space-y-2">
+          {cats.map((cat) => (
+            <div key={cat.id} className="grid grid-cols-[1fr_14rem] gap-3 items-center rounded-lg border p-3">
+              <div className="min-w-0">
+                <div className="font-medium truncate">{catName(cat)}</div>
+                <div className="text-xs text-muted-foreground truncate">{cat.name_th} · {cat.name_en}</div>
+              </div>
+              <Select value={cat.kitchen_zone_id ?? "__none__"} onValueChange={(v) => assignCategory(cat.id, v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Unassigned / Main ticket</SelectItem>
+                  {zones.map((zone) => (
+                    <SelectItem key={zone.id} value={zone.id}>{zoneName(zone)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Dialog open={!!edit} onOpenChange={(open) => !open && setEdit(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>{edit?.id ? "Edit kitchen zone" : "Add kitchen zone"}</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div><Label>Thai name</Label><Input value={edit?.name_th ?? ""} onChange={(e) => setEdit({ ...edit, name_th: e.target.value })} /></div>
+            <div><Label>English name</Label><Input value={edit?.name_en ?? ""} onChange={(e) => setEdit({ ...edit, name_en: e.target.value })} /></div>
+            <div><Label>Sort</Label><Input type="number" value={edit?.sort ?? 0} onChange={(e) => setEdit({ ...edit, sort: Number(e.target.value) })} /></div>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <Label>Active</Label>
+              <Switch checked={edit?.active ?? true} onCheckedChange={(checked) => setEdit({ ...edit, active: checked })} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEdit(null)}>Cancel</Button>
+            <Button onClick={saveZone}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

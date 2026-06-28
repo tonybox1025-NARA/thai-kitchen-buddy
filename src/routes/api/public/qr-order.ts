@@ -64,7 +64,7 @@ export const Route = createFileRoute("/api/public/qr-order")({
         const menuIds = items.map((i) => i.menu_id);
         const { data: menus } = await supabase
           .from("menus")
-          .select("id,name_th,name_en,name_my,price,cost,available")
+          .select("id,category_id,name_th,name_en,name_my,price,cost,available")
           .in("id", menuIds);
         const menuMap = new Map((menus ?? []).map((m) => [m.id, m]));
         for (const it of items) {
@@ -115,7 +115,17 @@ export const Route = createFileRoute("/api/public/qr-order")({
 
         // Insert items as already-sent — kitchen gets the ticket automatically, no staff confirmation needed
         const sentAt = new Date().toISOString();
-        const rows = items.map((it) => {
+        const categoryIds = [...new Set((menus ?? []).map((m: any) => m.category_id).filter(Boolean))] as string[];
+        const [{ data: categories }, { data: zones }] = await Promise.all([
+          categoryIds.length
+            ? supabase.from("categories").select("id,kitchen_zone_id").in("id", categoryIds)
+            : Promise.resolve({ data: [] }),
+          supabase.from("kitchen_zones").select("id,name_th,name_en,sort,active").eq("active", true).order("sort"),
+        ]);
+        const categoryMap = new Map(((categories ?? []) as any[]).map((c) => [c.id, c]));
+        const zoneMap = new Map(((zones ?? []) as any[]).map((z) => [z.id, z]));
+
+        const rowEntries = items.map((it) => {
           const m = menuMap.get(it.menu_id)!;
           const sc = it.set_config as { main?: { th: string }; sides?: { th: string }[]; drink?: { th: string }; rice?: string } | null | undefined;
           const baseNotes = sc
@@ -136,38 +146,66 @@ export const Route = createFileRoute("/api/public/qr-order")({
           // Authoritative total: base price + sum of selected addon prices
           const addonTotal = modifiers.reduce((s, mod) => s + mod.price, 0);
           const unit_price = Number(m.price) + addonTotal;
+          const category = (m as any).category_id ? categoryMap.get((m as any).category_id) : null;
+          const zone = category?.kitchen_zone_id ? zoneMap.get(category.kitchen_zone_id) : null;
 
           return {
-            order_id: order!.id,
-            menu_id: it.menu_id,
-            name_th: m.name_th,
-            name_en: m.name_en,
-            name_my: m.name_my,
-            qty: it.qty,
-            unit_price,
-            unit_cost: Number((m as any).cost ?? 0),
-            notes: baseNotes,
-            modifiers: modifiers.length > 0 ? modifiers : null,
-            status: "sent" as const,
-            sent_at: sentAt,
-            set_config: it.set_config ?? null,
+            zoneId: zone?.id ?? "__main__",
+            zoneLabel: zone?.name_en ?? "Main Kitchen",
+            row: {
+              order_id: order!.id,
+              menu_id: it.menu_id,
+              name_th: m.name_th,
+              name_en: m.name_en,
+              name_my: m.name_my,
+              qty: it.qty,
+              unit_price,
+              unit_cost: Number((m as any).cost ?? 0),
+              notes: baseNotes,
+              modifiers: modifiers.length > 0 ? modifiers : null,
+              status: "sent" as const,
+              sent_at: sentAt,
+              set_config: it.set_config ?? null,
+            },
           };
         });
+        const rows = rowEntries.map((entry) => entry.row);
         const { error: itemsErr } = await (supabase as any).from("order_items").insert(rows);
         if (itemsErr) return new Response(itemsErr.message, { status: 500 });
 
         // Queue kitchen + counter print jobs (same format as sendToKitchen in order.$orderId.tsx)
-        const lines = rows.map((r) => ({
-          name_th: r.name_th,
-          name_en: r.name_en,
-          name_my: r.name_my,
-          qty: r.qty,
-          notes: r.notes,
-          modifiers: (r.modifiers as { option_name: string; price: number }[] | null),
+        const lines = rowEntries.map((entry) => ({
+          zoneId: entry.zoneId,
+          zoneLabel: entry.zoneLabel,
+          name_th: entry.row.name_th,
+          name_en: entry.row.name_en,
+          name_my: entry.row.name_my,
+          qty: entry.row.qty,
+          notes: entry.row.notes,
+          modifiers: (entry.row.modifiers as { option_name: string; price: number }[] | null),
         }));
-        const ticketPayload = { kind: "order_ticket", table: table_code, source: "qr", lines, sent_at: sentAt };
+        const counterLines = lines.map(({ zoneId: _zoneId, zoneLabel: _zoneLabel, ...line }) => line);
+        const ticketPayload = { kind: "order_ticket", table: table_code, source: "qr", lines: counterLines, sent_at: sentAt };
+        const grouped = new Map<string, { zoneLabel: string; lines: typeof counterLines }>();
+        for (const line of lines) {
+          const entry = grouped.get(line.zoneId) ?? { zoneLabel: line.zoneLabel, lines: [] };
+          const { zoneId: _zoneId, zoneLabel: _zoneLabel, ...ticketLine } = line;
+          entry.lines.push(ticketLine);
+          grouped.set(line.zoneId, entry);
+        }
         await supabase.from("print_jobs").insert([
-          { printer: "kitchen", payload: { ...ticketPayload, language: "my" } },
+          ...[...grouped.values()].map((group, index, all) => ({
+            printer: "kitchen" as const,
+            payload: {
+              ...ticketPayload,
+              lines: group.lines,
+              language: "my",
+              department: group.zoneLabel,
+              station: group.zoneLabel,
+              ticketIndex: index + 1,
+              ticketTotal: all.length,
+            },
+          })),
           { printer: "counter", payload: { ...ticketPayload, language: "th" } },
         ]);
 
