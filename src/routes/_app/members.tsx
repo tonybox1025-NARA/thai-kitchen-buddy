@@ -146,6 +146,26 @@ async function insertInBatches(rows: ImportRow[]) {
   }
 }
 
+async function fetchAllMembers() {
+  const pageSize = 1000;
+  const all: Member[] = [];
+
+  for (let from = 0; ; from += pageSize) {
+    const to = from + pageSize - 1;
+    const { data, error } = await supabase
+      .from("members")
+      .select("id,full_name,nickname,phone,member_group_en,member_level,current_points,legacy_visit_count,legacy_total_spend,legacy_last_visit_at,status")
+      .order("current_points", { ascending: false })
+      .range(from, to);
+    if (error) throw error;
+    const page = (data ?? []) as Member[];
+    all.push(...page);
+    if (page.length < pageSize) break;
+  }
+
+  return all;
+}
+
 function MembersPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [settings, setSettings] = useState<LoyaltySettings>({
@@ -178,11 +198,8 @@ function MembersPage() {
 
   const load = async () => {
     setLoading(true);
-    const [{ data: memberRows, error: membersErr }, { data: settingsRow, error: settingsErr }] = await Promise.all([
-      supabase
-        .from("members")
-        .select("id,full_name,nickname,phone,member_group_en,member_level,current_points,legacy_visit_count,legacy_total_spend,legacy_last_visit_at,status")
-        .order("current_points", { ascending: false }),
+    const [memberResult, { data: settingsRow, error: settingsErr }] = await Promise.all([
+      fetchAllMembers().then((data) => ({ data, error: null as Error | null })).catch((error: Error) => ({ data: [] as Member[], error })),
       supabase
         .from("settings")
         .select("loyalty_enabled,loyalty_points_per_baht,loyalty_signup_bonus,loyalty_points_expire_months")
@@ -190,9 +207,9 @@ function MembersPage() {
         .single(),
     ]);
     setLoading(false);
-    if (membersErr) { toast.error(membersErr.message); return; }
+    if (memberResult.error) { toast.error(memberResult.error.message); return; }
     if (settingsErr) toast.error(settingsErr.message);
-    setMembers((memberRows ?? []) as Member[]);
+    setMembers(memberResult.data);
     if (settingsRow) setSettings(settingsRow as LoyaltySettings);
   };
 
