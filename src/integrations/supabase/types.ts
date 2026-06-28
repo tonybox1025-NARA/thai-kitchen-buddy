@@ -297,6 +297,141 @@ export type Database = {
         }
         Relationships: []
       }
+      member_point_ledger: {
+        Row: {
+          balance_after: number
+          bill_id: string | null
+          created_at: string
+          description: string | null
+          expires_at: string | null
+          id: string
+          member_id: string
+          points: number
+          type: string
+        }
+        Insert: {
+          balance_after: number
+          bill_id?: string | null
+          created_at?: string
+          description?: string | null
+          expires_at?: string | null
+          id?: string
+          member_id: string
+          points: number
+          type: string
+        }
+        Update: {
+          balance_after?: number
+          bill_id?: string | null
+          created_at?: string
+          description?: string | null
+          expires_at?: string | null
+          id?: string
+          member_id?: string
+          points?: number
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_point_ledger_bill_id_fkey"
+            columns: ["bill_id"]
+            isOneToOne: false
+            referencedRelation: "bills"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_point_ledger_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      members: {
+        Row: {
+          birthday: string | null
+          created_at: string
+          current_points: number
+          email: string | null
+          first_name: string | null
+          full_name: string
+          gender: string | null
+          id: string
+          imported_from: string | null
+          last_name: string | null
+          legacy_average_spend: number
+          legacy_last_visit_at: string | null
+          legacy_source_row: number | null
+          legacy_total_spend: number
+          legacy_visit_count: number
+          member_code: string | null
+          member_group_en: string | null
+          member_group_th: string | null
+          member_level: string | null
+          nickname: string | null
+          notes: string | null
+          opening_points: number
+          phone: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          birthday?: string | null
+          created_at?: string
+          current_points?: number
+          email?: string | null
+          first_name?: string | null
+          full_name: string
+          gender?: string | null
+          id?: string
+          imported_from?: string | null
+          last_name?: string | null
+          legacy_average_spend?: number
+          legacy_last_visit_at?: string | null
+          legacy_source_row?: number | null
+          legacy_total_spend?: number
+          legacy_visit_count?: number
+          member_code?: string | null
+          member_group_en?: string | null
+          member_group_th?: string | null
+          member_level?: string | null
+          nickname?: string | null
+          notes?: string | null
+          opening_points?: number
+          phone?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          birthday?: string | null
+          created_at?: string
+          current_points?: number
+          email?: string | null
+          first_name?: string | null
+          full_name?: string
+          gender?: string | null
+          id?: string
+          imported_from?: string | null
+          last_name?: string | null
+          legacy_average_spend?: number
+          legacy_last_visit_at?: string | null
+          legacy_source_row?: number | null
+          legacy_total_spend?: number
+          legacy_visit_count?: number
+          member_code?: string | null
+          member_group_en?: string | null
+          member_group_th?: string | null
+          member_level?: string | null
+          nickname?: string | null
+          notes?: string | null
+          opening_points?: number
+          phone?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       ingredients: {
         Row: {
           cost_per_unit: number
@@ -818,6 +953,10 @@ export type Database = {
           printer_counter_ip: string | null
           printer_kitchen_ip: string | null
           restaurant_name: string
+          loyalty_enabled: boolean
+          loyalty_points_expire_months: number
+          loyalty_points_per_baht: number
+          loyalty_signup_bonus: number
           max_discount_percent: number
           rounding_mode: string
           service_fee_rate: number
@@ -833,6 +972,10 @@ export type Database = {
           printer_counter_ip?: string | null
           printer_kitchen_ip?: string | null
           restaurant_name?: string
+          loyalty_enabled?: boolean
+          loyalty_points_expire_months?: number
+          loyalty_points_per_baht?: number
+          loyalty_signup_bonus?: number
           max_discount_percent?: number
           rounding_mode?: string
           service_fee_rate?: number
@@ -848,6 +991,10 @@ export type Database = {
           printer_counter_ip?: string | null
           printer_kitchen_ip?: string | null
           restaurant_name?: string
+          loyalty_enabled?: boolean
+          loyalty_points_expire_months?: number
+          loyalty_points_per_baht?: number
+          loyalty_signup_bonus?: number
           max_discount_percent?: number
           rounding_mode?: string
           service_fee_rate?: number

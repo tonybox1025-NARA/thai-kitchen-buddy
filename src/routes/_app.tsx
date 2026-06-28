@@ -5,7 +5,7 @@ import { useI18n } from "@/lib/i18n";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { PinKeypad } from "@/components/PinKeypad";
 import { Button } from "@/components/ui/button";
-import { LayoutGrid, BarChart3, FileText, Settings, LogOut, UserCircle2 } from "lucide-react";
+import { LayoutGrid, BarChart3, FileText, Settings, LogOut, UserCircle2, Heart } from "lucide-react";
 import { installAudioUnlockListeners, unlockAudio } from "@/lib/audio-alert";
 import { useQrAlertCount } from "@/lib/qr-alert-count";
 
@@ -72,6 +72,7 @@ function AppLayout() {
   const navItems = [
     { to: "/dashboard", label: t("nav_dashboard"), icon: BarChart3 },
     { to: "/pos", label: t("nav_pos"), icon: LayoutGrid },
+    { to: "/members", label: "Members", icon: Heart },
     { to: "/reports", label: t("nav_reports"), icon: FileText },
     { to: "/settings", label: t("nav_settings"), icon: Settings },
   ];

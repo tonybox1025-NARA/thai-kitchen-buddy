@@ -17,6 +17,7 @@ import { Route as MenuTableCodeRouteImport } from './routes/menu.$tableCode'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppReportsRouteImport } from './routes/_app/reports'
 import { Route as AppPosRouteImport } from './routes/_app/pos'
+import { Route as AppMembersRouteImport } from './routes/_app/members'
 import { Route as AppDetailVoidsRouteImport } from './routes/_app/detail-voids'
 import { Route as AppDetailTipsRouteImport } from './routes/_app/detail-tips'
 import { Route as AppDetailQrRouteImport } from './routes/_app/detail-qr'
@@ -65,6 +66,11 @@ const AppReportsRoute = AppReportsRouteImport.update({
 const AppPosRoute = AppPosRouteImport.update({
   id: '/pos',
   path: '/pos',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppMembersRoute = AppMembersRouteImport.update({
+  id: '/members',
+  path: '/members',
   getParentRoute: () => AppRoute,
 } as any)
 const AppDetailVoidsRoute = AppDetailVoidsRouteImport.update({
@@ -128,6 +134,7 @@ export interface FileRoutesByFullPath {
   '/detail-qr': typeof AppDetailQrRoute
   '/detail-tips': typeof AppDetailTipsRoute
   '/detail-voids': typeof AppDetailVoidsRoute
+  '/members': typeof AppMembersRoute
   '/pos': typeof AppPosRoute
   '/reports': typeof AppReportsRoute
   '/settings': typeof AppSettingsRoute
@@ -147,6 +154,7 @@ export interface FileRoutesByTo {
   '/detail-qr': typeof AppDetailQrRoute
   '/detail-tips': typeof AppDetailTipsRoute
   '/detail-voids': typeof AppDetailVoidsRoute
+  '/members': typeof AppMembersRoute
   '/pos': typeof AppPosRoute
   '/reports': typeof AppReportsRoute
   '/settings': typeof AppSettingsRoute
@@ -168,6 +176,7 @@ export interface FileRoutesById {
   '/_app/detail-qr': typeof AppDetailQrRoute
   '/_app/detail-tips': typeof AppDetailTipsRoute
   '/_app/detail-voids': typeof AppDetailVoidsRoute
+  '/_app/members': typeof AppMembersRoute
   '/_app/pos': typeof AppPosRoute
   '/_app/reports': typeof AppReportsRoute
   '/_app/settings': typeof AppSettingsRoute
@@ -189,6 +198,7 @@ export interface FileRouteTypes {
     | '/detail-qr'
     | '/detail-tips'
     | '/detail-voids'
+    | '/members'
     | '/pos'
     | '/reports'
     | '/settings'
@@ -208,6 +218,7 @@ export interface FileRouteTypes {
     | '/detail-qr'
     | '/detail-tips'
     | '/detail-voids'
+    | '/members'
     | '/pos'
     | '/reports'
     | '/settings'
@@ -228,6 +239,7 @@ export interface FileRouteTypes {
     | '/_app/detail-qr'
     | '/_app/detail-tips'
     | '/_app/detail-voids'
+    | '/_app/members'
     | '/_app/pos'
     | '/_app/reports'
     | '/_app/settings'
@@ -305,6 +317,13 @@ declare module '@tanstack/react-router' {
       path: '/pos'
       fullPath: '/pos'
       preLoaderRoute: typeof AppPosRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/members': {
+      id: '/_app/members'
+      path: '/members'
+      fullPath: '/members'
+      preLoaderRoute: typeof AppMembersRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/detail-voids': {
@@ -387,6 +406,7 @@ interface AppRouteChildren {
   AppDetailQrRoute: typeof AppDetailQrRoute
   AppDetailTipsRoute: typeof AppDetailTipsRoute
   AppDetailVoidsRoute: typeof AppDetailVoidsRoute
+  AppMembersRoute: typeof AppMembersRoute
   AppPosRoute: typeof AppPosRoute
   AppReportsRoute: typeof AppReportsRoute
   AppSettingsRoute: typeof AppSettingsRoute
@@ -401,6 +421,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppDetailQrRoute: AppDetailQrRoute,
   AppDetailTipsRoute: AppDetailTipsRoute,
   AppDetailVoidsRoute: AppDetailVoidsRoute,
+  AppMembersRoute: AppMembersRoute,
   AppPosRoute: AppPosRoute,
   AppReportsRoute: AppReportsRoute,
   AppSettingsRoute: AppSettingsRoute,
@@ -422,3 +443,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
