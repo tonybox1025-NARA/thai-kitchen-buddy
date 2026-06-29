@@ -27,6 +27,17 @@ type Member = {
   legacy_total_spend: number;
   legacy_last_visit_at: string | null;
   status: string;
+  guest_token: string | null;
+};
+
+type PointLedgerRow = {
+  id: string;
+  type: string;
+  points: number;
+  balance_after: number;
+  description: string | null;
+  created_at: string;
+  bill_id: string | null;
 };
 
 type LoyaltySettings = {
@@ -154,7 +165,7 @@ async function fetchAllMembers() {
     const to = from + pageSize - 1;
     const { data, error } = await supabase
       .from("members")
-      .select("id,full_name,nickname,phone,member_group_en,member_level,current_points,legacy_visit_count,legacy_total_spend,legacy_last_visit_at,status")
+      .select("id,full_name,nickname,phone,member_group_en,member_level,current_points,legacy_visit_count,legacy_total_spend,legacy_last_visit_at,status,guest_token")
       .order("current_points", { ascending: false })
       .range(from, to);
     if (error) throw error;
@@ -179,6 +190,9 @@ function MembersPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
   const [importing, setImporting] = useState(false);
+  const [selectedMember, setSelectedMember] = useState<Member | null>(null);
+  const [ledgerRows, setLedgerRows] = useState<PointLedgerRow[]>([]);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -245,6 +259,24 @@ function MembersPage() {
     }
   };
 
+  const openMemberDetail = async (member: Member) => {
+    setSelectedMember(member);
+    setLedgerRows([]);
+    setDetailLoading(true);
+    const { data, error } = await supabase
+      .from("member_point_ledger")
+      .select("id,type,points,balance_after,description,created_at,bill_id")
+      .eq("member_id", member.id)
+      .order("created_at", { ascending: false })
+      .limit(100);
+    setDetailLoading(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setLedgerRows((data ?? []) as PointLedgerRow[]);
+  };
+
   return (
     <div className="p-4 md:p-6 space-y-4">
       <div className="flex flex-wrap items-center gap-3">
@@ -295,7 +327,7 @@ function MembersPage() {
               </TableHeader>
               <TableBody>
                 {filtered.slice(0, 200).map((m) => (
-                  <TableRow key={m.id}>
+                  <TableRow key={m.id} className="cursor-pointer hover:bg-muted/50" onClick={() => void openMemberDetail(m)}>
                     <TableCell>
                       <div className="font-medium">{m.full_name}</div>
                       {m.nickname && <div className="text-xs text-muted-foreground">{m.nickname}</div>}
@@ -347,6 +379,72 @@ function MembersPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={!!selectedMember} onOpenChange={(open) => {
+        if (!open) {
+          setSelectedMember(null);
+          setLedgerRows([]);
+        }
+      }}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>{selectedMember?.full_name ?? "Member detail"}</DialogTitle>
+          </DialogHeader>
+          {selectedMember && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                {selectedMember.nickname && <span>{selectedMember.nickname}</span>}
+                {selectedMember.phone && <span>{selectedMember.phone}</span>}
+                {selectedMember.member_group_en && <Badge variant="secondary">{selectedMember.member_group_en}</Badge>}
+                {selectedMember.member_level && selectedMember.member_level !== "-" && <Badge>{selectedMember.member_level}</Badge>}
+                {selectedMember.guest_token && <Badge variant="outline">Guest wallet linked</Badge>}
+              </div>
+              <div className="grid gap-3 sm:grid-cols-4">
+                <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">Current points</div><div className="text-xl font-bold">{Number(selectedMember.current_points ?? 0).toLocaleString()}</div></CardContent></Card>
+                <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">Visits</div><div className="text-xl font-bold">{selectedMember.legacy_visit_count}</div></CardContent></Card>
+                <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">Legacy spend</div><div className="text-xl font-bold">{thb(selectedMember.legacy_total_spend)}</div></CardContent></Card>
+                <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">Last visit</div><div className="text-xl font-bold">{selectedMember.legacy_last_visit_at ?? "-"}</div></CardContent></Card>
+              </div>
+              <div className="rounded-lg border">
+                <div className="border-b p-3 font-medium">Point history</div>
+                {detailLoading ? (
+                  <div className="p-4 text-sm text-muted-foreground">Loading history...</div>
+                ) : ledgerRows.length === 0 ? (
+                  <div className="p-4 text-sm text-muted-foreground">No point history yet. Imported Dotdash points are shown as the opening/current balance.</div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Description</TableHead>
+                        <TableHead className="text-right">Points</TableHead>
+                        <TableHead className="text-right">Balance</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {ledgerRows.map((row) => (
+                        <TableRow key={row.id}>
+                          <TableCell>{new Date(row.created_at).toLocaleString()}</TableCell>
+                          <TableCell><Badge variant="outline">{row.type}</Badge></TableCell>
+                          <TableCell>{row.description ?? row.bill_id ?? "-"}</TableCell>
+                          <TableCell className={`text-right font-semibold ${row.points >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+                            {row.points >= 0 ? "+" : ""}{Number(row.points ?? 0).toLocaleString()}
+                          </TableCell>
+                          <TableCell className="text-right">{Number(row.balance_after ?? 0).toLocaleString()}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setSelectedMember(null); setLedgerRows([]); }}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={importOpen} onOpenChange={setImportOpen}>
         <DialogContent className="max-w-2xl">
