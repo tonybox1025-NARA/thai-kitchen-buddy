@@ -195,11 +195,13 @@ function buildReceipt(p) {
 function buildKitchen(p) {
   const _kd  = new Date(p.sent_at ?? Date.now());
   const time = `${String(_kd.getHours()).padStart(2,"0")}:${String(_kd.getMinutes()).padStart(2,"0")}:${String(_kd.getSeconds()).padStart(2,"0")}`;
+  const orderTypeLabel = p.order_type === "added" ? "ADDED ORDER / เพิ่มเติม" : "NEW ORDER";
   const parts = [
     CMD.INIT,
     CMD.ALIGN_CENTER,
     CMD.BOLD_ON, CMD.DSIZE_ON,
     `TABLE  ${p.table ?? "?"}`, lf(),
+    orderTypeLabel, lf(),
     CMD.DSIZE_OFF,
     p.source === "qr" ? "[ QR ORDER ]" : "[ POS ]", lf(),
     time, lf(),

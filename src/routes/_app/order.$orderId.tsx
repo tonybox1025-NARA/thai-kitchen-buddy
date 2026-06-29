@@ -256,6 +256,7 @@ function OrderPage() {
   const sendToKitchen = async () => {
     const pending = items.filter((i) => i.status === "pending");
     if (pending.length === 0) { toast.info(t("empty_order")); return; }
+    const orderType = items.some((i) => i.status === "sent") ? "added" : "new";
     const ids = pending.map((p) => p.id);
     const sentAt = new Date().toISOString();
     await supabase.from("order_items").update({ status: "sent", sent_at: sentAt }).in("id", ids);
@@ -285,7 +286,7 @@ function OrderPage() {
     });
     const displayLabel = orderSource === "takeout" ? `Takeout ${orderNumber ?? ""}` : orderSource === "staff_meal" ? `Staff ${orderNumber ?? ""}` : tableCode;
     const counterLines = lines.map(({ zoneId: _zoneId, zoneLabel: _zoneLabel, printToKitchen: _printToKitchen, ...line }) => line);
-    const ticketPayload: CounterPrintPayload = { kind: "order_ticket", table: displayLabel, lines: counterLines, sent_at: sentAt };
+    const ticketPayload: CounterPrintPayload = { kind: "order_ticket", table: displayLabel, order_type: orderType, lines: counterLines, sent_at: sentAt };
     const grouped = new Map<string, { zoneLabel: string; lines: typeof counterLines }>();
     for (const line of lines) {
       if (!line.printToKitchen) continue;

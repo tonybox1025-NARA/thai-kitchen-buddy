@@ -102,6 +102,7 @@ export const Route = createFileRoute("/api/public/qr-order")({
         // Find or create an open order for this table (source=qr OR pos — reuse existing open table order)
         let { data: order } = await supabase
           .from("orders").select("id").eq("table_id", table.id).eq("status", "open").maybeSingle();
+        let orderType: "new" | "added" = "new";
         if (!order) {
           const { data: newOrder, error: orderErr } = await supabase.from("orders").insert({
             table_id: table.id,
@@ -111,6 +112,15 @@ export const Route = createFileRoute("/api/public/qr-order")({
           }).select("id").single();
           if (orderErr || !newOrder) return new Response(orderErr?.message ?? "Failed to create order", { status: 500 });
           order = newOrder;
+        } else {
+          const { data: existingItems, error: existingItemsErr } = await supabase
+            .from("order_items")
+            .select("id")
+            .eq("order_id", order.id)
+            .neq("status", "voided")
+            .limit(1);
+          if (existingItemsErr) return new Response(existingItemsErr.message, { status: 500 });
+          orderType = existingItems && existingItems.length > 0 ? "added" : "new";
         }
 
         // Insert items as already-sent — kitchen gets the ticket automatically, no staff confirmation needed
@@ -188,7 +198,7 @@ export const Route = createFileRoute("/api/public/qr-order")({
         }));
         const counterLines = lines.map(({ zoneId: _zoneId, zoneLabel: _zoneLabel, printToKitchen: _printToKitchen, ...line }) => line);
         type TicketLine = (typeof counterLines)[number];
-        const ticketPayload = { kind: "order_ticket", table: table_code, source: "qr", lines: counterLines, sent_at: sentAt };
+        const ticketPayload = { kind: "order_ticket", table: table_code, source: "qr", order_type: orderType, lines: counterLines, sent_at: sentAt };
         const grouped = new Map<string, { zoneLabel: string; lines: TicketLine[] }>();
         for (const line of lines) {
           if (!line.printToKitchen) continue;
