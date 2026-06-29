@@ -17,13 +17,9 @@ function IndexPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const fallback = window.setTimeout(() => {
+    if (!loading && session) {
       void navigate({ to: "/pos", replace: true });
-    }, 2200);
-
-    if (loading) return () => window.clearTimeout(fallback);
-    window.clearTimeout(fallback);
-    void navigate({ to: session ? "/pos" : "/login", replace: true });
+    }
   }, [loading, session, navigate]);
 
   return (

@@ -141,8 +141,8 @@ export type Database = {
           discount_amount: number
           discount_note: string | null
           id: string
-          member_id: string | null
           member_discount_amount: number
+          member_id: string | null
           order_id: string
           paid_at: string | null
           shift_id: string | null
@@ -159,8 +159,8 @@ export type Database = {
           discount_amount?: number
           discount_note?: string | null
           id?: string
-          member_id?: string | null
           member_discount_amount?: number
+          member_id?: string | null
           order_id: string
           paid_at?: string | null
           shift_id?: string | null
@@ -177,8 +177,8 @@ export type Database = {
           discount_amount?: number
           discount_note?: string | null
           id?: string
-          member_id?: string | null
           member_discount_amount?: number
+          member_id?: string | null
           order_id?: string
           paid_at?: string | null
           shift_id?: string | null
