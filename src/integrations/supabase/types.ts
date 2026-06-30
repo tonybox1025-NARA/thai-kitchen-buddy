@@ -145,6 +145,10 @@ export type Database = {
           member_id: string | null
           order_id: string
           paid_at: string | null
+          rounding_adjustment: number
+          rounding_mode: string
+          service_fee_amount: number
+          service_fee_rate: number
           shift_id: string | null
           status: Database["public"]["Enums"]["bill_status"]
           subtotal: number
@@ -163,6 +167,10 @@ export type Database = {
           member_id?: string | null
           order_id: string
           paid_at?: string | null
+          rounding_adjustment?: number
+          rounding_mode?: string
+          service_fee_amount?: number
+          service_fee_rate?: number
           shift_id?: string | null
           status?: Database["public"]["Enums"]["bill_status"]
           subtotal?: number
@@ -181,6 +189,10 @@ export type Database = {
           member_id?: string | null
           order_id?: string
           paid_at?: string | null
+          rounding_adjustment?: number
+          rounding_mode?: string
+          service_fee_amount?: number
+          service_fee_rate?: number
           shift_id?: string | null
           status?: Database["public"]["Enums"]["bill_status"]
           subtotal?: number
@@ -1013,6 +1025,7 @@ export type Database = {
           loyalty_points_expire_months: number
           loyalty_points_per_baht: number
           loyalty_signup_bonus: number
+          max_discount_percent: number
           printer_counter_ip: string | null
           printer_kitchen_ip: string | null
           receipt_logo_url: string | null
@@ -1036,6 +1049,7 @@ export type Database = {
           loyalty_points_expire_months?: number
           loyalty_points_per_baht?: number
           loyalty_signup_bonus?: number
+          max_discount_percent?: number
           printer_counter_ip?: string | null
           printer_kitchen_ip?: string | null
           receipt_logo_url?: string | null
@@ -1059,6 +1073,7 @@ export type Database = {
           loyalty_points_expire_months?: number
           loyalty_points_per_baht?: number
           loyalty_signup_bonus?: number
+          max_discount_percent?: number
           printer_counter_ip?: string | null
           printer_kitchen_ip?: string | null
           receipt_logo_url?: string | null
