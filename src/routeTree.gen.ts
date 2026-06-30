@@ -18,6 +18,7 @@ import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppReportsRouteImport } from './routes/_app/reports'
 import { Route as AppPosRouteImport } from './routes/_app/pos'
 import { Route as AppMembersRouteImport } from './routes/_app/members'
+import { Route as AppLoyaltyRouteImport } from './routes/_app/loyalty'
 import { Route as AppDetailVoidsRouteImport } from './routes/_app/detail-voids'
 import { Route as AppDetailTipsRouteImport } from './routes/_app/detail-tips'
 import { Route as AppDetailQrRouteImport } from './routes/_app/detail-qr'
@@ -73,6 +74,11 @@ const AppPosRoute = AppPosRouteImport.update({
 const AppMembersRoute = AppMembersRouteImport.update({
   id: '/members',
   path: '/members',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppLoyaltyRoute = AppLoyaltyRouteImport.update({
+  id: '/loyalty',
+  path: '/loyalty',
   getParentRoute: () => AppRoute,
 } as any)
 const AppDetailVoidsRoute = AppDetailVoidsRouteImport.update({
@@ -147,6 +153,7 @@ export interface FileRoutesByFullPath {
   '/detail-qr': typeof AppDetailQrRoute
   '/detail-tips': typeof AppDetailTipsRoute
   '/detail-voids': typeof AppDetailVoidsRoute
+  '/loyalty': typeof AppLoyaltyRoute
   '/members': typeof AppMembersRoute
   '/pos': typeof AppPosRoute
   '/reports': typeof AppReportsRoute
@@ -169,6 +176,7 @@ export interface FileRoutesByTo {
   '/detail-qr': typeof AppDetailQrRoute
   '/detail-tips': typeof AppDetailTipsRoute
   '/detail-voids': typeof AppDetailVoidsRoute
+  '/loyalty': typeof AppLoyaltyRoute
   '/members': typeof AppMembersRoute
   '/pos': typeof AppPosRoute
   '/reports': typeof AppReportsRoute
@@ -193,6 +201,7 @@ export interface FileRoutesById {
   '/_app/detail-qr': typeof AppDetailQrRoute
   '/_app/detail-tips': typeof AppDetailTipsRoute
   '/_app/detail-voids': typeof AppDetailVoidsRoute
+  '/_app/loyalty': typeof AppLoyaltyRoute
   '/_app/members': typeof AppMembersRoute
   '/_app/pos': typeof AppPosRoute
   '/_app/reports': typeof AppReportsRoute
@@ -217,6 +226,7 @@ export interface FileRouteTypes {
     | '/detail-qr'
     | '/detail-tips'
     | '/detail-voids'
+    | '/loyalty'
     | '/members'
     | '/pos'
     | '/reports'
@@ -239,6 +249,7 @@ export interface FileRouteTypes {
     | '/detail-qr'
     | '/detail-tips'
     | '/detail-voids'
+    | '/loyalty'
     | '/members'
     | '/pos'
     | '/reports'
@@ -262,6 +273,7 @@ export interface FileRouteTypes {
     | '/_app/detail-qr'
     | '/_app/detail-tips'
     | '/_app/detail-voids'
+    | '/_app/loyalty'
     | '/_app/members'
     | '/_app/pos'
     | '/_app/reports'
@@ -351,6 +363,13 @@ declare module '@tanstack/react-router' {
       path: '/members'
       fullPath: '/members'
       preLoaderRoute: typeof AppMembersRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/loyalty': {
+      id: '/_app/loyalty'
+      path: '/loyalty'
+      fullPath: '/loyalty'
+      preLoaderRoute: typeof AppLoyaltyRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/detail-voids': {
@@ -447,6 +466,7 @@ interface AppRouteChildren {
   AppDetailQrRoute: typeof AppDetailQrRoute
   AppDetailTipsRoute: typeof AppDetailTipsRoute
   AppDetailVoidsRoute: typeof AppDetailVoidsRoute
+  AppLoyaltyRoute: typeof AppLoyaltyRoute
   AppMembersRoute: typeof AppMembersRoute
   AppPosRoute: typeof AppPosRoute
   AppReportsRoute: typeof AppReportsRoute
@@ -462,6 +482,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppDetailQrRoute: AppDetailQrRoute,
   AppDetailTipsRoute: AppDetailTipsRoute,
   AppDetailVoidsRoute: AppDetailVoidsRoute,
+  AppLoyaltyRoute: AppLoyaltyRoute,
   AppMembersRoute: AppMembersRoute,
   AppPosRoute: AppPosRoute,
   AppReportsRoute: AppReportsRoute,

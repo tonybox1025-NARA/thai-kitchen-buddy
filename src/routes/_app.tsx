@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { LayoutGrid, BarChart3, FileText, Settings, LogOut, UserCircle2, Heart, UtensilsCrossed } from "lucide-react";
+import { LayoutGrid, BarChart3, FileText, Settings, LogOut, UserCircle2, Heart, UtensilsCrossed, BadgePercent } from "lucide-react";
 import { installAudioUnlockListeners, unlockAudio } from "@/lib/audio-alert";
 import { useQrAlertCount } from "@/lib/qr-alert-count";
 
@@ -67,6 +67,7 @@ function AppLayout() {
     { to: "/dashboard", label: t("nav_dashboard"), icon: BarChart3 },
     { to: "/pos", label: t("nav_pos"), icon: LayoutGrid },
     { to: "/members", label: "Members", icon: Heart },
+    { to: "/loyalty", label: "Loyalty", icon: BadgePercent },
     { to: "/reports", label: t("nav_reports"), icon: FileText },
     { to: "/settings", label: t("nav_settings"), icon: Settings },
   ];
