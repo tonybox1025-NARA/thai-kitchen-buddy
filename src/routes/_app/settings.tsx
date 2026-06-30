@@ -64,6 +64,10 @@ type Settings = {
   service_fee_rate: number;
   rounding_mode: RoundingMode;
   max_discount_percent: number;
+  gov_qr_enabled: boolean;
+  gov_qr_label: string;
+  gov_qr_customer_percent: number;
+  gov_qr_government_percent: number;
   printer_counter_ip: string | null;
   printer_kitchen_ip: string | null;
   starting_cash: number;
@@ -282,6 +286,32 @@ function GeneralTab() {
                 <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
               </div>
             </div>
+          </div>
+
+          <div className="rounded-lg border p-3 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <Label>Government co-pay QR</Label>
+                <p className="text-xs text-muted-foreground">Configurable QR payment such as 60/40 or 50/50.</p>
+              </div>
+              <Switch checked={s.gov_qr_enabled ?? false} onCheckedChange={(checked) => setS({ ...s, gov_qr_enabled: checked })} />
+            </div>
+            {s.gov_qr_enabled && (
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div>
+                  <Label>Label</Label>
+                  <Input value={s.gov_qr_label ?? "60/40"} onChange={(e) => setS({ ...s, gov_qr_label: e.target.value })} />
+                </div>
+                <div>
+                  <Label>Customer %</Label>
+                  <Input type="number" min={0} max={100} step="0.01" value={s.gov_qr_customer_percent ?? 60} onChange={(e) => setS({ ...s, gov_qr_customer_percent: Math.max(0, Math.min(100, Number(e.target.value))) })} />
+                </div>
+                <div>
+                  <Label>Government %</Label>
+                  <Input type="number" min={0} max={100} step="0.01" value={s.gov_qr_government_percent ?? 40} onChange={(e) => setS({ ...s, gov_qr_government_percent: Math.max(0, Math.min(100, Number(e.target.value))) })} />
+                </div>
+              </div>
+            )}
           </div>
 
           <Button onClick={save}>{t("save")}</Button>

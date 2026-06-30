@@ -70,13 +70,13 @@ function Dashboard() {
     const gross     = bills.reduce((s, b) => s + Number(b.subtotal), 0);
     const net       = bills.reduce((s, b) => s + Number(b.total), 0);
     const discounts = bills.reduce((s, b) => s + Number(b.discount_amount) + Number(b.member_discount_amount), 0);
-    const byMethod: Record<string,number> = { cash:0, qr:0, card:0 };
+    const byMethod: Record<string,number> = { cash:0, qr:0, gov_qr:0, card:0 };
     payments.forEach(p => { byMethod[p.method] = (byMethod[p.method]??0) + Number(p.amount); });
     const tipTotal = payments.filter(p => p.method==="qr").reduce((s,p) => s+Number(p.tip_amount??0), 0);
     const grossProfit = gross - totalCost;
     const costPct     = gross > 0 ? (totalCost  / gross) * 100 : 0;
     const marginPct   = gross > 0 ? (grossProfit / gross) * 100 : 0;
-    return { gross, net, discounts, byMethod, count: bills.length, tipTotal, qrGross: byMethod.qr+tipTotal, grossProfit, costPct, marginPct };
+    return { gross, net, discounts, byMethod, count: bills.length, tipTotal, qrGross: byMethod.qr + byMethod.gov_qr + tipTotal, grossProfit, costPct, marginPct };
   }, [bills, payments, totalCost]);
 
   // Encode range into query string for detail pages
@@ -135,6 +135,11 @@ function Dashboard() {
             <StatLink title={t("qr_transfer")} value={thb(stats.qrGross)} to={`/detail-qr${rangeQ}`} />
             <StatCard title={t("card")}        value={thb(stats.byMethod.card)} />
           </div>
+          {stats.byMethod.gov_qr > 0 && (
+            <div className="grid grid-cols-3 gap-4">
+              <StatCard title="Government QR" value={thb(stats.byMethod.gov_qr)} />
+            </div>
+          )}
           {stats.tipTotal > 0 && (
             <div className="border-t pt-4 grid grid-cols-3 gap-4">
               <StatLink title={t("tips_collected")} value={thb(stats.tipTotal)} to={`/detail-tips${rangeQ}`} />

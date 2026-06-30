@@ -40,7 +40,7 @@ type ReportData = {
 type AdjPay = {
   payment_id: string; bill_id: string; table_code: string;
   amount: number; tip_amount: number;
-  method: "cash" | "qr" | "card"; paid_at: string;
+  method: "cash" | "qr" | "card" | "gov_qr"; paid_at: string;
 };
 
 type BillRow = {
@@ -50,7 +50,7 @@ type BillRow = {
 };
 
 function getQrGrossReceived(r: ReportData) {
-  return r.byMethod.qr + r.tipTotal;
+  return r.byMethod.qr + r.byMethod.gov_qr + r.tipTotal;
 }
 
 function getNetQrSales(r: ReportData) {
@@ -92,6 +92,7 @@ ${row("Net sales", thb(r.net), true)}
 <h2>Payments</h2><table>
 ${row("Cash", thb(r.byMethod.cash))}
 ${row("QR revenue", thb(getQrGrossReceived(r)))}
+${r.byMethod.gov_qr > 0 ? row("  Government QR", thb(r.byMethod.gov_qr)) : ""}
 ${r.tipTotal > 0 ? row("  Tips collected (QR)", thb(r.tipTotal)) : ""}
 ${r.tipTotal > 0 ? row("  Tips paid out (cash)", `- ${thb(r.tipTotal)}`) : ""}
 ${r.tipTotal > 0 ? row("  Net QR sales", thb(getNetQrSales(r)), true) : ""}
@@ -143,7 +144,7 @@ function Reports() {
   // Scenario 2: Z-report payment type adjustment
   const [adjDlg, setAdjDlg] = useState(false);
   const [adjPays, setAdjPays] = useState<AdjPay[]>([]);
-  const [adjChanges, setAdjChanges] = useState<Record<string, "cash" | "qr" | "card">>({});
+  const [adjChanges, setAdjChanges] = useState<Record<string, "cash" | "qr" | "card" | "gov_qr">>({});
   const [adjLoading, setAdjLoading] = useState(false);
 
   useEffect(() => {
@@ -177,7 +178,7 @@ function Reports() {
     const net = (bills ?? []).reduce((x, b) => x + Number(b.total), 0);
     const discount = (bills ?? []).reduce((x, b) => x + Number(b.discount_amount), 0);
     const member = (bills ?? []).reduce((x, b) => x + Number(b.member_discount_amount), 0);
-    const byMethod: Record<string, number> = { cash: 0, qr: 0, card: 0 };
+    const byMethod: Record<string, number> = { cash: 0, qr: 0, gov_qr: 0, card: 0 };
     (pays ?? []).forEach((p) => { byMethod[p.method] = (byMethod[p.method] ?? 0) + Number(p.amount); });
     const tipTotal = (pays ?? []).filter((p) => p.method === "qr").reduce((s, p) => s + Number(p.tip_amount ?? 0), 0);
 
@@ -305,7 +306,7 @@ function Reports() {
         return {
           payment_id: p.id, bill_id: p.bill_id, table_code: tableCode,
           amount: Number(p.amount), tip_amount: Number(p.tip_amount ?? 0),
-          method: p.method as "cash" | "qr" | "card",
+          method: p.method as "cash" | "qr" | "card" | "gov_qr",
           paid_at: bill?.paid_at ?? (p.created_at as string),
         };
       });
@@ -488,11 +489,12 @@ function Reports() {
                   <span className="w-8 shrink-0 font-medium text-xs text-muted-foreground">{p.table_code}</span>
                   <span className="w-20 shrink-0 font-semibold tabular-nums">{thb(p.amount)}</span>
                   {p.tip_amount > 0 && <span className="text-xs text-muted-foreground shrink-0">+tip {thb(p.tip_amount)}</span>}
-                  <Select value={next} onValueChange={(v) => setAdjChanges({ ...adjChanges, [p.payment_id]: v as "cash" | "qr" | "card" })}>
+                  <Select value={next} onValueChange={(v) => setAdjChanges({ ...adjChanges, [p.payment_id]: v as "cash" | "qr" | "card" | "gov_qr" })}>
                     <SelectTrigger className="flex-1 h-8 text-xs"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="cash">Cash</SelectItem>
                       <SelectItem value="qr">QR Transfer</SelectItem>
+                      <SelectItem value="gov_qr">Government QR</SelectItem>
                       <SelectItem value="card">Credit card</SelectItem>
                     </SelectContent>
                   </Select>
@@ -509,13 +511,13 @@ function Reports() {
             <div className="rounded-lg border bg-muted/40 p-3 text-sm space-y-2">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Before / After</p>
               <div className="grid grid-cols-3 gap-2 text-center">
-                {(["cash", "qr", "card"] as const).map((m) => {
+                {(["cash", "qr", "gov_qr", "card"] as const).map((m) => {
                   const bef = adjSummary.before[m] ?? 0;
                   const aft = adjSummary.after[m] ?? 0;
                   const diff = aft - bef;
                   return (
                     <div key={m} className={`rounded p-2 ${diff !== 0 ? "bg-amber-100 dark:bg-amber-900/40" : "bg-background"}`}>
-                      <p className="text-xs text-muted-foreground capitalize">{m === "qr" ? "QR Transfer" : m === "card" ? "Credit card" : "Cash"}</p>
+                      <p className="text-xs text-muted-foreground capitalize">{m === "qr" ? "QR Transfer" : m === "gov_qr" ? "Government QR" : m === "card" ? "Credit card" : "Cash"}</p>
                       <p className="font-semibold tabular-nums">{thb(aft)}</p>
                       {diff !== 0 && (
                         <p className={`text-xs tabular-nums font-medium ${diff > 0 ? "text-green-600" : "text-red-500"}`}>
@@ -638,8 +640,9 @@ function BillHistoryTab() {
     const cls =
       method === "cash" ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400" :
       method === "qr"   ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400" :
+      method === "gov_qr" ? "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-400" :
                           "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400";
-    const label = method === "qr" ? "QR" : method === "card" ? "Card" : "Cash";
+    const label = method === "qr" ? "QR" : method === "gov_qr" ? "Gov QR" : method === "card" ? "Card" : "Cash";
     return (
       <span key={method + amount} className={`text-xs px-2 py-0.5 rounded-full font-medium ${cls}`}>
         {label} {thb(amount)}
@@ -1462,6 +1465,7 @@ function ReportCard({ r }: { r: ReportData }) {
         <div className="border-t pt-2 mt-2" />
         <Row label="Cash" value={thb(r.byMethod.cash)} />
         <Row label="QR revenue" value={thb(getQrGrossReceived(r))} />
+        {r.byMethod.gov_qr > 0 && <Row label="  ↳ Government QR" value={thb(r.byMethod.gov_qr)} />}
         {r.tipTotal > 0 && <>
           <Row label="  ↳ Tips collected (QR)" value={thb(r.tipTotal)} />
           <Row label="  ↳ Tips paid out (cash)" value={`- ${thb(r.tipTotal)}`} />

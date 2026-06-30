@@ -173,6 +173,7 @@ function buildReceipt(p) {
   for (const pay of p.payments ?? []) {
     const label = pay.method === "cash" ? "Cash"
                 : pay.method === "qr"   ? "QR Transfer"
+                : pay.method === "gov_qr" ? "Government QR"
                 :                        "Credit Card";
     parts.push(twoCol(label, thb(pay.amount)), lf());
     if (pay.cash_received) parts.push(twoCol("  Received", thb(pay.cash_received)), lf());

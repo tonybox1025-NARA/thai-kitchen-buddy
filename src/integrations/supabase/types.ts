@@ -1004,6 +1004,10 @@ export type Database = {
       settings: {
         Row: {
           current_business_day: string
+          gov_qr_customer_percent: number
+          gov_qr_enabled: boolean
+          gov_qr_government_percent: number
+          gov_qr_label: string
           id: number
           loyalty_enabled: boolean
           loyalty_points_expire_months: number
@@ -1012,13 +1016,20 @@ export type Database = {
           printer_counter_ip: string | null
           printer_kitchen_ip: string | null
           restaurant_name: string
+          rounding_mode: string
+          service_fee_rate: number
           starting_cash: number
           updated_at: string
+          vat_enabled: boolean
           vat_mode: Database["public"]["Enums"]["vat_mode"]
           vat_rate: number
         }
         Insert: {
           current_business_day?: string
+          gov_qr_customer_percent?: number
+          gov_qr_enabled?: boolean
+          gov_qr_government_percent?: number
+          gov_qr_label?: string
           id?: number
           loyalty_enabled?: boolean
           loyalty_points_expire_months?: number
@@ -1027,13 +1038,20 @@ export type Database = {
           printer_counter_ip?: string | null
           printer_kitchen_ip?: string | null
           restaurant_name?: string
+          rounding_mode?: string
+          service_fee_rate?: number
           starting_cash?: number
           updated_at?: string
+          vat_enabled?: boolean
           vat_mode?: Database["public"]["Enums"]["vat_mode"]
           vat_rate?: number
         }
         Update: {
           current_business_day?: string
+          gov_qr_customer_percent?: number
+          gov_qr_enabled?: boolean
+          gov_qr_government_percent?: number
+          gov_qr_label?: string
           id?: number
           loyalty_enabled?: boolean
           loyalty_points_expire_months?: number
@@ -1042,8 +1060,11 @@ export type Database = {
           printer_counter_ip?: string | null
           printer_kitchen_ip?: string | null
           restaurant_name?: string
+          rounding_mode?: string
+          service_fee_rate?: number
           starting_cash?: number
           updated_at?: string
+          vat_enabled?: boolean
           vat_mode?: Database["public"]["Enums"]["vat_mode"]
           vat_rate?: number
         }
@@ -1275,7 +1296,7 @@ export type Database = {
       order_item_status: "pending" | "sent" | "served" | "voided"
       order_source: "pos" | "qr" | "takeout" | "staff_meal"
       order_status: "open" | "closed" | "cancelled"
-      payment_method: "qr" | "cash" | "card"
+      payment_method: "qr" | "cash" | "card" | "gov_qr"
       print_status: "pending" | "printed" | "failed"
       printer_kind: "counter" | "kitchen"
       shift_status: "open" | "closed"
@@ -1413,7 +1434,7 @@ export const Constants = {
       order_item_status: ["pending", "sent", "served", "voided"],
       order_source: ["pos", "qr", "takeout", "staff_meal"],
       order_status: ["open", "closed", "cancelled"],
-      payment_method: ["qr", "cash", "card"],
+      payment_method: ["qr", "cash", "card", "gov_qr"],
       print_status: ["pending", "printed", "failed"],
       printer_kind: ["counter", "kitchen"],
       shift_status: ["open", "closed"],

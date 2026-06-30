@@ -27,7 +27,8 @@ type Bill = {
   vat_amount: number; total: number; status: string; paid_at: string | null;
 };
 type Item = { id: string; name_th: string; name_en: string; qty: number; unit_price: number; status: string };
-type Payment = { id: string; method: "qr" | "cash" | "card"; amount: number; cash_received: number | null; change_due: number | null; tip_amount: number };
+type PaymentMethod = "qr" | "cash" | "card" | "gov_qr";
+type Payment = { id: string; method: PaymentMethod; amount: number; cash_received: number | null; change_due: number | null; tip_amount: number; reference: string | null };
 type MemberLookup = {
   id: string;
   full_name: string;
@@ -118,6 +119,10 @@ function PaymentPage() {
   const [settingsServiceFeeRate, setSettingsServiceFeeRate] = useState(0);
   const [settingsRoundingMode, setSettingsRoundingMode] = useState<RoundingMode>("none");
   const [settingsMaxDiscountPercent, setSettingsMaxDiscountPercent] = useState(100);
+  const [govQrEnabled, setGovQrEnabled] = useState(false);
+  const [govQrLabel, setGovQrLabel] = useState("60/40");
+  const [govQrCustomerPercent, setGovQrCustomerPercent] = useState(60);
+  const [govQrGovernmentPercent, setGovQrGovernmentPercent] = useState(40);
   const [loyaltyEnabled, setLoyaltyEnabled] = useState(true);
   const [loyaltyPointsPerBaht, setLoyaltyPointsPerBaht] = useState(1);
   const [selectedMember, setSelectedMember] = useState<MemberLookup | null>(null);
@@ -146,7 +151,7 @@ function PaymentPage() {
 
   // Payment type correction
   const [corrOpen, setCorrOpen] = useState(false);
-  const [corrChanges, setCorrChanges] = useState<Record<string, "qr" | "cash" | "card">>({});
+  const [corrChanges, setCorrChanges] = useState<Record<string, PaymentMethod>>({});
   const [corrReason, setCorrReason] = useState("");
 
   // Split bill
@@ -163,7 +168,7 @@ function PaymentPage() {
     const [{ data: b }, { data: ps }, { data: s }] = await Promise.all([
       supabase.from("bills").select("*").eq("id", billId).single(),
       supabase.from("payments").select("*").eq("bill_id", billId),
-      supabase.from("settings").select("restaurant_name, vat_enabled, vat_mode, vat_rate, service_fee_rate, rounding_mode, max_discount_percent, loyalty_enabled, loyalty_points_per_baht").eq("id", 1).single(),
+      supabase.from("settings").select("restaurant_name, vat_enabled, vat_mode, vat_rate, service_fee_rate, rounding_mode, max_discount_percent, loyalty_enabled, loyalty_points_per_baht, gov_qr_enabled, gov_qr_label, gov_qr_customer_percent, gov_qr_government_percent").eq("id", 1).single(),
     ]);
     if (b) {
       setBill(b as unknown as Bill);
@@ -219,6 +224,10 @@ function PaymentPage() {
       setSettingsMaxDiscountPercent(Number(row.max_discount_percent ?? 100));
       setLoyaltyEnabled(row.loyalty_enabled ?? true);
       setLoyaltyPointsPerBaht(Number(row.loyalty_points_per_baht ?? 1));
+      setGovQrEnabled(row.gov_qr_enabled ?? false);
+      setGovQrLabel(row.gov_qr_label ?? "60/40");
+      setGovQrCustomerPercent(Number(row.gov_qr_customer_percent ?? 60));
+      setGovQrGovernmentPercent(Number(row.gov_qr_government_percent ?? 40));
     }
   };
 
@@ -242,6 +251,12 @@ function PaymentPage() {
   const paid = payments.reduce((s, p) => s + Number(p.amount), 0);
   const remaining = Math.max(0, total - paid);
   const earnPoints = loyaltyEnabled && selectedMember ? Math.max(0, Math.floor(total * loyaltyPointsPerBaht)) : 0;
+  const paymentMethodLabel = (method: PaymentMethod) => (
+    method === "cash" ? t("cash")
+    : method === "qr" ? t("qr_transfer")
+    : method === "gov_qr" ? `Government QR ${govQrLabel}`
+    : t("card")
+  );
 
   // Persist member discount + VAT + total to bill (discount_amount owned by applyDiscount/removeDiscount)
   const persistBill = async () => {
@@ -656,7 +671,7 @@ function PaymentPage() {
             <CardContent className="space-y-1 text-sm">
               {payments.map((p) => (
                 <div key={p.id}>
-                  <Row label={`${p.method.toUpperCase()}${p.cash_received ? ` (rcv ${thb(p.cash_received)}, chg ${thb(p.change_due ?? 0)})` : ""}`} value={thb(p.amount)} />
+                  <Row label={`${paymentMethodLabel(p.method)}${p.cash_received ? ` (rcv ${thb(p.cash_received)}, chg ${thb(p.change_due ?? 0)})` : ""}`} value={thb(p.amount)} />
                   {p.tip_amount > 0 && <Row label="  ↳ Tip (cash payout)" value={thb(p.tip_amount)} muted />}
                 </div>
               ))}
@@ -754,9 +769,10 @@ function PaymentPage() {
             {/* ── Payment methods ── */}
             <h3 className="font-semibold mb-2 text-sm">{t("pay")}</h3>
             <Tabs defaultValue="cash">
-              <TabsList className="grid grid-cols-3 w-full">
+              <TabsList className={`grid ${govQrEnabled ? "grid-cols-4" : "grid-cols-3"} w-full`}>
                 <TabsTrigger value="cash"><Banknote className="h-4 w-4 mr-1" />{t("cash")}</TabsTrigger>
                 <TabsTrigger value="qr"><QrCode className="h-4 w-4 mr-1" />QR</TabsTrigger>
+                {govQrEnabled && <TabsTrigger value="gov_qr"><QrCode className="h-4 w-4 mr-1" />{govQrLabel}</TabsTrigger>}
                 <TabsTrigger value="card"><CreditCard className="h-4 w-4 mr-1" />{t("card")}</TabsTrigger>
               </TabsList>
               <TabsContent value="cash" className="pt-3">
@@ -785,6 +801,18 @@ function PaymentPage() {
                   {t("qr_transfer")}{qrTip > 0 ? ` + Tip ${thb(qrTip)}` : ""}
                 </Button>
               </TabsContent>
+              {govQrEnabled && (
+                <TabsContent value="gov_qr" className="pt-3 space-y-2">
+                  <div className="rounded-md bg-muted px-3 py-2 text-sm space-y-1">
+                    <div className="flex justify-between"><span>Customer {govQrCustomerPercent}%</span><span className="font-semibold">{thb(remaining * govQrCustomerPercent / 100)}</span></div>
+                    <div className="flex justify-between"><span>Government {govQrGovernmentPercent}%</span><span className="font-semibold">{thb(remaining * govQrGovernmentPercent / 100)}</span></div>
+                  </div>
+                  <Button className="w-full" size="lg" disabled={remaining <= 0}
+                    onClick={() => addPayment("gov_qr", remaining, { reference: `${govQrLabel}; customer ${govQrCustomerPercent}% ${thb(remaining * govQrCustomerPercent / 100)}; government ${govQrGovernmentPercent}% ${thb(remaining * govQrGovernmentPercent / 100)}` })}>
+                    Government QR {govQrLabel} · {thb(remaining)}
+                  </Button>
+                </TabsContent>
+              )}
               <TabsContent value="card" className="pt-3 space-y-2">
                 <Input id="card-amt" type="number" defaultValue={remaining} step="0.01" />
                 <Button className="w-full" size="lg" disabled={remaining <= 0} onClick={() => {
@@ -1043,6 +1071,10 @@ function PaymentPage() {
         t={t}
         onAddPayment={addPayment}
         paidStatus={paidStatus}
+        govQrEnabled={govQrEnabled}
+        govQrLabel={govQrLabel}
+        govQrCustomerPercent={govQrCustomerPercent}
+        govQrGovernmentPercent={govQrGovernmentPercent}
       />
 
       <ManagerPinDialog open={managerOpen} onOpenChange={setManagerOpen} onApproved={() => {
@@ -1065,11 +1097,12 @@ function PaymentPage() {
               return (
                 <div key={p.id} className={`flex items-center gap-3 rounded-lg border p-2 ${changed ? "border-amber-400 bg-amber-50 dark:bg-amber-950/30" : ""}`}>
                   <span className="text-sm font-medium w-20 shrink-0">{thb(p.amount)}</span>
-                  <Select value={next} onValueChange={(v) => setCorrChanges({ ...corrChanges, [p.id]: v as "cash" | "qr" | "card" })}>
+                  <Select value={next} onValueChange={(v) => setCorrChanges({ ...corrChanges, [p.id]: v as PaymentMethod })}>
                     <SelectTrigger className="flex-1 h-8"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="cash">Cash</SelectItem>
                       <SelectItem value="qr">QR Transfer</SelectItem>
+                      <SelectItem value="gov_qr">Government QR {govQrLabel}</SelectItem>
                       <SelectItem value="card">Credit card</SelectItem>
                     </SelectContent>
                   </Select>
@@ -1134,16 +1167,20 @@ function PaymentPage() {
 // Split Bill Dialog
 // ─────────────────────────────────────────────────────────────────────────────
 type SplitStep = "choose" | "even_setup" | "even_pay" | "item_assign" | "item_pay";
-type PayMethod = "cash" | "qr" | "card";
+type PayMethod = PaymentMethod;
 
 function SplitBillDialog({
-  open, onClose, items, billTotal, remaining, lang, t, onAddPayment, paidStatus,
+  open, onClose, items, billTotal, remaining, lang, t, onAddPayment, paidStatus, govQrEnabled, govQrLabel, govQrCustomerPercent, govQrGovernmentPercent,
 }: {
   open: boolean; onClose: () => void;
   items: Item[]; billTotal: number; remaining: number;
   lang: "th" | "en"; t: (k: string) => string;
   onAddPayment: (m: PayMethod, amount: number, extras?: Record<string, unknown>) => Promise<void>;
   paidStatus: boolean;
+  govQrEnabled: boolean;
+  govQrLabel: string;
+  govQrCustomerPercent: number;
+  govQrGovernmentPercent: number;
 }) {
   const [step, setStep] = useState<SplitStep>("choose");
   const [ways, setWays] = useState(2);
@@ -1208,6 +1245,8 @@ function SplitBillDialog({
       } else if (payMethod === "qr") {
         await onAddPayment("qr", currentAmount, { tip_amount: qrTip });
         setQrTip(0);
+      } else if (payMethod === "gov_qr") {
+        await onAddPayment("gov_qr", currentAmount, { reference: `${govQrLabel}; customer ${govQrCustomerPercent}% ${thb(currentAmount * govQrCustomerPercent / 100)}; government ${govQrGovernmentPercent}% ${thb(currentAmount * govQrGovernmentPercent / 100)}` });
       } else {
         await onAddPayment("card", currentAmount);
       }
@@ -1245,10 +1284,10 @@ function SplitBillDialog({
   const PayForm = ({ amount }: { amount: number }) => (
     <div className="space-y-3">
       <div className="flex gap-2">
-        {(["cash", "qr", "card"] as const).map((m) => (
+        {(["cash", "qr", ...(govQrEnabled ? ["gov_qr" as const] : []), "card"] as const).map((m) => (
           <button key={m} onClick={() => setPayMethod(m)}
             className={`flex-1 py-2 rounded-lg border text-sm font-medium transition-colors ${payMethod === m ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted/60"}`}>
-            {m === "cash" ? t("cash") : m === "qr" ? "QR" : t("card")}
+            {m === "cash" ? t("cash") : m === "qr" ? "QR" : m === "gov_qr" ? govQrLabel : t("card")}
           </button>
         ))}
       </div>
@@ -1299,6 +1338,13 @@ function SplitBillDialog({
       {payMethod === "card" && (
         <div className="flex justify-between text-sm bg-muted rounded px-3 py-2">
           <span>{t("amount")}</span><span className="font-bold tabular-nums">{thb(amount)}</span>
+        </div>
+      )}
+
+      {payMethod === "gov_qr" && (
+        <div className="space-y-1 text-sm bg-muted rounded px-3 py-2">
+          <div className="flex justify-between"><span>Customer {govQrCustomerPercent}%</span><span className="font-bold tabular-nums">{thb(amount * govQrCustomerPercent / 100)}</span></div>
+          <div className="flex justify-between"><span>Government {govQrGovernmentPercent}%</span><span className="font-bold tabular-nums">{thb(amount * govQrGovernmentPercent / 100)}</span></div>
         </div>
       )}
     </div>

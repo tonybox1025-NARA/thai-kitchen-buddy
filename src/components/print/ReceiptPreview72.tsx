@@ -1,6 +1,12 @@
 import type { ReceiptData } from "@/lib/print/types";
 
 const fmt = (n: number) => n.toFixed(2);
+const paymentLabel = (method: string) =>
+  method === "cash" ? "CASH"
+  : method === "qr" ? "QR TRANSFER"
+  : method === "gov_qr" ? "GOVERNMENT QR"
+  : method === "card" ? "CREDIT CARD"
+  : method.toUpperCase();
 
 export function ReceiptPreview72({ data }: { data: ReceiptData }) {
   return (
@@ -36,7 +42,7 @@ export function ReceiptPreview72({ data }: { data: ReceiptData }) {
       </div>
       <div className="border-t border-dashed border-black my-1" />
       {data.payments.map((p, i) => (
-        <div key={i} className="flex justify-between"><span>{p.method.toUpperCase()}</span><span>{fmt(p.amount)}</span></div>
+        <div key={i} className="flex justify-between"><span>{paymentLabel(p.method)}</span><span>{fmt(p.amount)}</span></div>
       ))}
       {data.change != null && data.change > 0 && (
         <div className="flex justify-between"><span>Change</span><span>{fmt(data.change)}</span></div>
@@ -62,7 +68,7 @@ export function receiptToHtml(data: ReceiptData): string {
      <div class="sub">  ${it.qty} x ${fmt(it.unitPrice)}</div>`
   ).join("");
   const pays = data.payments.map((p) =>
-    `<div class="row"><span>${escapeHtml(p.method.toUpperCase())}</span><span>${fmt(p.amount)}</span></div>`
+    `<div class="row"><span>${escapeHtml(paymentLabel(p.method))}</span><span>${fmt(p.amount)}</span></div>`
   ).join("");
   return `
   <style>
