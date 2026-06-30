@@ -419,6 +419,11 @@ function PaymentPage() {
     if (paid + amount + 0.001 >= total) await finalize();
   };
 
+  const completeZeroTotal = async () => {
+    if (!bill || total > 0.001 || paidStatus) return;
+    await finalize();
+  };
+
   const searchMembers = async () => {
     const term = memberQuery.trim().replace(/[%,()]/g, "");
     let query = supabase
@@ -768,6 +773,11 @@ function PaymentPage() {
 
             {/* ── Payment methods ── */}
             <h3 className="font-semibold mb-2 text-sm">{t("pay")}</h3>
+            {remaining <= 0 ? (
+              <Button className="w-full" size="lg" onClick={completeZeroTotal}>
+                Complete checkout · {thb(0)}
+              </Button>
+            ) : (
             <Tabs defaultValue="cash">
               <TabsList className={`grid ${govQrEnabled ? "grid-cols-4" : "grid-cols-3"} w-full`}>
                 <TabsTrigger value="cash"><Banknote className="h-4 w-4 mr-1" />{t("cash")}</TabsTrigger>
@@ -821,6 +831,7 @@ function PaymentPage() {
                 }}>{t("card")}</Button>
               </TabsContent>
             </Tabs>
+            )}
           </>
         ) : (
           <div className="space-y-3">
