@@ -11,6 +11,11 @@ const paymentLabel = (method: string) =>
 export function ReceiptPreview72({ data }: { data: ReceiptData }) {
   return (
     <div className="receipt-72 mx-auto bg-white text-black font-mono text-[12px] leading-tight p-2" style={{ width: "72mm" }}>
+      {data.logoUrl && (
+        <div className="mb-1 flex justify-center">
+          <img src={data.logoUrl} alt="" className="max-h-14 max-w-[38mm] object-contain" />
+        </div>
+      )}
       <div className="text-center font-bold text-[14px]">{data.restaurant}</div>
       {data.address && <div className="text-center text-[11px]">{data.address}</div>}
       {data.taxId && <div className="text-center text-[11px]">Tax ID: {data.taxId}</div>}
@@ -77,6 +82,8 @@ export function receiptToHtml(data: ReceiptData): string {
     .center { text-align: center; }
     .b { font-weight: 700; }
     .lg { font-size: 14px; }
+    .logo-wrap { text-align: center; margin-bottom: 4px; }
+    .logo { max-width: 38mm; max-height: 14mm; object-fit: contain; }
     .row { display: flex; justify-content: space-between; }
     .sub { font-size: 10px; }
     .small { font-size: 10px; overflow-wrap: anywhere; }
@@ -84,6 +91,7 @@ export function receiptToHtml(data: ReceiptData): string {
     .name { padding-right: 4px; }
   </style>
   <div class="r">
+    ${data.logoUrl ? `<div class="logo-wrap"><img class="logo" src="${escapeHtml(data.logoUrl)}" alt=""></div>` : ""}
     <div class="center b lg">${escapeHtml(data.restaurant)}</div>
     ${data.address ? `<div class="center">${escapeHtml(data.address)}</div>` : ""}
     ${data.taxId ? `<div class="center">Tax ID: ${escapeHtml(data.taxId)}</div>` : ""}

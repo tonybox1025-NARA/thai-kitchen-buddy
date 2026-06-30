@@ -58,6 +58,7 @@ type MenuIngredientRow = {
 type RoundingMode = "none" | "nearest_whole" | "up_whole" | "down_whole";
 type Settings = {
   restaurant_name: string;
+  receipt_logo_url: string | null;
   vat_enabled: boolean;
   vat_mode: "inclusive" | "exclusive";
   vat_rate: number;
@@ -203,26 +204,75 @@ function GeneralTab() {
     if (error) { toast.error(error.message); return; }
     toast.success("Saved");
   };
+  const previewSubtotal = sampleReceipt.subtotal;
+  const previewService = previewSubtotal * Number(s.service_fee_rate ?? 0) / 100;
+  const previewVatRate = Number(s.vat_rate ?? 0);
+  const previewBase = previewSubtotal + previewService;
+  const previewVat = s.vat_enabled
+    ? s.vat_mode === "exclusive"
+      ? previewBase * previewVatRate / 100
+      : previewBase - previewBase / (1 + previewVatRate / 100)
+    : 0;
+  const previewTotal = s.vat_mode === "exclusive" ? previewBase + previewVat : previewBase;
+  const receiptPreview = {
+    ...sampleReceipt,
+    restaurant: s.restaurant_name || sampleReceipt.restaurant,
+    logoUrl: s.receipt_logo_url?.trim() || undefined,
+    serviceCharge: previewService,
+    vatMode: s.vat_mode,
+    vatRate: previewVatRate,
+    vatAmount: previewVat,
+    total: previewTotal,
+    payments: [{ method: s.gov_qr_enabled ? "gov_qr" : "cash", amount: previewTotal }],
+    change: s.gov_qr_enabled ? 0 : Math.max(0, 1000 - previewTotal),
+  };
   return (
-    <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,32rem)_minmax(0,36rem)]">
-      <Card>
-        <CardHeader><CardTitle className="text-base">Store information</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
-          <div><Label>{t("restaurant_name")}</Label><Input value={s.restaurant_name} onChange={(e) => setS({ ...s, restaurant_name: e.target.value })} /></div>
-          <div>
-            <Label>{t("starting_cash")}</Label>
-            <Input type="number" step="1" value={s.starting_cash ?? 0} onChange={(e) => setS({ ...s, starting_cash: Number(e.target.value) })} />
-            <p className="text-xs text-muted-foreground mt-1">{t("starting_cash_help")}</p>
-          </div>
-          <Button onClick={save}>{t("save")}</Button>
-        </CardContent>
-      </Card>
+    <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(20rem,28rem)_minmax(0,36rem)]">
+      <div className="space-y-4">
+        <Card>
+          <CardHeader><CardTitle className="text-base">Receipt preview</CardTitle></CardHeader>
+          <CardContent>
+            <div className="rounded-lg border bg-muted/30 py-5">
+              <ReceiptPreview72 data={receiptPreview} />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle className="text-base">Store information</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            <div><Label>{t("restaurant_name")}</Label><Input value={s.restaurant_name} onChange={(e) => setS({ ...s, restaurant_name: e.target.value })} /></div>
+            <div>
+              <Label>{t("starting_cash")}</Label>
+              <Input type="number" step="1" value={s.starting_cash ?? 0} onChange={(e) => setS({ ...s, starting_cash: Number(e.target.value) })} />
+              <p className="text-xs text-muted-foreground mt-1">{t("starting_cash_help")}</p>
+            </div>
+            <Button onClick={save}>{t("save")}</Button>
+          </CardContent>
+        </Card>
+      </div>
 
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Receipt setup</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="rounded-lg border p-3 space-y-2">
+            <Label>Receipt logo URL</Label>
+            <Input
+              type="url"
+              placeholder="https://..."
+              value={s.receipt_logo_url ?? ""}
+              onChange={(e) => setS({ ...s, receipt_logo_url: e.target.value })}
+            />
+            <p className="text-xs text-muted-foreground">Use a direct PNG/JPG logo URL. Square or wide transparent PNG works best.</p>
+            {s.receipt_logo_url && (
+              <Button variant="outline" size="sm" onClick={() => setS({ ...s, receipt_logo_url: "" })}>
+                Clear logo
+              </Button>
+            )}
+          </div>
+
           <div className="rounded-lg border p-3 space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div>

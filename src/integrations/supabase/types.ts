@@ -1015,6 +1015,7 @@ export type Database = {
           loyalty_signup_bonus: number
           printer_counter_ip: string | null
           printer_kitchen_ip: string | null
+          receipt_logo_url: string | null
           restaurant_name: string
           rounding_mode: string
           service_fee_rate: number
@@ -1037,6 +1038,7 @@ export type Database = {
           loyalty_signup_bonus?: number
           printer_counter_ip?: string | null
           printer_kitchen_ip?: string | null
+          receipt_logo_url?: string | null
           restaurant_name?: string
           rounding_mode?: string
           service_fee_rate?: number
@@ -1059,6 +1061,7 @@ export type Database = {
           loyalty_signup_bonus?: number
           printer_counter_ip?: string | null
           printer_kitchen_ip?: string | null
+          receipt_logo_url?: string | null
           restaurant_name?: string
           rounding_mode?: string
           service_fee_rate?: number

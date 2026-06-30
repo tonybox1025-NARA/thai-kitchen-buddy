@@ -12,6 +12,7 @@ export type ReceiptItem = {
 
 export type ReceiptData = {
   restaurant: string;
+  logoUrl?: string;
   address?: string;
   taxId?: string;
   table?: string;

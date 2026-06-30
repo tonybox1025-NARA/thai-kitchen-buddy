@@ -102,6 +102,7 @@ function OrderPage() {
   const [settingsVatMode, setSettingsVatMode] = useState<"inclusive" | "exclusive">("inclusive");
   const [settingsVatRate, setSettingsVatRate] = useState(7);
   const [restaurantName, setRestaurantName] = useState("");
+  const [receiptLogoUrl, setReceiptLogoUrl] = useState<string | null>(null);
 
   const loadAll = async () => {
     const [{ data: m }, { data: c }, { data: it }, { data: ord }, { data: s }] = await Promise.all([
@@ -109,12 +110,12 @@ function OrderPage() {
       supabase.from("categories").select("*").order("sort"),
       supabase.from("order_items").select("*").eq("order_id", orderId).order("sent_at", { ascending: true, nullsFirst: true }),
       supabase.from("orders").select("table_id,source,order_number").eq("id", orderId).single(),
-      supabase.from("settings").select("vat_mode,vat_rate,restaurant_name").eq("id", 1).single(),
+      supabase.from("settings").select("vat_mode,vat_rate,restaurant_name,receipt_logo_url").eq("id", 1).single(),
     ]);
     if (m) setMenus(m as Menu[]);
     if (c) setCats(c as Category[]);
     if (it) setItems(it as Item[]);
-    if (s) { setSettingsVatMode((s.vat_mode as "inclusive" | "exclusive") || "inclusive"); setSettingsVatRate(Number(s.vat_rate) || 7); setRestaurantName(s.restaurant_name); }
+    if (s) { setSettingsVatMode((s.vat_mode as "inclusive" | "exclusive") || "inclusive"); setSettingsVatRate(Number(s.vat_rate) || 7); setRestaurantName(s.restaurant_name); setReceiptLogoUrl((s as any).receipt_logo_url ?? null); }
     if (ord) {
       setOrderSource((ord as any).source ?? "pos");
       setOrderNumber((ord as any).order_number ?? null);
@@ -469,6 +470,7 @@ function OrderPage() {
     if (liveItems.length === 0) { toast.error(t("empty_order")); return; }
     await printCounter({
       kind: "receipt", table: tableCode, restaurant: restaurantName,
+      logoUrl: receiptLogoUrl || undefined,
       items: liveItems, total: billTotal,
       vatAmount: settingsVatMode === "exclusive" ? billVatAmount : 0,
       vat_mode: settingsVatMode, payments: [], language: lang,
