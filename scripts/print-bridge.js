@@ -117,6 +117,17 @@ function fmtDateTime(iso) {
   return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
 }
 
+function asciiText(value, fallback = "") {
+  return [...String(value ?? "")]
+    .filter((ch) => {
+      const code = ch.charCodeAt(0);
+      return code >= 0x20 && code <= 0x7e;
+    })
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim() || fallback;
+}
+
 // ── Receipt formatter (counter printer) ──────────────────────────────────────
 function buildReceipt(p) {
   const now = fmtDateTime(new Date().toISOString());
@@ -196,7 +207,7 @@ function buildReceipt(p) {
 function buildKitchen(p) {
   const _kd  = new Date(p.sent_at ?? Date.now());
   const time = `${String(_kd.getHours()).padStart(2,"0")}:${String(_kd.getMinutes()).padStart(2,"0")}:${String(_kd.getSeconds()).padStart(2,"0")}`;
-  const orderTypeLabel = p.order_type === "added" ? "ADDED ORDER / เพิ่มเติม" : "NEW ORDER";
+  const orderTypeLabel = p.order_type === "added" ? "ADDED ORDER" : "NEW ORDER";
   const parts = [
     CMD.INIT,
     CMD.ALIGN_CENTER,
@@ -212,16 +223,18 @@ function buildKitchen(p) {
   ];
 
   for (const item of p.lines ?? []) {
-    const name = item.name_my || item.name_en || item.name_th || "-";
+    const name = asciiText(item.name_en) || asciiText(item.name_th) || asciiText(item.name_my) || "Item";
     parts.push(CMD.BOLD_ON, `${item.qty}  x  ${name}`, CMD.BOLD_OFF, lf());
-    if (item.notes) parts.push(`     ** ${item.notes} **`, lf());
+    const notes = asciiText(item.notes);
+    if (notes) parts.push(`     ** ${notes} **`, lf());
     // Print selected add-ons (stored in modifiers array)
     if (Array.isArray(item.modifiers) && item.modifiers.length > 0) {
       for (const mod of item.modifiers) {
         const q = mod.qty ?? 1;
         const qtyStr = q > 1 ? ` x${q}` : "";
         const priceStr = mod.price > 0 ? ` +${mod.price * q}` : "";
-        parts.push(`     + ${mod.option_name}${qtyStr}${priceStr}`, lf());
+        const optionName = asciiText(mod.option_name, "Option");
+        parts.push(`     + ${optionName}${qtyStr}${priceStr}`, lf());
       }
     }
   }
