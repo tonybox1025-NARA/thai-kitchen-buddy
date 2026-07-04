@@ -9,17 +9,12 @@ export type CounterPrintPayload = Record<string, unknown> & {
 };
 
 export async function printCounter(payload: CounterPrintPayload) {
-  try {
-    await printCounterViaAndroidBridge(payload);
-    return { ok: true, via: "android-bridge" as const };
-  } catch (error) {
-    console.warn("[counter-printer] Android bridge failed, queueing print_jobs fallback", error);
-    await supabase.from("print_jobs").insert({
-      printer: "counter",
-      payload: payload as Json,
-    });
-    return { ok: false, via: "print_jobs-fallback" as const, error };
-  }
+  const { error } = await supabase.from("print_jobs").insert({
+    printer: "counter",
+    payload: payload as Json,
+  });
+  if (error) throw error;
+  return { ok: true, via: "print_jobs" as const };
 }
 
 export async function printCounterViaAndroidBridge(payload: CounterPrintPayload) {
