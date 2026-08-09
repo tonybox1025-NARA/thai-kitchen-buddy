@@ -173,6 +173,7 @@ const dict: Dict = {
   qr_transactions:     { th: "รายการ QR",                 en: "QR Transactions"                },
   qr_received:         { th: "รับ QR รวม",                en: "QR received"                    },
   all_qr_payments:     { th: "รายการ QR ทั้งหมด",          en: "All QR payments"                },
+  qr_by_time:          { th: "QR แยกตามช่วงเวลา",           en: "QR by time"                     },
   no_qr_period:        { th: "ไม่มีรายการ QR ในช่วงเวลานี้", en: "No QR payments in this period" },
   tips:                { th: "ทิป",                       en: "Tips"                           },
   // detail-tips

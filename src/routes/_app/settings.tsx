@@ -17,6 +17,7 @@ import type { PrintJob } from "@/lib/print/types";
 import { ReceiptPreview72, receiptToHtml } from "@/components/print/ReceiptPreview72";
 import { KitchenTicketPreview72, kitchenToHtml } from "@/components/print/KitchenTicketPreview72";
 import { sampleReceipt, sampleKitchen, sampleDepartmentOrder, splitOrderByDepartment } from "@/lib/print/sampleData";
+import { parseBuckets, isValidBucket, type QrTimeBucket } from "@/lib/qr-buckets";
 // qrcode is dynamically imported inside QrCodesTab to avoid Node deps at SSR module-eval
 
 export const Route = createFileRoute("/_app/settings")({ component: SettingsPage });
@@ -72,6 +73,7 @@ type Settings = {
   printer_counter_ip: string | null;
   printer_kitchen_ip: string | null;
   starting_cash: number;
+  qr_time_buckets: QrTimeBucket[];
 };
 type Staff = { id: string; name: string; role: "admin" | "manager" | "staff"; active: boolean };
 // Add-ons
@@ -197,11 +199,19 @@ function IngredientsTab() {
 function GeneralTab() {
   const { t } = useI18n();
   const [s, setS] = useState<Settings | null>(null);
-  useEffect(() => { supabase.from("settings").select("*").eq("id", 1).single().then(({ data }) => setS(data as unknown as Settings)); }, []);
+  useEffect(() => {
+    supabase.from("settings").select("*").eq("id", 1).single().then(({ data }) => {
+      if (!data) return;
+      setS({ ...(data as unknown as Settings), qr_time_buckets: parseBuckets((data as any).qr_time_buckets) });
+    });
+  }, []);
   if (!s) return null;
   const save = async () => {
-    const { error } = await (supabase as any).from("settings").update(s).eq("id", 1);
+    // Drop any half-filled time windows so the report/detail views stay clean.
+    const cleaned: Settings = { ...s, qr_time_buckets: s.qr_time_buckets.filter(isValidBucket) };
+    const { error } = await (supabase as any).from("settings").update(cleaned).eq("id", 1);
     if (error) { toast.error(error.message); return; }
+    setS(cleaned);
     toast.success("Saved");
   };
   const previewSubtotal = sampleReceipt.subtotal;
@@ -362,6 +372,49 @@ function GeneralTab() {
                 </div>
               </div>
             )}
+          </div>
+
+          <div className="rounded-lg border p-3 space-y-3">
+            <div>
+              <Label>QR sales by time</Label>
+              <p className="text-xs text-muted-foreground">Split the QR revenue total into time windows on the QR detail page and the X/Z report.</p>
+            </div>
+            {s.qr_time_buckets.length > 0 && (
+              <div className="space-y-2">
+                {s.qr_time_buckets.map((b, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <Input
+                      type="time"
+                      value={b.start}
+                      onChange={(e) => setS({ ...s, qr_time_buckets: s.qr_time_buckets.map((x, j) => (j === i ? { ...x, start: e.target.value } : x)) })}
+                      className="w-32"
+                    />
+                    <span className="text-muted-foreground">–</span>
+                    <Input
+                      type="time"
+                      value={b.end}
+                      onChange={(e) => setS({ ...s, qr_time_buckets: s.qr_time_buckets.map((x, j) => (j === i ? { ...x, end: e.target.value } : x)) })}
+                      className="w-32"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setS({ ...s, qr_time_buckets: s.qr_time_buckets.filter((_, j) => j !== i) })}
+                      aria-label="Remove time window"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setS({ ...s, qr_time_buckets: [...s.qr_time_buckets, { start: "", end: "" }] })}
+            >
+              <Plus className="h-4 w-4 mr-1" />Add time window
+            </Button>
           </div>
 
           <Button onClick={save}>{t("save")}</Button>

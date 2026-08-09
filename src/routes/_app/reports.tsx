@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import { PencilLine, ArrowRight, CalendarIcon, XCircle, Printer } from "lucide-react";
+import { bucketizeQr, parseBuckets, type QrBucketTotal, type QrTimeBucket } from "@/lib/qr-buckets";
 
 export const Route = createFileRoute("/_app/reports")({ component: Reports });
 
@@ -35,6 +36,7 @@ type ReportData = {
   staffMealTotal: number; // net sales from staff meal orders
   discountByType: { percent: number; fixed: number; free_item: number }; // discount amount per type
   discountByStaff: { staffName: string; amount: number; count: number }[]; // who gave how much
+  qrByBucket: QrBucketTotal[]; // QR revenue split into the user-defined time windows
 };
 
 type AdjPay = {
@@ -96,6 +98,7 @@ ${r.byMethod.gov_qr > 0 ? row("  Government QR", thb(r.byMethod.gov_qr)) : ""}
 ${r.tipTotal > 0 ? row("  Tips collected (QR)", thb(r.tipTotal)) : ""}
 ${r.tipTotal > 0 ? row("  Tips paid out (cash)", `- ${thb(r.tipTotal)}`) : ""}
 ${r.tipTotal > 0 ? row("  Net QR sales", thb(getNetQrSales(r)), true) : ""}
+${(r.qrByBucket ?? []).map((b) => row(`  QR ${b.label}`, thb(b.gross))).join("")}
 ${row("Credit card", thb(r.byMethod.card))}
 </table>
 <h2>Other</h2><table>
@@ -137,6 +140,7 @@ function Reports() {
   const [xCashCount, setXCashCount] = useState<Record<number, number>>({});
   const [cashCount, setCashCount] = useState<Record<number, number>>({});
   const [restaurantName, setRestaurantName] = useState("");
+  const [qrBuckets, setQrBuckets] = useState<QrTimeBucket[]>([]);
   const [managerOpen, setManagerOpen] = useState(false);
   const [pendingZ, setPendingZ] = useState(false);
   const [xLoading, setXLoading] = useState(false);
@@ -151,8 +155,9 @@ function Reports() {
     supabase.from("shifts").select("*").eq("status", "open").maybeSingle().then(({ data }) => {
       setShift((data as Shift) ?? null);
     });
-    supabase.from("settings").select("restaurant_name").eq("id", 1).maybeSingle().then(({ data }) => {
+    supabase.from("settings").select("restaurant_name,qr_time_buckets").eq("id", 1).maybeSingle().then(({ data }) => {
       setRestaurantName((data as any)?.restaurant_name ?? "");
+      setQrBuckets(parseBuckets((data as any)?.qr_time_buckets));
     });
   }, []);
 
@@ -162,8 +167,8 @@ function Reports() {
     const orderIds = (bills ?? []).map((b) => (b as any).order_id).filter(Boolean) as string[];
     const [{ data: pays }, { data: voids }, { data: refunds }, { data: cancelledOrds }, { data: orderSources }, { data: billDiscs }] = await Promise.all([
       billIds.length
-        ? supabase.from("payments").select("method,amount,tip_amount").in("bill_id", billIds)
-        : Promise.resolve({ data: [] as { method: string; amount: number; tip_amount: number }[], error: null }),
+        ? supabase.from("payments").select("method,amount,tip_amount,created_at").in("bill_id", billIds)
+        : Promise.resolve({ data: [] as { method: string; amount: number; tip_amount: number; created_at: string }[], error: null }),
       supabase.from("voids").select("amount").eq("shift_id", s.id),
       supabase.from("refunds").select("amount").eq("shift_id", s.id),
       supabase.from("orders").select("id").eq("shift_id", s.id).eq("status", "cancelled"),
@@ -181,6 +186,12 @@ function Reports() {
     const byMethod: Record<string, number> = { cash: 0, qr: 0, gov_qr: 0, card: 0 };
     (pays ?? []).forEach((p) => { byMethod[p.method] = (byMethod[p.method] ?? 0) + Number(p.amount); });
     const tipTotal = (pays ?? []).filter((p) => p.method === "qr").reduce((s, p) => s + Number(p.tip_amount ?? 0), 0);
+
+    // QR revenue split into the user-defined time windows (matches getQrGrossReceived: qr + gov_qr + tips)
+    const qrPays = (pays ?? [])
+      .filter((p) => p.method === "qr" || p.method === "gov_qr")
+      .map((p) => ({ amount: Number(p.amount), tip: Number(p.tip_amount ?? 0), at: (p as any).created_at ?? "" }));
+    const qrByBucket = bucketizeQr(qrPays, qrBuckets);
 
     // Compute takeout and staff meal totals from bills + order source
     const sourceMap = new Map((orderSources ?? []).map((o) => [o.id, o.source]));
@@ -224,6 +235,7 @@ function Reports() {
       staffMealTotal,
       discountByType,
       discountByStaff,
+      qrByBucket,
     };
   };
 
@@ -1471,6 +1483,9 @@ function ReportCard({ r }: { r: ReportData }) {
           <Row label="  ↳ Tips paid out (cash)" value={`- ${thb(r.tipTotal)}`} />
           <Row label="  ↳ Net QR sales" value={thb(getNetQrSales(r))} bold />
         </>}
+        {(r.qrByBucket ?? []).map((b) => (
+          <Row key={b.label} label={`  ↳ QR ${b.label}`} value={thb(b.gross)} />
+        ))}
         <Row label="Credit card" value={thb(r.byMethod.card)} />
         <div className="border-t pt-2 mt-2" />
         <Row label="Voids & Cancellations" value={thb(r.voids)} />

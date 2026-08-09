@@ -1028,6 +1028,7 @@ export type Database = {
           max_discount_percent: number
           printer_counter_ip: string | null
           printer_kitchen_ip: string | null
+          qr_time_buckets: Json
           receipt_logo_url: string | null
           restaurant_name: string
           rounding_mode: string
@@ -1052,6 +1053,7 @@ export type Database = {
           max_discount_percent?: number
           printer_counter_ip?: string | null
           printer_kitchen_ip?: string | null
+          qr_time_buckets?: Json
           receipt_logo_url?: string | null
           restaurant_name?: string
           rounding_mode?: string
@@ -1076,6 +1078,7 @@ export type Database = {
           max_discount_percent?: number
           printer_counter_ip?: string | null
           printer_kitchen_ip?: string | null
+          qr_time_buckets?: Json
           receipt_logo_url?: string | null
           restaurant_name?: string
           rounding_mode?: string

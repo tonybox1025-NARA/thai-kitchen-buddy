@@ -9,6 +9,7 @@ import type { DateRange } from "react-day-picker";
 import { DashRangeBar } from "@/components/DashRangeBar";
 import { type DashRange, rangeBounds, shiftIdsFor } from "@/lib/dash-range";
 import { useI18n } from "@/lib/i18n";
+import { bucketizeQr, parseBuckets, type QrTimeBucket } from "@/lib/qr-buckets";
 
 export const Route = createFileRoute("/_app/detail-qr")({
   component: QrSalesDetail,
@@ -24,6 +25,12 @@ function QrSalesDetail() {
   const [custom, setCustom] = useState<DateRange | undefined>();
   const [rows, setRows] = useState<QrRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [buckets, setBuckets] = useState<QrTimeBucket[]>([]);
+
+  useEffect(() => {
+    supabase.from("settings").select("qr_time_buckets").eq("id", 1).maybeSingle()
+      .then(({ data }) => setBuckets(parseBuckets((data as any)?.qr_time_buckets)));
+  }, []);
 
   const bounds = useMemo<[Date, Date]>(() => {
     if (range === "custom" && custom?.from) {
@@ -87,6 +94,11 @@ function QrSalesDetail() {
   const totalTips  = rows.reduce((s, r) => s + r.tipAmount, 0);
   const totalGross = totalNet + totalTips;
 
+  const byBucket = useMemo(
+    () => bucketizeQr(rows.map(r => ({ amount: r.amount, tip: r.tipAmount, at: r.paidAt })), buckets),
+    [rows, buckets],
+  );
+
   return (
     <div className="p-6 space-y-5 max-w-3xl mx-auto">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -109,6 +121,27 @@ function QrSalesDetail() {
               </Card>
             ))}
           </div>
+
+          {byBucket.length > 0 && (
+            <Card>
+              <CardHeader><CardTitle className="text-base">{t("qr_by_time")}</CardTitle></CardHeader>
+              <CardContent>
+                <div className="space-y-1 text-sm">
+                  <div className="grid grid-cols-[1fr_5rem_5rem_3rem] gap-2 text-xs uppercase tracking-wide text-muted-foreground pb-1 border-b">
+                    <span>{t("time")}</span><span className="text-right">{t("qr_received")}</span><span className="text-right">{t("net")}</span><span className="text-right">#</span>
+                  </div>
+                  {byBucket.map((b) => (
+                    <div key={b.label} className="grid grid-cols-[1fr_5rem_5rem_3rem] gap-2 items-center py-1">
+                      <span className="font-medium tabular-nums">{b.label}</span>
+                      <span className="text-right font-semibold tabular-nums">{thb(b.gross)}</span>
+                      <span className="text-right text-muted-foreground tabular-nums">{thb(b.net)}</span>
+                      <span className="text-right text-muted-foreground tabular-nums">{b.count}</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader><CardTitle className="text-base">{t("all_qr_payments")} ({rows.length})</CardTitle></CardHeader>
