@@ -377,7 +377,7 @@ function GeneralTab() {
           <div className="rounded-lg border p-3 space-y-3">
             <div>
               <Label>QR sales by time</Label>
-              <p className="text-xs text-muted-foreground">Split the QR revenue total into time windows on the QR detail page and the X/Z report.</p>
+              <p className="text-xs text-muted-foreground">Split the QR payment total into time windows on the QR detail page and the X/Z report. Add an optional label (e.g. "OPEN-23:00") to name each window.</p>
             </div>
             {s.qr_time_buckets.length > 0 && (
               <div className="space-y-2">
@@ -387,18 +387,26 @@ function GeneralTab() {
                       type="time"
                       value={b.start}
                       onChange={(e) => setS({ ...s, qr_time_buckets: s.qr_time_buckets.map((x, j) => (j === i ? { ...x, start: e.target.value } : x)) })}
-                      className="w-32"
+                      className="w-28 shrink-0"
                     />
                     <span className="text-muted-foreground">–</span>
                     <Input
                       type="time"
                       value={b.end}
                       onChange={(e) => setS({ ...s, qr_time_buckets: s.qr_time_buckets.map((x, j) => (j === i ? { ...x, end: e.target.value } : x)) })}
-                      className="w-32"
+                      className="w-28 shrink-0"
+                    />
+                    <Input
+                      type="text"
+                      placeholder="Label (optional)"
+                      value={b.label ?? ""}
+                      onChange={(e) => setS({ ...s, qr_time_buckets: s.qr_time_buckets.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })}
+                      className="flex-1 min-w-0"
                     />
                     <Button
                       variant="ghost"
                       size="icon"
+                      className="shrink-0"
                       onClick={() => setS({ ...s, qr_time_buckets: s.qr_time_buckets.filter((_, j) => j !== i) })}
                       aria-label="Remove time window"
                     >

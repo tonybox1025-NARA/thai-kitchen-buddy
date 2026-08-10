@@ -4,7 +4,7 @@
 // the X/Z report. Windows are matched by local time-of-day, so they work regardless
 // of business day and support a single window that crosses midnight (end ≤ start).
 
-export type QrTimeBucket = { start: string; end: string }; // "HH:MM"
+export type QrTimeBucket = { start: string; end: string; label?: string }; // times are "HH:MM"; label is an optional custom name shown on reports
 
 export type QrPayLike = { amount: number; tip: number; at: string };
 
@@ -18,7 +18,8 @@ export type QrBucketTotal = {
 };
 
 export function bucketLabel(b: QrTimeBucket): string {
-  return `${b.start}–${b.end}`;
+  const custom = b.label?.trim();
+  return custom ? custom : `${b.start}–${b.end}`;
 }
 
 /** Parse "HH:MM" to minutes-of-day, or null if malformed. */
@@ -82,7 +83,13 @@ export function parseBuckets(raw: unknown): QrTimeBucket[] {
       typeof x === "object" &&
       typeof (x as QrTimeBucket).start === "string" &&
       typeof (x as QrTimeBucket).end === "string"
-        ? { start: (x as QrTimeBucket).start, end: (x as QrTimeBucket).end }
+        ? {
+            start: (x as QrTimeBucket).start,
+            end: (x as QrTimeBucket).end,
+            ...(typeof (x as QrTimeBucket).label === "string"
+              ? { label: (x as QrTimeBucket).label }
+              : {}),
+          }
         : null,
     )
     .filter((b): b is QrTimeBucket => b !== null && isValidBucket(b));

@@ -76,6 +76,10 @@ function openPrintWindow(
   const { cashTotal, expected, overShort } = calcCashSummary(counts, r);
   const row = (l: string, v: string, b = false) =>
     `<tr${b ? ' style="font-weight:700"' : ""}><td>${l}</td><td style="text-align:right">${v}</td></tr>`;
+  // Informational sub-line: indented label, amount pulled left — shows a breakdown of the
+  // line above without being part of the totals column.
+  const subRow = (l: string, v: string) =>
+    `<tr><td colspan="2" style="padding-left:20px;color:#555;font-size:12px"><span style="display:inline-block;min-width:130px">${l}</span>${v}</td></tr>`;
   const denomRows = DENOMS.filter((d) => (counts[d] ?? 0) > 0)
     .map((d) => row(`${d}฿ × ${counts[d]}`, thb(d * counts[d])))
     .join("") || `<tr><td colspan="2" style="color:#888">No denominations entered</td></tr>`;
@@ -93,12 +97,12 @@ ${row("Net sales", thb(r.net), true)}
 </table>
 <h2>Payments</h2><table>
 ${row("Cash", thb(r.byMethod.cash))}
-${row("QR revenue", thb(getQrGrossReceived(r)))}
-${r.byMethod.gov_qr > 0 ? row("  Government QR", thb(r.byMethod.gov_qr)) : ""}
+${row("QR PAYMENT", thb(getQrGrossReceived(r)))}
+${(r.qrByBucket ?? []).map((b) => subRow(b.label, thb(b.gross))).join("")}
+${r.byMethod.gov_qr > 0 ? row("  60/40 PAYMENT", thb(r.byMethod.gov_qr)) : ""}
 ${r.tipTotal > 0 ? row("  Tips collected (QR)", thb(r.tipTotal)) : ""}
 ${r.tipTotal > 0 ? row("  Tips paid out (cash)", `- ${thb(r.tipTotal)}`) : ""}
 ${r.tipTotal > 0 ? row("  Net QR sales", thb(getNetQrSales(r)), true) : ""}
-${(r.qrByBucket ?? []).map((b) => row(`  QR ${b.label}`, thb(b.gross))).join("")}
 ${row("Credit card", thb(r.byMethod.card))}
 </table>
 <h2>Other</h2><table>
@@ -1476,16 +1480,16 @@ function ReportCard({ r }: { r: ReportData }) {
         <Row label="Net sales" value={thb(r.net)} bold />
         <div className="border-t pt-2 mt-2" />
         <Row label="Cash" value={thb(r.byMethod.cash)} />
-        <Row label="QR revenue" value={thb(getQrGrossReceived(r))} />
-        {r.byMethod.gov_qr > 0 && <Row label="  ↳ Government QR" value={thb(r.byMethod.gov_qr)} />}
+        <Row label="QR PAYMENT" value={thb(getQrGrossReceived(r))} />
+        {(r.qrByBucket ?? []).map((b) => (
+          <SubRow key={b.label} label={b.label} value={thb(b.gross)} />
+        ))}
+        {r.byMethod.gov_qr > 0 && <Row label="  ↳ 60/40 PAYMENT" value={thb(r.byMethod.gov_qr)} />}
         {r.tipTotal > 0 && <>
           <Row label="  ↳ Tips collected (QR)" value={thb(r.tipTotal)} />
           <Row label="  ↳ Tips paid out (cash)" value={`- ${thb(r.tipTotal)}`} />
           <Row label="  ↳ Net QR sales" value={thb(getNetQrSales(r))} bold />
         </>}
-        {(r.qrByBucket ?? []).map((b) => (
-          <Row key={b.label} label={`  ↳ QR ${b.label}`} value={thb(b.gross)} />
-        ))}
         <Row label="Credit card" value={thb(r.byMethod.card)} />
         <div className="border-t pt-2 mt-2" />
         <Row label="Voids & Cancellations" value={thb(r.voids)} />
@@ -1510,6 +1514,17 @@ function Row({ label, value, bold }: { label: string; value: string; bold?: bool
   return (
     <div className={`flex justify-between ${bold ? "font-bold" : ""}`}>
       <span>{label}</span><span>{value}</span>
+    </div>
+  );
+}
+
+// Informational breakdown line: indented label, amount pulled left (not in the totals
+// column) so it reads as detail of the line above, not part of the calculation.
+function SubRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex gap-4 pl-5 text-xs text-muted-foreground">
+      <span className="min-w-[8rem]">{label}</span>
+      <span className="tabular-nums">{value}</span>
     </div>
   );
 }
