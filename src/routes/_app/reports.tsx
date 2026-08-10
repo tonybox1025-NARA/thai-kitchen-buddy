@@ -65,10 +65,15 @@ function getCardGrossReceived(r: ReportData) {
   return r.byMethod.card + (r.cardTipTotal ?? 0);
 }
 
+// Tips are collected electronically (QR / card) but handed to staff in cash, so
+// they leave the drawer and reduce the expected cash.
+function cashTipsPaidOut(r: ReportData) {
+  return (r.tipTotal ?? 0) + (r.cardTipTotal ?? 0);
+}
+
 function calcCashSummary(cashCount: Record<number, number>, r: ReportData) {
   const cashTotal = Object.entries(cashCount).reduce((s, [d, c]) => s + Number(d) * (c || 0), 0);
-  // Tips are collected via QR and paid out from QR settlement — unrelated to the cash drawer.
-  const expected = r.openingFloat + r.byMethod.cash;
+  const expected = r.openingFloat + r.byMethod.cash - cashTipsPaidOut(r);
   return { cashTotal, expected, overShort: cashTotal - expected };
 }
 
@@ -133,8 +138,10 @@ ${r.discountByStaff.map((s) => row(`  ${s.staffName} (×${s.count})`, `- ${thb(s
 <h2>Cash count</h2><table>${denomRows}</table>
 <h2>Cash drawer</h2><table>
 ${row("Opening float", thb(r.openingFloat))}
+${row("Cash sales", thb(r.byMethod.cash))}
+${cashTipsPaidOut(r) > 0 ? row("Tips paid out (cash)", `- ${thb(cashTipsPaidOut(r))}`) : ""}
+${row("Expected", thb(expected), true)}
 ${row("Counted", thb(cashTotal))}
-${row("Expected", thb(expected))}
 ${row("Over / Short", thb(overShort), true)}
 </table>
 <script>window.onload=()=>setTimeout(()=>window.print(),100)</script>
@@ -285,9 +292,7 @@ function Reports() {
 
   const doZ = async () => {
     if (!shift || !report) return;
-    const cashTotal = Object.entries(cashCount).reduce((s, [d, c]) => s + Number(d) * (c || 0), 0);
-    const expected = report.openingFloat + report.byMethod.cash;
-    const overShort = cashTotal - expected;
+    const { cashTotal, expected, overShort } = calcCashSummary(cashCount, report);
     await supabase.from("shifts").update({
       closed_at: new Date().toISOString(), closed_by: staff?.id, status: "closed",
       cash_count: cashCount, totals: { ...report, cashTotal, expected, overShort },
@@ -1460,10 +1465,14 @@ function DenomGrid({ cashCount, onChange }: { cashCount: Record<number, number>;
 
 function CashSummary({ r, cashCount, overShortLabel }: { r: ReportData; cashCount: Record<number, number>; overShortLabel: string }) {
   const { cashTotal, expected, overShort } = calcCashSummary(cashCount, r);
+  const tipsOut = cashTipsPaidOut(r);
   return (
     <div className="text-sm space-y-1 pt-3 border-t">
+      <Row label="Opening float" value={thb(r.openingFloat)} />
+      <Row label="Cash sales" value={thb(r.byMethod.cash)} />
+      {tipsOut > 0 && <Row label="Tips paid out (cash)" value={`- ${thb(tipsOut)}`} />}
+      <Row label="Expected" value={thb(expected)} bold />
       <Row label="Counted" value={thb(cashTotal)} />
-      <Row label="Expected" value={thb(expected)} />
       <Row label={overShortLabel} value={thb(overShort)} bold />
     </div>
   );
