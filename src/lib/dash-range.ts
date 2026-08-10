@@ -1,14 +1,16 @@
 import { supabase } from "@/integrations/supabase/client";
 
-export type DashRange = "today" | "yesterday" | "week" | "month" | "custom";
+export type DashRange = "today" | "yesterday" | "week" | "month" | "ytd" | "custom";
 
 export function rangeBounds(r: Exclude<DashRange, "custom">): [Date, Date] {
   const now = new Date();
   const s = new Date(now), e = new Date(now);
-  if (r === "today")     { s.setHours(0,0,0,0); e.setHours(23,59,59,999); }
+  e.setHours(23,59,59,999);
+  if (r === "today")     { s.setHours(0,0,0,0); }
   else if (r === "yesterday") { s.setDate(s.getDate()-1); s.setHours(0,0,0,0); e.setDate(e.getDate()-1); e.setHours(23,59,59,999); }
-  else if (r === "week") { const d=s.getDay()||7; s.setDate(s.getDate()-(d-1)); s.setHours(0,0,0,0); e.setHours(23,59,59,999); }
-  else                   { s.setDate(1); s.setHours(0,0,0,0); e.setHours(23,59,59,999); }
+  else if (r === "week") { const d=s.getDay()||7; s.setDate(s.getDate()-(d-1)); s.setHours(0,0,0,0); }
+  else if (r === "month") { s.setDate(1); s.setHours(0,0,0,0); }
+  else                   { s.setMonth(0,1); s.setHours(0,0,0,0); } // ytd: Jan 1 of this year
   return [s, e];
 }
 
@@ -27,5 +29,5 @@ export async function shiftIdsFor(r: DashRange, bounds: [Date, Date]): Promise<s
 }
 
 export function rangeLabel(r: DashRange): string {
-  return r === "today" ? "Today" : r === "yesterday" ? "Yesterday" : r === "week" ? "This week" : r === "month" ? "This month" : "Custom range";
+  return r === "today" ? "Today" : r === "yesterday" ? "Yesterday" : r === "week" ? "Weekly" : r === "month" ? "Monthly" : r === "ytd" ? "YTD" : "Custom range";
 }

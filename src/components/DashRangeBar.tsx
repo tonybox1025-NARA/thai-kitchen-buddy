@@ -29,13 +29,14 @@ export function DashRangeBar({ range, onRange, custom, onCustom }: Props) {
   const rangeLabel: Record<string, string> = {
     today:     t("today"),
     yesterday: t("yesterday"),
-    week:      t("this_week"),
-    month:     t("this_month"),
+    week:      t("weekly"),
+    month:     t("monthly"),
+    ytd:       t("ytd"),
   };
 
   return (
     <div className="flex gap-2 flex-wrap">
-      {(["today","yesterday","week","month"] as const).map((r) => (
+      {(["today","yesterday","week","month","ytd"] as const).map((r) => (
         <Button key={r} size="sm" variant={range === r ? "default" : "outline"} onClick={() => onRange(r)}>
           {rangeLabel[r]}
         </Button>

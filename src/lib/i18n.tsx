@@ -100,6 +100,9 @@ const dict: Dict = {
   yesterday: { th: "เมื่อวาน", en: "Yesterday" },
   this_week: { th: "สัปดาห์นี้", en: "This week" },
   this_month: { th: "เดือนนี้", en: "This month" },
+  weekly: { th: "รายสัปดาห์", en: "Weekly" },
+  monthly: { th: "รายเดือน", en: "Monthly" },
+  ytd: { th: "ตั้งแต่ต้นปี", en: "YTD" },
   // settings
   menu_management: { th: "จัดการเมนู", en: "Menu" },
   printers: { th: "เครื่องพิมพ์", en: "Printers" },
