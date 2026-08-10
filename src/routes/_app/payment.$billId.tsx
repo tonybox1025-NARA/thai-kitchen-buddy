@@ -134,6 +134,7 @@ function PaymentPage() {
   const [qrTip, setQrTip] = useState(0);
   const [govQrAmt, setGovQrAmt] = useState(0);
   const [cardAmt, setCardAmt] = useState(0);
+  const [cardTip, setCardTip] = useState(0);
 
   // Cash dialog
   const [cashOpen, setCashOpen] = useState(false);
@@ -851,8 +852,21 @@ function PaymentPage() {
                   <span>Balance remaining</span>
                   <span className="font-semibold">{thb(Math.max(0, remaining - cardAmt))}</span>
                 </div>
+                <div>
+                  <Label className="text-xs">Tip (optional)</Label>
+                  <Input type="number" min={0} step="0.01" value={cardTip} onChange={(e) => setCardTip(Math.max(0, Number(e.target.value)))} placeholder="0.00" />
+                  <p className="text-xs text-muted-foreground mt-0.5">Tips collected via card are paid out to staff in cash.</p>
+                </div>
+                {cardTip > 0 && (
+                  <div className="text-sm flex justify-between bg-muted rounded px-2 py-1.5">
+                    <span>Total card charge</span>
+                    <span className="font-semibold">{thb(cardAmt + cardTip)}</span>
+                  </div>
+                )}
                 <Button className="w-full" size="lg" disabled={remaining <= 0 || cardAmt <= 0}
-                  onClick={() => addPayment("card", cardAmt)}>{t("card")} · {thb(cardAmt)}</Button>
+                  onClick={() => { addPayment("card", cardAmt, { tip_amount: cardTip }); setCardTip(0); }}>
+                  {t("card")} · {thb(cardAmt)}{cardTip > 0 ? ` + Tip ${thb(cardTip)}` : ""}
+                </Button>
               </TabsContent>
             </Tabs>
             )}
@@ -1199,7 +1213,7 @@ function PaymentPage() {
 // ─────────────────────────────────────────────────────────────────────────────
 // Split Bill Dialog
 // ─────────────────────────────────────────────────────────────────────────────
-type SplitStep = "choose" | "even_setup" | "even_pay" | "item_assign" | "item_pay";
+type SplitStep = "choose" | "even_setup" | "even_pay" | "item_assign" | "item_pay" | "amount_pay";
 type PayMethod = PaymentMethod;
 
 function SplitBillDialog({
@@ -1221,6 +1235,7 @@ function SplitBillDialog({
   const [personCount, setPersonCount] = useState(2);     // item split: how many people
   const [assignments, setAssignments] = useState<Record<string, number>>({}); // item.id → 0-based person
   const [paidPersons, setPaidPersons] = useState<Set<number>>(new Set());
+  const [amountEntry, setAmountEntry] = useState(0); // split-by-amount: amount the current guest pays
 
   // Payment sub-form state
   const [payMethod, setPayMethod] = useState<PayMethod>("cash");
@@ -1235,11 +1250,14 @@ function SplitBillDialog({
       setPaidCount(0); setPersonCount(2);
       setAssignments({}); setPaidPersons(new Set());
       setPayMethod("cash"); setCashReceived(0); setQrTip(0); setProcessing(false);
+      setAmountEntry(0);
     }
   }, [open]);
 
   // Reset cash fields when moving between seats/persons
   useEffect(() => { setCashReceived(0); setQrTip(0); }, [paidCount, paidPersons]);
+  // Split-by-amount: default the entry to the current balance after each payment
+  useEffect(() => { if (step === "amount_pay") { setAmountEntry(remaining); setCashReceived(0); setQrTip(0); } }, [remaining, step]);
 
   // ── Even split helpers ──
   const baseShare = capturedAmount > 0 ? Math.floor(capturedAmount / ways * 100) / 100 : 0;
@@ -1263,7 +1281,7 @@ function SplitBillDialog({
   const currentItemShare = isLastPerson ? remaining : personDisplayShare(currentPersonIdx);
 
   // ── Current amount to pay ──
-  const currentAmount = step === "even_pay" ? currentEvenShare : step === "item_pay" ? currentItemShare : 0;
+  const currentAmount = step === "even_pay" ? currentEvenShare : step === "item_pay" ? currentItemShare : step === "amount_pay" ? amountEntry : 0;
   const cashChange = Math.max(0, cashReceived - currentAmount);
 
   const handlePay = async () => {
@@ -1283,9 +1301,11 @@ function SplitBillDialog({
       }
       if (step === "even_pay") {
         setPaidCount((c) => c + 1);
-      } else {
+      } else if (step === "item_pay") {
         setPaidPersons((prev) => new Set([...prev, currentPersonIdx]));
       }
+      // amount_pay: no per-person counter; the balance drives completion and the
+      // entry effect resets the amount field to whatever is left.
     } finally {
       setProcessing(false);
     }
@@ -1420,6 +1440,45 @@ function SplitBillDialog({
                 {lang === "th" ? "มอบหมายแต่ละรายการให้แต่ละคน แล้วชำระแยก" : "Assign each item to a person and pay separately"}
               </div>
             </button>
+            <button
+              className="w-full rounded-xl border-2 hover:border-primary/60 bg-card p-4 text-left transition-colors hover:bg-primary/5"
+              onClick={() => { setCapturedAmount(remaining); setAmountEntry(remaining); setStep("amount_pay"); }}
+            >
+              <div className="font-semibold text-base">{t("split_by_amount")}</div>
+              <div className="text-sm text-muted-foreground mt-0.5">
+                {lang === "th" ? "ใส่จำนวนเงินที่แต่ละคนจ่าย จนกว่าจะครบ" : "Enter the amount each guest pays until the bill is covered"}
+              </div>
+            </button>
+          </div>
+        )}
+
+        {/* ── Amount: pay by entered amount until covered ── */}
+        {!allDone && step === "amount_pay" && (
+          <div className="space-y-4 py-1">
+            <div className="rounded-xl border bg-card p-4 space-y-4">
+              <div className="flex items-baseline justify-between">
+                <span className="font-semibold">{lang === "th" ? "จำนวนเงินที่ชำระ" : "Amount to pay"}</span>
+                <span className="text-sm text-muted-foreground">
+                  {lang === "th" ? "คงเหลือ" : "Remaining"} <span className="font-bold text-primary tabular-nums">{thb(remaining)}</span>
+                </span>
+              </div>
+              <div>
+                <Label className="text-xs">{t("amount")}</Label>
+                <Input type="number" min={0} max={remaining} step="0.01" value={amountEntry}
+                  onChange={(e) => setAmountEntry(Math.max(0, Math.min(remaining, Number(e.target.value))))}
+                  className="text-lg font-bold text-center" />
+              </div>
+              <div className="flex justify-between text-sm bg-muted rounded px-3 py-2">
+                <span>{lang === "th" ? "คงเหลือหลังชำระ" : "Balance after this"}</span>
+                <span className="font-bold tabular-nums">{thb(Math.max(0, remaining - amountEntry))}</span>
+              </div>
+              <PayForm amount={amountEntry} />
+            </div>
+
+            <Button className="w-full" size="lg" disabled={payDisabled} onClick={handlePay}>
+              {processing ? "…" : `${t("pay")} · ${thb(amountEntry)}${payMethod === "qr" && qrTip > 0 ? ` + Tip ${thb(qrTip)}` : ""}`}
+            </Button>
+            <Button variant="ghost" className="w-full" onClick={() => setStep("choose")}>{t("cancel")}</Button>
           </div>
         )}
 

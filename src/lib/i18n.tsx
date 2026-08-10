@@ -207,6 +207,7 @@ const dict: Dict = {
   split_bill:         { th: "แยกบิล",                    en: "Split Bill"                      },
   split_evenly:       { th: "แบ่งเท่ากัน",                en: "Split Evenly"                    },
   split_by_item:      { th: "แยกตามรายการ",               en: "Split by Item"                   },
+  split_by_amount:    { th: "แยกตามจำนวนเงิน",             en: "Split by Amount"                 },
   split_ways:         { th: "แบ่งกี่ทาง",                 en: "Split ways"                      },
   split_person:       { th: "คนที่",                      en: "Person"                          },
   split_all_paid:     { th: "ชำระครบแล้ว!",               en: "All shares paid!"                },

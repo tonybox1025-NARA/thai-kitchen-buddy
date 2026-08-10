@@ -31,6 +31,7 @@ type ReportData = {
   voids: number; refunds: number; byMethod: Record<string, number>;
   openingFloat: number; bills: number;
   tipTotal: number; // sum of tip_amount on QR payments; payment.amount excludes tip
+  cardTipTotal: number; // sum of tip_amount on card payments; also paid out to staff in cash
   cancelledCount: number; // number of cancelled (table-closed) orders this shift
   takeoutTotal: number; // net sales from takeout orders
   staffMealTotal: number; // net sales from staff meal orders
@@ -57,6 +58,11 @@ function getQrGrossReceived(r: ReportData) {
 
 function getNetQrSales(r: ReportData) {
   return r.byMethod.qr;
+}
+
+// What the merchant receives via the card terminal = card sales + card tips.
+function getCardGrossReceived(r: ReportData) {
+  return r.byMethod.card + (r.cardTipTotal ?? 0);
 }
 
 function calcCashSummary(cashCount: Record<number, number>, r: ReportData) {
@@ -103,7 +109,10 @@ ${r.byMethod.gov_qr > 0 ? row("  60/40 PAYMENT", thb(r.byMethod.gov_qr)) : ""}
 ${r.tipTotal > 0 ? row("  Tips collected (QR)", thb(r.tipTotal)) : ""}
 ${r.tipTotal > 0 ? row("  Tips paid out (cash)", `- ${thb(r.tipTotal)}`) : ""}
 ${r.tipTotal > 0 ? row("  Net QR sales", thb(getNetQrSales(r)), true) : ""}
-${row("Credit card", thb(r.byMethod.card))}
+${row("Credit card", thb(getCardGrossReceived(r)))}
+${r.cardTipTotal > 0 ? row("  Tips collected (card)", thb(r.cardTipTotal)) : ""}
+${r.cardTipTotal > 0 ? row("  Tips paid out (cash)", `- ${thb(r.cardTipTotal)}`) : ""}
+${r.cardTipTotal > 0 ? row("  Net card sales", thb(r.byMethod.card), true) : ""}
 </table>
 <h2>Other</h2><table>
 ${row("Voids &amp; Cancellations", thb(r.voids))}
@@ -190,6 +199,7 @@ function Reports() {
     const byMethod: Record<string, number> = { cash: 0, qr: 0, gov_qr: 0, card: 0 };
     (pays ?? []).forEach((p) => { byMethod[p.method] = (byMethod[p.method] ?? 0) + Number(p.amount); });
     const tipTotal = (pays ?? []).filter((p) => p.method === "qr").reduce((s, p) => s + Number(p.tip_amount ?? 0), 0);
+    const cardTipTotal = (pays ?? []).filter((p) => p.method === "card").reduce((s, p) => s + Number(p.tip_amount ?? 0), 0);
 
     // QR revenue split into the user-defined time windows (matches getQrGrossReceived: qr + gov_qr + tips)
     const qrPays = (pays ?? [])
@@ -234,6 +244,7 @@ function Reports() {
       refunds: (refunds ?? []).reduce((x, v) => x + Number(v.amount), 0),
       byMethod, openingFloat: Number(s.opening_float), bills: (bills ?? []).length,
       tipTotal,
+      cardTipTotal,
       cancelledCount: (cancelledOrds ?? []).length,
       takeoutTotal,
       staffMealTotal,
@@ -1490,7 +1501,12 @@ function ReportCard({ r }: { r: ReportData }) {
           <Row label="  ↳ Tips paid out (cash)" value={`- ${thb(r.tipTotal)}`} />
           <Row label="  ↳ Net QR sales" value={thb(getNetQrSales(r))} bold />
         </>}
-        <Row label="Credit card" value={thb(r.byMethod.card)} />
+        <Row label="Credit card" value={thb(getCardGrossReceived(r))} />
+        {(r.cardTipTotal ?? 0) > 0 && <>
+          <Row label="  ↳ Tips collected (card)" value={thb(r.cardTipTotal)} />
+          <Row label="  ↳ Tips paid out (cash)" value={`- ${thb(r.cardTipTotal)}`} />
+          <Row label="  ↳ Net card sales" value={thb(r.byMethod.card)} bold />
+        </>}
         <div className="border-t pt-2 mt-2" />
         <Row label="Voids & Cancellations" value={thb(r.voids)} />
         <Row label="Refunds total" value={thb(r.refunds)} />
