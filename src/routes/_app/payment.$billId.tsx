@@ -133,6 +133,7 @@ function PaymentPage() {
   const [qrAmt, setQrAmt] = useState(0);
   const [qrTip, setQrTip] = useState(0);
   const [govQrAmt, setGovQrAmt] = useState(0);
+  const [cardAmt, setCardAmt] = useState(0);
 
   // Cash dialog
   const [cashOpen, setCashOpen] = useState(false);
@@ -276,9 +277,12 @@ function PaymentPage() {
 
   // Sync QR field with remaining balance
   useEffect(() => { setQrAmt(remaining); }, [remaining]);
-  // Default the 60/40 field to the full remaining, but the cashier can lower it
-  // to whatever the customer is eligible to use under the scheme.
+  // Default the amount fields to the full remaining, but the cashier can change
+  // each one to a partial amount (e.g. split across methods, or several guests
+  // using 60/40). Amounts are NOT capped to the balance — a tip can be added on
+  // top via QR or card.
   useEffect(() => { setGovQrAmt(remaining); }, [remaining]);
+  useEffect(() => { setCardAmt(remaining); }, [remaining]);
 
   // ── Discount helpers ────────────────────────────────────────────────────────
 
@@ -798,6 +802,10 @@ function PaymentPage() {
                   <Label className="text-xs">{t("amount")}</Label>
                   <Input type="number" min={0} step="0.01" value={qrAmt} onChange={(e) => setQrAmt(Math.max(0, Number(e.target.value)))} />
                 </div>
+                <div className="text-sm flex justify-between bg-muted rounded px-2 py-1.5">
+                  <span>Balance remaining</span>
+                  <span className="font-semibold">{thb(Math.max(0, remaining - qrAmt))}</span>
+                </div>
                 <div>
                   <Label className="text-xs">Tip (optional)</Label>
                   <Input type="number" min={0} step="0.01" value={qrTip} onChange={(e) => setQrTip(Math.max(0, Number(e.target.value)))} placeholder="0.00" />
@@ -818,8 +826,8 @@ function PaymentPage() {
                 <TabsContent value="gov_qr" className="pt-3 space-y-2">
                   <div>
                     <Label className="text-xs">{govQrLabel} {t("amount")}</Label>
-                    <Input type="number" min={0} max={remaining} step="0.01" value={govQrAmt}
-                      onChange={(e) => setGovQrAmt(Math.max(0, Math.min(remaining, Number(e.target.value))))} />
+                    <Input type="number" min={0} step="0.01" value={govQrAmt}
+                      onChange={(e) => setGovQrAmt(Math.max(0, Number(e.target.value)))} />
                   </div>
                   <div className="text-sm flex justify-between bg-muted rounded px-2 py-1.5">
                     <span>Balance remaining</span>
@@ -835,11 +843,16 @@ function PaymentPage() {
                 </TabsContent>
               )}
               <TabsContent value="card" className="pt-3 space-y-2">
-                <Input id="card-amt" type="number" defaultValue={remaining} step="0.01" />
-                <Button className="w-full" size="lg" disabled={remaining <= 0} onClick={() => {
-                  const v = Number((document.getElementById("card-amt") as HTMLInputElement).value);
-                  addPayment("card", v);
-                }}>{t("card")}</Button>
+                <div>
+                  <Label className="text-xs">{t("amount")}</Label>
+                  <Input type="number" min={0} step="0.01" value={cardAmt} onChange={(e) => setCardAmt(Math.max(0, Number(e.target.value)))} />
+                </div>
+                <div className="text-sm flex justify-between bg-muted rounded px-2 py-1.5">
+                  <span>Balance remaining</span>
+                  <span className="font-semibold">{thb(Math.max(0, remaining - cardAmt))}</span>
+                </div>
+                <Button className="w-full" size="lg" disabled={remaining <= 0 || cardAmt <= 0}
+                  onClick={() => addPayment("card", cardAmt)}>{t("card")} · {thb(cardAmt)}</Button>
               </TabsContent>
             </Tabs>
             )}
