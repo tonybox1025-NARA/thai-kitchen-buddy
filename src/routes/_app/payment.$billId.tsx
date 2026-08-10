@@ -121,8 +121,6 @@ function PaymentPage() {
   const [settingsMaxDiscountPercent, setSettingsMaxDiscountPercent] = useState(100);
   const [govQrEnabled, setGovQrEnabled] = useState(false);
   const [govQrLabel, setGovQrLabel] = useState("60/40");
-  const [govQrCustomerPercent, setGovQrCustomerPercent] = useState(60);
-  const [govQrGovernmentPercent, setGovQrGovernmentPercent] = useState(40);
   const [loyaltyEnabled, setLoyaltyEnabled] = useState(true);
   const [loyaltyPointsPerBaht, setLoyaltyPointsPerBaht] = useState(1);
   const [receiptLogoUrl, setReceiptLogoUrl] = useState<string | null>(null);
@@ -134,6 +132,7 @@ function PaymentPage() {
   // QR payment state
   const [qrAmt, setQrAmt] = useState(0);
   const [qrTip, setQrTip] = useState(0);
+  const [govQrAmt, setGovQrAmt] = useState(0);
 
   // Cash dialog
   const [cashOpen, setCashOpen] = useState(false);
@@ -228,8 +227,6 @@ function PaymentPage() {
       setLoyaltyPointsPerBaht(Number(row.loyalty_points_per_baht ?? 1));
       setGovQrEnabled(row.gov_qr_enabled ?? false);
       setGovQrLabel(row.gov_qr_label ?? "60/40");
-      setGovQrCustomerPercent(Number(row.gov_qr_customer_percent ?? 60));
-      setGovQrGovernmentPercent(Number(row.gov_qr_government_percent ?? 40));
     }
   };
 
@@ -256,7 +253,7 @@ function PaymentPage() {
   const paymentMethodLabel = (method: PaymentMethod) => (
     method === "cash" ? t("cash")
     : method === "qr" ? t("qr_transfer")
-    : method === "gov_qr" ? `Government QR ${govQrLabel}`
+    : method === "gov_qr" ? govQrLabel
     : t("card")
   );
 
@@ -279,6 +276,9 @@ function PaymentPage() {
 
   // Sync QR field with remaining balance
   useEffect(() => { setQrAmt(remaining); }, [remaining]);
+  // Default the 60/40 field to the full remaining, but the cashier can lower it
+  // to whatever the customer is eligible to use under the scheme.
+  useEffect(() => { setGovQrAmt(remaining); }, [remaining]);
 
   // ── Discount helpers ────────────────────────────────────────────────────────
 
@@ -816,14 +816,22 @@ function PaymentPage() {
               </TabsContent>
               {govQrEnabled && (
                 <TabsContent value="gov_qr" className="pt-3 space-y-2">
-                  <div className="rounded-md bg-muted px-3 py-2 text-sm space-y-1">
-                    <div className="flex justify-between"><span>Customer {govQrCustomerPercent}%</span><span className="font-semibold">{thb(remaining * govQrCustomerPercent / 100)}</span></div>
-                    <div className="flex justify-between"><span>Government {govQrGovernmentPercent}%</span><span className="font-semibold">{thb(remaining * govQrGovernmentPercent / 100)}</span></div>
+                  <div>
+                    <Label className="text-xs">{govQrLabel} {t("amount")}</Label>
+                    <Input type="number" min={0} max={remaining} step="0.01" value={govQrAmt}
+                      onChange={(e) => setGovQrAmt(Math.max(0, Math.min(remaining, Number(e.target.value))))} />
                   </div>
-                  <Button className="w-full" size="lg" disabled={remaining <= 0}
-                    onClick={() => addPayment("gov_qr", remaining, { reference: `${govQrLabel}; customer ${govQrCustomerPercent}% ${thb(remaining * govQrCustomerPercent / 100)}; government ${govQrGovernmentPercent}% ${thb(remaining * govQrGovernmentPercent / 100)}` })}>
-                    Government QR {govQrLabel} · {thb(remaining)}
+                  <div className="text-sm flex justify-between bg-muted rounded px-2 py-1.5">
+                    <span>Balance remaining</span>
+                    <span className="font-semibold">{thb(Math.max(0, remaining - govQrAmt))}</span>
+                  </div>
+                  <Button className="w-full" size="lg" disabled={remaining <= 0 || govQrAmt <= 0}
+                    onClick={() => addPayment("gov_qr", govQrAmt, { reference: govQrLabel })}>
+                    {govQrLabel} · {thb(govQrAmt)}
                   </Button>
+                  {remaining - govQrAmt > 0 && (
+                    <p className="text-xs text-muted-foreground">Pay the balance of {thb(remaining - govQrAmt)} with cash or card next.</p>
+                  )}
                 </TabsContent>
               )}
               <TabsContent value="card" className="pt-3 space-y-2">
@@ -1087,8 +1095,6 @@ function PaymentPage() {
         paidStatus={paidStatus}
         govQrEnabled={govQrEnabled}
         govQrLabel={govQrLabel}
-        govQrCustomerPercent={govQrCustomerPercent}
-        govQrGovernmentPercent={govQrGovernmentPercent}
       />
 
       <ManagerPinDialog open={managerOpen} onOpenChange={setManagerOpen} onApproved={() => {
@@ -1184,7 +1190,7 @@ type SplitStep = "choose" | "even_setup" | "even_pay" | "item_assign" | "item_pa
 type PayMethod = PaymentMethod;
 
 function SplitBillDialog({
-  open, onClose, items, billTotal, remaining, lang, t, onAddPayment, paidStatus, govQrEnabled, govQrLabel, govQrCustomerPercent, govQrGovernmentPercent,
+  open, onClose, items, billTotal, remaining, lang, t, onAddPayment, paidStatus, govQrEnabled, govQrLabel,
 }: {
   open: boolean; onClose: () => void;
   items: Item[]; billTotal: number; remaining: number;
@@ -1193,8 +1199,6 @@ function SplitBillDialog({
   paidStatus: boolean;
   govQrEnabled: boolean;
   govQrLabel: string;
-  govQrCustomerPercent: number;
-  govQrGovernmentPercent: number;
 }) {
   const [step, setStep] = useState<SplitStep>("choose");
   const [ways, setWays] = useState(2);
@@ -1260,7 +1264,7 @@ function SplitBillDialog({
         await onAddPayment("qr", currentAmount, { tip_amount: qrTip });
         setQrTip(0);
       } else if (payMethod === "gov_qr") {
-        await onAddPayment("gov_qr", currentAmount, { reference: `${govQrLabel}; customer ${govQrCustomerPercent}% ${thb(currentAmount * govQrCustomerPercent / 100)}; government ${govQrGovernmentPercent}% ${thb(currentAmount * govQrGovernmentPercent / 100)}` });
+        await onAddPayment("gov_qr", currentAmount, { reference: govQrLabel });
       } else {
         await onAddPayment("card", currentAmount);
       }
@@ -1356,9 +1360,8 @@ function SplitBillDialog({
       )}
 
       {payMethod === "gov_qr" && (
-        <div className="space-y-1 text-sm bg-muted rounded px-3 py-2">
-          <div className="flex justify-between"><span>Customer {govQrCustomerPercent}%</span><span className="font-bold tabular-nums">{thb(amount * govQrCustomerPercent / 100)}</span></div>
-          <div className="flex justify-between"><span>Government {govQrGovernmentPercent}%</span><span className="font-bold tabular-nums">{thb(amount * govQrGovernmentPercent / 100)}</span></div>
+        <div className="flex justify-between text-sm bg-muted rounded px-3 py-2">
+          <span>{govQrLabel}</span><span className="font-bold tabular-nums">{thb(amount)}</span>
         </div>
       )}
     </div>

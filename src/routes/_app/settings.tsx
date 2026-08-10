@@ -352,24 +352,14 @@ function GeneralTab() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <Label>Government co-pay QR</Label>
-                <p className="text-xs text-muted-foreground">Configurable QR payment such as 60/40 or 50/50.</p>
+                <p className="text-xs text-muted-foreground">A named QR payment (e.g. 60/40). The cashier enters the amount the customer uses; the balance is paid by cash or card.</p>
               </div>
               <Switch checked={s.gov_qr_enabled ?? false} onCheckedChange={(checked) => setS({ ...s, gov_qr_enabled: checked })} />
             </div>
             {s.gov_qr_enabled && (
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div>
-                  <Label>Label</Label>
-                  <Input value={s.gov_qr_label ?? "60/40"} onChange={(e) => setS({ ...s, gov_qr_label: e.target.value })} />
-                </div>
-                <div>
-                  <Label>Customer %</Label>
-                  <Input type="number" min={0} max={100} step="0.01" value={s.gov_qr_customer_percent ?? 60} onChange={(e) => setS({ ...s, gov_qr_customer_percent: Math.max(0, Math.min(100, Number(e.target.value))) })} />
-                </div>
-                <div>
-                  <Label>Government %</Label>
-                  <Input type="number" min={0} max={100} step="0.01" value={s.gov_qr_government_percent ?? 40} onChange={(e) => setS({ ...s, gov_qr_government_percent: Math.max(0, Math.min(100, Number(e.target.value))) })} />
-                </div>
+              <div className="sm:max-w-[12rem]">
+                <Label>Label</Label>
+                <Input value={s.gov_qr_label ?? "60/40"} onChange={(e) => setS({ ...s, gov_qr_label: e.target.value })} />
               </div>
             )}
           </div>
