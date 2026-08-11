@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { RefreshCw, Search, Upload } from "lucide-react";
+import { segmentFor, type Segment } from "@/lib/rfm";
 
 export const Route = createFileRoute("/_app/members")({ component: MembersPage });
 
@@ -34,6 +35,7 @@ type Member = {
   visits: number;       // legacy_visit_count + pos_visits
   spend: number;        // legacy_total_spend + pos_spend
   last_visit: string | null; // latest of legacy_last_visit_at / POS bills (YYYY-MM-DD)
+  segment: Segment;     // RFM segment computed from combined recency/frequency/spend
 };
 
 type MemberActivity = { visits: number; spend: number; lastVisit: string | null };
@@ -220,13 +222,16 @@ function enrichMember(m: Member, act: MemberActivity | undefined): Member {
     .filter(Boolean)
     .sort()
     .pop() ?? null;
+  const visits = Number(m.legacy_visit_count ?? 0) + pos_visits;
+  const spend = Number(m.legacy_total_spend ?? 0) + pos_spend;
   return {
     ...m,
     pos_visits,
     pos_spend,
-    visits: Number(m.legacy_visit_count ?? 0) + pos_visits,
-    spend: Number(m.legacy_total_spend ?? 0) + pos_spend,
+    visits,
+    spend,
     last_visit,
+    segment: segmentFor(last_visit, visits, spend),
   };
 }
 
@@ -239,6 +244,7 @@ function MembersPage() {
     loyalty_points_expire_months: 6,
   });
   const [query, setQuery] = useState("");
+  const [segmentFilter, setSegmentFilter] = useState<Segment | null>(null);
   const [loading, setLoading] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
@@ -250,12 +256,19 @@ function MembersPage() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return members;
-    return members.filter((m) =>
-      [m.full_name, m.nickname, m.phone, m.member_group_en, m.member_level]
-        .some((v) => String(v ?? "").toLowerCase().includes(q)),
-    );
-  }, [members, query]);
+    return members.filter((m) => {
+      if (segmentFilter && m.segment !== segmentFilter) return false;
+      if (!q) return true;
+      return [m.full_name, m.nickname, m.phone, m.segment, m.member_group_en, m.member_level]
+        .some((v) => String(v ?? "").toLowerCase().includes(q));
+    });
+  }, [members, query, segmentFilter]);
+
+  const segmentCounts = useMemo(() => {
+    const counts = new Map<Segment, number>();
+    for (const m of members) counts.set(m.segment, (counts.get(m.segment) ?? 0) + 1);
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  }, [members]);
 
   const stats = useMemo(() => ({
     count: members.length,
@@ -381,6 +394,30 @@ function MembersPage() {
         <Card><CardHeader><CardTitle className="text-sm">Total spend</CardTitle></CardHeader><CardContent className="text-2xl font-bold">{thb(stats.spend)}</CardContent></Card>
       </div>
 
+      {segmentCounts.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Segments (RFM)</CardTitle></CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              {segmentCounts.map(([seg, n]) => (
+                <button
+                  key={seg}
+                  onClick={() => setSegmentFilter(segmentFilter === seg ? null : seg)}
+                  className={`rounded-full border px-3 py-1 text-xs transition-colors ${segmentFilter === seg ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted/60"}`}
+                >
+                  {seg} <span className="font-bold tabular-nums">{n.toLocaleString()}</span>
+                </button>
+              ))}
+              {segmentFilter && (
+                <button onClick={() => setSegmentFilter(null)} className="rounded-full border px-3 py-1 text-xs text-muted-foreground hover:bg-muted/60">
+                  Clear filter ✕
+                </button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <Card>
           <CardHeader>
@@ -415,7 +452,7 @@ function MembersPage() {
                     <TableCell>{m.phone ?? "-"}</TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
-                        {m.member_group_en && <Badge variant="secondary">{m.member_group_en}</Badge>}
+                        <Badge variant="secondary">{m.segment}</Badge>
                         {m.member_level && m.member_level !== "-" && <Badge>{m.member_level}</Badge>}
                       </div>
                     </TableCell>
@@ -475,7 +512,10 @@ function MembersPage() {
               <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                 {selectedMember.nickname && <span>{selectedMember.nickname}</span>}
                 {selectedMember.phone && <span>{selectedMember.phone}</span>}
-                {selectedMember.member_group_en && <Badge variant="secondary">{selectedMember.member_group_en}</Badge>}
+                <Badge variant="secondary">{selectedMember.segment}</Badge>
+                {selectedMember.member_group_en && selectedMember.member_group_en !== selectedMember.segment && (
+                  <Badge variant="outline" className="font-normal">MERI: {selectedMember.member_group_en}</Badge>
+                )}
                 {selectedMember.member_level && selectedMember.member_level !== "-" && <Badge>{selectedMember.member_level}</Badge>}
                 {selectedMember.guest_token && <Badge variant="outline">Guest wallet linked</Badge>}
               </div>
