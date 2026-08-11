@@ -248,17 +248,40 @@ function buildKitchen(p) {
 }
 
 // ── TCP send ──────────────────────────────────────────────────────────────────
-function sendToPrinter(ip, data) {
+// One attempt. Resolves only after the bytes are flushed AND the connection is
+// held briefly so the printer can consume its buffer before we send FIN — these
+// cheap network printers silently drop data on an immediate close.
+const SEND_HOLD_MS = 500;
+function sendOnce(ip, data) {
   return new Promise((resolve, reject) => {
     if (!ip) return reject(new Error("Printer IP not configured"));
     const sock = createConnection({ host: ip, port: PRINTER_PORT });
-    sock.setTimeout(5000);
+    let settled = false;
+    const done = (err) => { if (settled) return; settled = true; err ? reject(err) : resolve(); };
+    sock.setTimeout(6000);
     sock.once("connect", () => {
-      sock.write(data, () => { sock.end(); resolve(); });
+      sock.write(data, () => {
+        setTimeout(() => { try { sock.end(); } catch {} done(); }, SEND_HOLD_MS);
+      });
     });
-    sock.once("error",   reject);
-    sock.once("timeout", () => { sock.destroy(); reject(new Error(`Printer ${ip}:${PRINTER_PORT} timeout`)); });
+    sock.once("error",   (e) => done(e));
+    sock.once("timeout", () => { sock.destroy(); done(new Error(`Printer ${ip}:${PRINTER_PORT} timeout`)); });
   });
+}
+
+// Retry the whole send a few times — these printers accept only one connection
+// at a time and intermittently refuse/time out until a prior one is released.
+async function sendToPrinter(ip, data, attempts = 4) {
+  let lastErr;
+  for (let i = 1; i <= attempts; i++) {
+    try { await sendOnce(ip, data); return; }
+    catch (e) {
+      lastErr = e;
+      console.warn(`   ⏳ send attempt ${i}/${attempts} failed (${e.message})`);
+      if (i < attempts) await new Promise((r) => setTimeout(r, 600 * i));
+    }
+  }
+  throw lastErr;
 }
 
 // ── Load printer IPs from settings ───────────────────────────────────────────
