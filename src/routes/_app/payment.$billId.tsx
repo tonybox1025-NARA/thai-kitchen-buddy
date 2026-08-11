@@ -123,6 +123,13 @@ function PaymentPage() {
   const [govQrLabel, setGovQrLabel] = useState("60/40");
   const [loyaltyEnabled, setLoyaltyEnabled] = useState(true);
   const [loyaltyPointsPerBaht, setLoyaltyPointsPerBaht] = useState(1);
+  const [signupBonus, setSignupBonus] = useState(0);
+  // New-member form (create at the register)
+  const [newMemberMode, setNewMemberMode] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newNick, setNewNick] = useState("");
+  const [newPhone, setNewPhone] = useState("");
+  const [creatingMember, setCreatingMember] = useState(false);
   const [receiptLogoUrl, setReceiptLogoUrl] = useState<string | null>(null);
   const [selectedMember, setSelectedMember] = useState<MemberLookup | null>(null);
   const [memberSearchOpen, setMemberSearchOpen] = useState(false);
@@ -170,7 +177,7 @@ function PaymentPage() {
     const [{ data: b }, { data: ps }, { data: s }] = await Promise.all([
       supabase.from("bills").select("*").eq("id", billId).single(),
       supabase.from("payments").select("*").eq("bill_id", billId),
-      supabase.from("settings").select("restaurant_name, receipt_logo_url, vat_enabled, vat_mode, vat_rate, service_fee_rate, rounding_mode, max_discount_percent, loyalty_enabled, loyalty_points_per_baht, gov_qr_enabled, gov_qr_label, gov_qr_customer_percent, gov_qr_government_percent").eq("id", 1).single(),
+      supabase.from("settings").select("restaurant_name, receipt_logo_url, vat_enabled, vat_mode, vat_rate, service_fee_rate, rounding_mode, max_discount_percent, loyalty_enabled, loyalty_points_per_baht, loyalty_signup_bonus, gov_qr_enabled, gov_qr_label, gov_qr_customer_percent, gov_qr_government_percent").eq("id", 1).single(),
     ]);
     if (b) {
       setBill(b as unknown as Bill);
@@ -227,6 +234,7 @@ function PaymentPage() {
       setSettingsMaxDiscountPercent(Number(row.max_discount_percent ?? 100));
       setLoyaltyEnabled(row.loyalty_enabled ?? true);
       setLoyaltyPointsPerBaht(Number(row.loyalty_points_per_baht ?? 1));
+      setSignupBonus(Math.max(0, Math.floor(Number((row as any).loyalty_signup_bonus ?? 0))));
       setGovQrEnabled(row.gov_qr_enabled ?? false);
       setGovQrLabel(row.gov_qr_label ?? "60/40");
     }
@@ -460,6 +468,47 @@ function PaymentPage() {
     const { error } = await supabase.from("bills").update({ member_id: null }).eq("id", bill.id);
     if (error) { toast.error(error.message); return; }
     setSelectedMember(null);
+  };
+
+  const resetNewMember = () => {
+    setNewMemberMode(false); setNewName(""); setNewNick(""); setNewPhone("");
+  };
+
+  // Create a member at the register (walk-in onboarding) and attach to this bill.
+  const createMember = async () => {
+    if (!bill) return;
+    const fullName = newName.trim() || newNick.trim();
+    const phone = newPhone.trim().replace(/[^\d+]/g, "") || null;
+    if (!fullName) { toast.error("Name or nickname required"); return; }
+    setCreatingMember(true);
+    try {
+      const { data, error } = await supabase
+        .from("members")
+        .insert({
+          full_name: fullName,
+          nickname: newNick.trim() || null,
+          phone,
+          opening_points: signupBonus,
+          current_points: signupBonus,
+          imported_from: "pos",
+        })
+        .select("id,full_name,nickname,phone,current_points,member_group_en")
+        .single();
+      if (error) throw error;
+      if (signupBonus > 0) {
+        await supabase.from("member_point_ledger").insert({
+          member_id: data.id, type: "signup_bonus", points: signupBonus,
+          balance_after: signupBonus, description: "Signup bonus (registered at POS)",
+        });
+      }
+      resetNewMember();
+      await selectMember(data as MemberLookup);
+      toast.success(signupBonus > 0 ? `Member created · +${signupBonus} pts` : "Member created");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not create member");
+    } finally {
+      setCreatingMember(false);
+    }
   };
 
   const awardLoyaltyPoints = async () => {
@@ -1016,54 +1065,94 @@ function PaymentPage() {
       </Dialog>
 
       {/* ── Member search dialog ────────────────────────────────────────────── */}
-      <Dialog open={memberSearchOpen} onOpenChange={setMemberSearchOpen}>
+      <Dialog open={memberSearchOpen} onOpenChange={(o) => { setMemberSearchOpen(o); if (!o) resetNewMember(); }}>
         <DialogContent className="max-w-xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Heart className="h-4 w-4" />Find member
+              <Heart className="h-4 w-4" />{newMemberMode ? "New member" : "Find member"}
             </DialogTitle>
           </DialogHeader>
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                className="pl-8"
-                placeholder="Search name, nickname, phone..."
-                value={memberQuery}
-                onChange={(e) => setMemberQuery(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") void searchMembers(); }}
-              />
-            </div>
-            <Button onClick={searchMembers}>Search</Button>
-          </div>
-          <div className="max-h-80 overflow-y-auto space-y-2">
-            {memberResults.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => selectMember(m)}
-                className="w-full rounded-lg border p-3 text-left hover:bg-accent transition-colors"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="font-semibold truncate">{m.full_name}</div>
-                    <div className="text-xs text-muted-foreground truncate">
-                      {m.nickname ? `${m.nickname} · ` : ""}{m.phone ?? "No phone"}{m.member_group_en ? ` · ${m.member_group_en}` : ""}
-                    </div>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <div className="font-bold tabular-nums">{Number(m.current_points ?? 0).toLocaleString()}</div>
-                    <div className="text-xs text-muted-foreground">points</div>
-                  </div>
+          {newMemberMode ? (
+            <div className="space-y-3">
+              <div>
+                <Label className="text-xs">Name *</Label>
+                <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Customer name" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs">Nickname</Label>
+                  <Input value={newNick} onChange={(e) => setNewNick(e.target.value)} />
                 </div>
-              </button>
-            ))}
-            {memberResults.length === 0 && (
-              <p className="py-8 text-center text-sm text-muted-foreground">No members found.</p>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setMemberSearchOpen(false)}>{t("cancel")}</Button>
-          </DialogFooter>
+                <div>
+                  <Label className="text-xs">Phone</Label>
+                  <Input value={newPhone} onChange={(e) => setNewPhone(e.target.value)} placeholder="08x-xxx-xxxx" />
+                </div>
+              </div>
+              {signupBonus > 0 && (
+                <p className="text-xs text-muted-foreground">New member gets a {signupBonus.toLocaleString()}-point signup bonus.</p>
+              )}
+              <DialogFooter>
+                <Button variant="outline" onClick={resetNewMember} disabled={creatingMember}>Back</Button>
+                <Button onClick={createMember} disabled={creatingMember || (!newName.trim() && !newNick.trim())}>
+                  {creatingMember ? "Creating…" : "Create & select"}
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    className="pl-8"
+                    placeholder="Search name, nickname, phone..."
+                    value={memberQuery}
+                    onChange={(e) => setMemberQuery(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") void searchMembers(); }}
+                  />
+                </div>
+                <Button onClick={searchMembers}>Search</Button>
+              </div>
+              <div className="max-h-80 overflow-y-auto space-y-2">
+                {memberResults.map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => selectMember(m)}
+                    className="w-full rounded-lg border p-3 text-left hover:bg-accent transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-semibold truncate">{m.full_name}</div>
+                        <div className="text-xs text-muted-foreground truncate">
+                          {m.nickname ? `${m.nickname} · ` : ""}{m.phone ?? "No phone"}{m.member_group_en ? ` · ${m.member_group_en}` : ""}
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <div className="font-bold tabular-nums">{Number(m.current_points ?? 0).toLocaleString()}</div>
+                        <div className="text-xs text-muted-foreground">points</div>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+                {memberResults.length === 0 && (
+                  <p className="py-8 text-center text-sm text-muted-foreground">No members found.</p>
+                )}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setMemberSearchOpen(false)}>{t("cancel")}</Button>
+                <Button onClick={() => {
+                  const q = memberQuery.trim();
+                  const isPhone = /^[\d+\-\s]+$/.test(q) && /\d/.test(q);
+                  setNewPhone(isPhone ? q : "");
+                  setNewName(isPhone ? "" : q);
+                  setNewNick("");
+                  setNewMemberMode(true);
+                }}>
+                  <Heart className="h-4 w-4 mr-1" />New member
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 
