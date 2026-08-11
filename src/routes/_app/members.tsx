@@ -28,7 +28,15 @@ type Member = {
   legacy_last_visit_at: string | null;
   status: string;
   guest_token: string | null;
+  // Computed at load time: MERI seed (legacy_*) + live POS activity from bills.
+  pos_visits: number;
+  pos_spend: number;
+  visits: number;       // legacy_visit_count + pos_visits
+  spend: number;        // legacy_total_spend + pos_spend
+  last_visit: string | null; // latest of legacy_last_visit_at / POS bills (YYYY-MM-DD)
 };
+
+type MemberActivity = { visits: number; spend: number; lastVisit: string | null };
 
 type PointLedgerRow = {
   id: string;
@@ -177,6 +185,51 @@ async function fetchAllMembers() {
   return all;
 }
 
+/** Live POS activity per member, aggregated from paid bills. This is the source of
+ *  truth going forward — no counters to drift. Combined with the MERI legacy_* seed. */
+async function fetchMemberActivity(): Promise<Map<string, MemberActivity>> {
+  const map = new Map<string, MemberActivity>();
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase
+      .from("bills")
+      .select("member_id,total,paid_at")
+      .not("member_id", "is", null)
+      .in("status", ["paid", "partial_refund"])
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    const page = (data ?? []) as { member_id: string; total: number; paid_at: string | null }[];
+    for (const b of page) {
+      const cur = map.get(b.member_id) ?? { visits: 0, spend: 0, lastVisit: null };
+      cur.visits += 1;
+      cur.spend += Number(b.total ?? 0);
+      const day = b.paid_at ? b.paid_at.slice(0, 10) : null;
+      if (day && (!cur.lastVisit || day > cur.lastVisit)) cur.lastVisit = day;
+      map.set(b.member_id, cur);
+    }
+    if (page.length < pageSize) break;
+  }
+  return map;
+}
+
+/** Merge the MERI seed row with its live POS activity into display totals. */
+function enrichMember(m: Member, act: MemberActivity | undefined): Member {
+  const pos_visits = act?.visits ?? 0;
+  const pos_spend = act?.spend ?? 0;
+  const last_visit = [m.legacy_last_visit_at, act?.lastVisit ?? null]
+    .filter(Boolean)
+    .sort()
+    .pop() ?? null;
+  return {
+    ...m,
+    pos_visits,
+    pos_spend,
+    visits: Number(m.legacy_visit_count ?? 0) + pos_visits,
+    spend: Number(m.legacy_total_spend ?? 0) + pos_spend,
+    last_visit,
+  };
+}
+
 function MembersPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [settings, setSettings] = useState<LoyaltySettings>({
@@ -208,13 +261,14 @@ function MembersPage() {
     count: members.length,
     withPhone: members.filter((m) => m.phone).length,
     points: members.reduce((s, m) => s + Number(m.current_points ?? 0), 0),
-    spend: members.reduce((s, m) => s + Number(m.legacy_total_spend ?? 0), 0),
+    spend: members.reduce((s, m) => s + Number(m.spend ?? 0), 0),
   }), [members]);
 
   const load = async () => {
     setLoading(true);
-    const [memberResult, { data: settingsRow, error: settingsErr }] = await Promise.all([
+    const [memberResult, activityResult, { data: settingsRow, error: settingsErr }] = await Promise.all([
       fetchAllMembers().then((data) => ({ data, error: null as Error | null })).catch((error: Error) => ({ data: [] as Member[], error })),
+      fetchMemberActivity().then((data) => ({ data, error: null as Error | null })).catch((error: Error) => ({ data: new Map<string, MemberActivity>(), error })),
       supabase
         .from("settings")
         .select("loyalty_enabled,loyalty_points_per_baht,loyalty_signup_bonus,loyalty_points_expire_months")
@@ -224,7 +278,8 @@ function MembersPage() {
     setLoading(false);
     if (memberResult.error) { toast.error(memberResult.error.message); return; }
     if (settingsErr) toast.error(settingsErr.message);
-    setMembers(memberResult.data);
+    const activity = activityResult.data;
+    setMembers(memberResult.data.map((m) => enrichMember(m, activity.get(m.id))));
     if (settingsRow) setSettings(settingsRow as LoyaltySettings);
   };
 
@@ -323,7 +378,7 @@ function MembersPage() {
         <Card><CardHeader><CardTitle className="text-sm">Members</CardTitle></CardHeader><CardContent className="text-2xl font-bold">{stats.count}</CardContent></Card>
         <Card><CardHeader><CardTitle className="text-sm">With phone</CardTitle></CardHeader><CardContent className="text-2xl font-bold">{stats.withPhone}</CardContent></Card>
         <Card><CardHeader><CardTitle className="text-sm">Available points</CardTitle></CardHeader><CardContent className="text-2xl font-bold">{stats.points.toLocaleString()}</CardContent></Card>
-        <Card><CardHeader><CardTitle className="text-sm">Legacy spend</CardTitle></CardHeader><CardContent className="text-2xl font-bold">{thb(stats.spend)}</CardContent></Card>
+        <Card><CardHeader><CardTitle className="text-sm">Total spend</CardTitle></CardHeader><CardContent className="text-2xl font-bold">{thb(stats.spend)}</CardContent></Card>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
@@ -365,9 +420,9 @@ function MembersPage() {
                       </div>
                     </TableCell>
                     <TableCell className="text-right font-semibold">{Number(m.current_points ?? 0).toLocaleString()}</TableCell>
-                    <TableCell className="text-right">{m.legacy_visit_count}</TableCell>
-                    <TableCell className="text-right">{thb(m.legacy_total_spend)}</TableCell>
-                    <TableCell>{m.legacy_last_visit_at ?? "-"}</TableCell>
+                    <TableCell className="text-right">{m.visits}</TableCell>
+                    <TableCell className="text-right">{thb(m.spend)}</TableCell>
+                    <TableCell>{m.last_visit ?? "-"}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -426,9 +481,9 @@ function MembersPage() {
               </div>
               <div className="grid gap-3 sm:grid-cols-4">
                 <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">Current points</div><div className="text-xl font-bold">{Number(selectedMember.current_points ?? 0).toLocaleString()}</div></CardContent></Card>
-                <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">Visits</div><div className="text-xl font-bold">{selectedMember.legacy_visit_count}</div></CardContent></Card>
-                <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">Legacy spend</div><div className="text-xl font-bold">{thb(selectedMember.legacy_total_spend)}</div></CardContent></Card>
-                <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">Last visit</div><div className="text-xl font-bold">{selectedMember.legacy_last_visit_at ?? "-"}</div></CardContent></Card>
+                <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">Visits</div><div className="text-xl font-bold">{selectedMember.visits}</div>{selectedMember.pos_visits > 0 && <div className="text-[10px] text-muted-foreground mt-0.5">{selectedMember.pos_visits} in POS · {selectedMember.legacy_visit_count} imported</div>}</CardContent></Card>
+                <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">Total spend</div><div className="text-xl font-bold">{thb(selectedMember.spend)}</div>{selectedMember.pos_spend > 0 && <div className="text-[10px] text-muted-foreground mt-0.5">{thb(selectedMember.pos_spend)} in POS</div>}</CardContent></Card>
+                <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">Last visit</div><div className="text-xl font-bold">{selectedMember.last_visit ?? "-"}</div></CardContent></Card>
               </div>
               <div className="rounded-lg border">
                 <div className="border-b p-3 font-medium">Point history</div>
