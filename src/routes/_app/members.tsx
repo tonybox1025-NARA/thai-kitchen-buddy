@@ -231,7 +231,7 @@ function enrichMember(m: Member, act: MemberActivity | undefined): Member {
     visits,
     spend,
     last_visit,
-    segment: segmentFor(last_visit, visits, spend),
+    segment: segmentFor(last_visit, visits),
   };
 }
 
