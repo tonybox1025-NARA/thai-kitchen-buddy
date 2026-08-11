@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Download, RefreshCw, Search, Upload } from "lucide-react";
+import { RefreshCw, Search, Upload } from "lucide-react";
 
 export const Route = createFileRoute("/_app/members")({ component: MembersPage });
 
@@ -190,6 +190,7 @@ function MembersPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
   const [importing, setImporting] = useState(false);
+  const [confirmReplace, setConfirmReplace] = useState(false);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [ledgerRows, setLedgerRows] = useState<PointLedgerRow[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -240,6 +241,7 @@ function MembersPage() {
     const text = await file.text();
     const rows = mapDotdashRows(text);
     setImportRows(rows);
+    setConfirmReplace(false);
     toast.success(`Ready to import ${rows.length} customers`);
   };
 
@@ -254,6 +256,29 @@ function MembersPage() {
       await load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Import failed");
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  // Re-sync with a fresh MERI/DotDash export: delete the previous DotDash import,
+  // then insert the new rows. Used because the export has no stable key to match on.
+  // Members earned/redeemed in the POS (imported_from = null) are left untouched;
+  // member_point_ledger cascades on delete, and bills.member_id is set null.
+  const doReplace = async () => {
+    if (importRows.length === 0) return;
+    setImporting(true);
+    try {
+      const { error: delErr } = await supabase.from("members").delete().eq("imported_from", "dotdash");
+      if (delErr) throw delErr;
+      await insertInBatches(importRows);
+      toast.success(`Replaced DotDash members · imported ${importRows.length}`);
+      setImportOpen(false);
+      setImportRows([]);
+      setConfirmReplace(false);
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Replace failed");
     } finally {
       setImporting(false);
     }
@@ -470,17 +495,30 @@ function MembersPage() {
                 </div>
               </div>
             )}
+            {confirmReplace && (
+              <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-3 text-sm space-y-1">
+                <div className="font-semibold text-destructive">Replace previous DotDash import?</div>
+                <p className="text-muted-foreground">
+                  This deletes every member imported from DotDash and re-imports the {importRows.length.toLocaleString()} rows
+                  from this file. Members added or edited inside the POS (not from DotDash) are kept.
+                </p>
+              </div>
+            )}
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setImportOpen(false)}>Cancel</Button>
-            <Button variant="outline" asChild>
-              <a href="/members" onClick={(e) => e.preventDefault()}>
-                <Download className="h-4 w-4 mr-2" />Template later
-              </a>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button variant="outline" onClick={() => { setImportOpen(false); setConfirmReplace(false); }}>Cancel</Button>
+            <Button variant="outline" onClick={doImport} disabled={importRows.length === 0 || importing}>
+              {importing ? "Working…" : "Add only"}
             </Button>
-            <Button onClick={doImport} disabled={importRows.length === 0 || importing}>
-              {importing ? "Importing..." : "Import members"}
-            </Button>
+            {confirmReplace ? (
+              <Button variant="destructive" onClick={doReplace} disabled={importRows.length === 0 || importing}>
+                {importing ? "Replacing…" : `Confirm — delete old & import ${importRows.length.toLocaleString()}`}
+              </Button>
+            ) : (
+              <Button onClick={() => setConfirmReplace(true)} disabled={importRows.length === 0 || importing}>
+                <RefreshCw className="h-4 w-4 mr-2" />Replace previous import
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
