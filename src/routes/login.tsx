@@ -27,7 +27,7 @@ function LoginPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen grid place-items-center bg-gradient-to-br from-background to-muted p-4 text-muted-foreground">
+      <div className="min-h-dvh grid place-items-center bg-gradient-to-br from-background to-muted p-4 text-muted-foreground">
         {t("loading")}
       </div>
     );
@@ -44,7 +44,7 @@ function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen grid place-items-center bg-gradient-to-br from-background to-muted p-4">
+    <div className="min-h-dvh grid place-items-center bg-gradient-to-br from-background to-muted p-4">
       <div className="absolute top-4 right-4"><LanguageToggle /></div>
       <Card className="w-full max-w-md shadow-xl">
         <CardHeader className="text-center">
@@ -57,7 +57,7 @@ function LoginPage() {
           <form onSubmit={submit} className="space-y-4">
             <div>
               <Label htmlFor="email">{t("email")}</Label>
-              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
+              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" autoFocus enterKeyHint="next" />
             </div>
             <div>
               <Label htmlFor="password">{t("password")}</Label>
