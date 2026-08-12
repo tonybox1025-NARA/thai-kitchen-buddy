@@ -32,6 +32,8 @@ function LivePage() {
   const [salesNet, setSalesNet] = useState(0);
   const [billCount, setBillCount] = useState(0);
   const [hasShift, setHasShift] = useState(true);
+  const [hourly, setHourly] = useState<{ hour: number; count: number; total: number }[]>([]);
+  const [topItems, setTopItems] = useState<{ name: string; qty: number }[]>([]);
   const [updatedAt, setUpdatedAt] = useState<Date>(new Date());
   const [loading, setLoading] = useState(true);
 
@@ -52,18 +54,46 @@ function LivePage() {
     // Today's paid sales for the open shift
     setHasShift(!!shift);
     if (shift?.id) {
-      const { data: bills } = await supabase.from("bills").select("id,total").eq("status", "paid").eq("shift_id", shift.id);
+      const { data: bills } = await supabase.from("bills").select("id,total,paid_at").eq("status", "paid").eq("shift_id", shift.id);
       const ids = (bills ?? []).map((b) => b.id);
       setBillCount((bills ?? []).length);
       setSalesNet((bills ?? []).reduce((s, b) => s + Number(b.total), 0));
-      const { data: pays } = ids.length
-        ? await supabase.from("payments").select("method,amount").in("bill_id", ids)
-        : { data: [] as { method: string; amount: number }[] };
+
+      // Hourly customer flow (by bill paid_at, local hour)
+      const hMap = new Map<number, { count: number; total: number }>();
+      for (const b of (bills ?? []) as { total: number; paid_at: string | null }[]) {
+        if (!b.paid_at) continue;
+        const h = new Date(b.paid_at).getHours();
+        const cur = hMap.get(h) ?? { count: 0, total: 0 };
+        cur.count += 1; cur.total += Number(b.total);
+        hMap.set(h, cur);
+      }
+      setHourly([...hMap.entries()].map(([hour, v]) => ({ hour, ...v })).sort((a, b) => a.hour - b.hour));
+
+      const [{ data: pays }, { data: shiftOrders }] = await Promise.all([
+        ids.length
+          ? supabase.from("payments").select("method,amount").in("bill_id", ids)
+          : Promise.resolve({ data: [] as { method: string; amount: number }[] }),
+        supabase.from("orders").select("id").eq("shift_id", shift.id),
+      ]);
       const m: Record<string, number> = { cash: 0, qr: 0, gov_qr: 0, card: 0 };
       for (const p of pays ?? []) m[p.method] = (m[p.method] ?? 0) + Number(p.amount);
       setByMethod(m);
+
+      // Top items today (all non-voided order items in this shift)
+      const orderIds = (shiftOrders ?? []).map((o: { id: string }) => o.id);
+      const { data: oi } = orderIds.length
+        ? await (supabase as any).from("order_items").select("name_th,name_en,qty,voided_at").in("order_id", orderIds).is("voided_at", null)
+        : { data: [] as { name_th: string; name_en: string; qty: number }[] };
+      const iMap = new Map<string, number>();
+      for (const it of (oi ?? []) as { name_th: string; name_en: string; qty: number }[]) {
+        const name = it.name_en || it.name_th || "Item";
+        iMap.set(name, (iMap.get(name) ?? 0) + Number(it.qty));
+      }
+      setTopItems([...iMap.entries()].map(([name, qty]) => ({ name, qty })).sort((a, b) => b.qty - a.qty).slice(0, 5));
     } else {
       setBillCount(0); setSalesNet(0); setByMethod({ cash: 0, qr: 0, gov_qr: 0, card: 0 });
+      setHourly([]); setTopItems([]);
     }
     setUpdatedAt(new Date());
     setLoading(false);
@@ -143,6 +173,47 @@ function LivePage() {
             ))}
           </CardContent>
         </Card>
+      )}
+
+      {/* Busy hours today */}
+      {hourly.length > 0 && (
+        <div>
+          <h2 className="mb-2 text-sm font-semibold">Busy hours</h2>
+          <Card>
+            <CardContent className="p-3 space-y-1.5">
+              {(() => {
+                const max = Math.max(...hourly.map((h) => h.count), 1);
+                return hourly.map((h) => (
+                  <div key={h.hour} className="flex items-center gap-2 text-xs">
+                    <span className="w-10 flex-none tabular-nums text-muted-foreground">{String(h.hour).padStart(2, "0")}:00</span>
+                    <div className="h-4 flex-1 rounded bg-muted overflow-hidden">
+                      <div className="h-full rounded bg-primary/70" style={{ width: `${(h.count / max) * 100}%` }} />
+                    </div>
+                    <span className="w-24 flex-none text-right tabular-nums">{h.count} bills · {thb(h.total)}</span>
+                  </div>
+                ));
+              })()}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Top items today */}
+      {topItems.length > 0 && (
+        <div>
+          <h2 className="mb-2 text-sm font-semibold">Top items today</h2>
+          <Card>
+            <CardContent className="p-2">
+              {topItems.map((it, i) => (
+                <div key={it.name} className="flex items-center gap-3 px-1 py-1.5">
+                  <span className="grid h-6 w-6 flex-none place-items-center rounded-full bg-primary/10 text-xs font-bold text-primary">{i + 1}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">{it.name}</span>
+                  <span className="flex-none text-sm font-bold tabular-nums">×{it.qty}</span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {/* Active tables */}
