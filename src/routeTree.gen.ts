@@ -19,6 +19,7 @@ import { Route as AppReportsRouteImport } from './routes/_app/reports'
 import { Route as AppPosRouteImport } from './routes/_app/pos'
 import { Route as AppMembersRouteImport } from './routes/_app/members'
 import { Route as AppLoyaltyRouteImport } from './routes/_app/loyalty'
+import { Route as AppLiveRouteImport } from './routes/_app/live'
 import { Route as AppDetailVoidsRouteImport } from './routes/_app/detail-voids'
 import { Route as AppDetailTipsRouteImport } from './routes/_app/detail-tips'
 import { Route as AppDetailQrRouteImport } from './routes/_app/detail-qr'
@@ -79,6 +80,11 @@ const AppMembersRoute = AppMembersRouteImport.update({
 const AppLoyaltyRoute = AppLoyaltyRouteImport.update({
   id: '/loyalty',
   path: '/loyalty',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppLiveRoute = AppLiveRouteImport.update({
+  id: '/live',
+  path: '/live',
   getParentRoute: () => AppRoute,
 } as any)
 const AppDetailVoidsRoute = AppDetailVoidsRouteImport.update({
@@ -153,6 +159,7 @@ export interface FileRoutesByFullPath {
   '/detail-qr': typeof AppDetailQrRoute
   '/detail-tips': typeof AppDetailTipsRoute
   '/detail-voids': typeof AppDetailVoidsRoute
+  '/live': typeof AppLiveRoute
   '/loyalty': typeof AppLoyaltyRoute
   '/members': typeof AppMembersRoute
   '/pos': typeof AppPosRoute
@@ -176,6 +183,7 @@ export interface FileRoutesByTo {
   '/detail-qr': typeof AppDetailQrRoute
   '/detail-tips': typeof AppDetailTipsRoute
   '/detail-voids': typeof AppDetailVoidsRoute
+  '/live': typeof AppLiveRoute
   '/loyalty': typeof AppLoyaltyRoute
   '/members': typeof AppMembersRoute
   '/pos': typeof AppPosRoute
@@ -201,6 +209,7 @@ export interface FileRoutesById {
   '/_app/detail-qr': typeof AppDetailQrRoute
   '/_app/detail-tips': typeof AppDetailTipsRoute
   '/_app/detail-voids': typeof AppDetailVoidsRoute
+  '/_app/live': typeof AppLiveRoute
   '/_app/loyalty': typeof AppLoyaltyRoute
   '/_app/members': typeof AppMembersRoute
   '/_app/pos': typeof AppPosRoute
@@ -226,6 +235,7 @@ export interface FileRouteTypes {
     | '/detail-qr'
     | '/detail-tips'
     | '/detail-voids'
+    | '/live'
     | '/loyalty'
     | '/members'
     | '/pos'
@@ -249,6 +259,7 @@ export interface FileRouteTypes {
     | '/detail-qr'
     | '/detail-tips'
     | '/detail-voids'
+    | '/live'
     | '/loyalty'
     | '/members'
     | '/pos'
@@ -273,6 +284,7 @@ export interface FileRouteTypes {
     | '/_app/detail-qr'
     | '/_app/detail-tips'
     | '/_app/detail-voids'
+    | '/_app/live'
     | '/_app/loyalty'
     | '/_app/members'
     | '/_app/pos'
@@ -372,6 +384,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppLoyaltyRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/live': {
+      id: '/_app/live'
+      path: '/live'
+      fullPath: '/live'
+      preLoaderRoute: typeof AppLiveRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/detail-voids': {
       id: '/_app/detail-voids'
       path: '/detail-voids'
@@ -466,6 +485,7 @@ interface AppRouteChildren {
   AppDetailQrRoute: typeof AppDetailQrRoute
   AppDetailTipsRoute: typeof AppDetailTipsRoute
   AppDetailVoidsRoute: typeof AppDetailVoidsRoute
+  AppLiveRoute: typeof AppLiveRoute
   AppLoyaltyRoute: typeof AppLoyaltyRoute
   AppMembersRoute: typeof AppMembersRoute
   AppPosRoute: typeof AppPosRoute
@@ -482,6 +502,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppDetailQrRoute: AppDetailQrRoute,
   AppDetailTipsRoute: AppDetailTipsRoute,
   AppDetailVoidsRoute: AppDetailVoidsRoute,
+  AppLiveRoute: AppLiveRoute,
   AppLoyaltyRoute: AppLoyaltyRoute,
   AppMembersRoute: AppMembersRoute,
   AppPosRoute: AppPosRoute,
@@ -507,3 +528,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
