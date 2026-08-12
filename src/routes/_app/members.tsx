@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { KeypadInput } from "@/components/KeypadInput";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -478,19 +479,16 @@ function MembersPage() {
             </div>
             <div>
               <Label>Points per baht</Label>
-              <Input type="number" min={0} step="0.01" value={settings.loyalty_points_per_baht}
-                onChange={(e) => setSettings({ ...settings, loyalty_points_per_baht: Number(e.target.value) })} />
+              <KeypadInput value={settings.loyalty_points_per_baht} onChange={(n) => setSettings({ ...settings, loyalty_points_per_baht: n })} title="Points per baht" display={(n) => String(n)} decimal />
               <p className="mt-1 text-xs text-muted-foreground">Dotdash screenshot shows 1 baht = 1 point.</p>
             </div>
             <div>
               <Label>Sign-up bonus points</Label>
-              <Input type="number" min={0} value={settings.loyalty_signup_bonus}
-                onChange={(e) => setSettings({ ...settings, loyalty_signup_bonus: Number(e.target.value) })} />
+              <KeypadInput value={settings.loyalty_signup_bonus} onChange={(n) => setSettings({ ...settings, loyalty_signup_bonus: n })} title="Sign-up bonus points" display={(n) => String(n)} />
             </div>
             <div>
               <Label>Points expire after months</Label>
-              <Input type="number" min={0} value={settings.loyalty_points_expire_months}
-                onChange={(e) => setSettings({ ...settings, loyalty_points_expire_months: Number(e.target.value) })} />
+              <KeypadInput value={settings.loyalty_points_expire_months} onChange={(n) => setSettings({ ...settings, loyalty_points_expire_months: n })} title="Expire after months" display={(n) => String(n)} />
             </div>
             <Button className="w-full" onClick={saveSettings}>Save loyalty settings</Button>
           </CardContent>

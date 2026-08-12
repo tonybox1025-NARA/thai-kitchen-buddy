@@ -6,6 +6,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { KeypadInput } from "@/components/KeypadInput";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
@@ -183,7 +184,7 @@ function IngredientsTab() {
             <div><Label>English name</Label><Input value={edit?.name_english ?? ""} onChange={(e) => setEdit({ ...edit, name_english: e.target.value })} /></div>
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Unit</Label><Input placeholder="กก., กรัม, ลิตร, มล., ชิ้น" value={edit?.unit ?? ""} onChange={(e) => setEdit({ ...edit, unit: e.target.value })} /></div>
-              <div><Label>Cost per unit (฿)</Label><Input type="number" step="0.01" value={edit?.cost_per_unit ?? 0} onChange={(e) => setEdit({ ...edit, cost_per_unit: Number(e.target.value) })} /></div>
+              <div><Label>Cost per unit (฿)</Label><KeypadInput value={edit?.cost_per_unit ?? 0} onChange={(n) => setEdit({ ...edit, cost_per_unit: n })} title="Cost per unit" decimal /></div>
             </div>
           </div>
           <DialogFooter>
@@ -254,7 +255,7 @@ function GeneralTab() {
             <div><Label>{t("restaurant_name")}</Label><Input value={s.restaurant_name} onChange={(e) => setS({ ...s, restaurant_name: e.target.value })} /></div>
             <div>
               <Label>{t("starting_cash")}</Label>
-              <Input type="number" step="1" value={s.starting_cash ?? 0} onChange={(e) => setS({ ...s, starting_cash: Number(e.target.value) })} />
+              <KeypadInput value={s.starting_cash ?? 0} onChange={(n) => setS({ ...s, starting_cash: n })} title={t("starting_cash")} />
               <p className="text-xs text-muted-foreground mt-1">{t("starting_cash_help")}</p>
             </div>
             <Button onClick={save}>{t("save")}</Button>
@@ -303,7 +304,7 @@ function GeneralTab() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div><Label>{t("vat_rate")}</Label><Input type="number" min={0} max={100} step="0.01" value={s.vat_rate} onChange={(e) => setS({ ...s, vat_rate: Number(e.target.value) })} /></div>
+                <div><Label>{t("vat_rate")}</Label><KeypadInput value={s.vat_rate} onChange={(n) => setS({ ...s, vat_rate: Math.min(100, n) })} title={t("vat_rate")} display={(n) => `${n}%`} decimal /></div>
               </div>
             )}
           </div>
@@ -312,7 +313,7 @@ function GeneralTab() {
             <Label>Service fee</Label>
             <div className="grid grid-cols-[1fr_9rem] gap-3 items-center">
               <span className="text-sm text-muted-foreground">Service rate</span>
-              <Input type="number" min={0} max={100} step="0.01" value={s.service_fee_rate ?? 0} onChange={(e) => setS({ ...s, service_fee_rate: Number(e.target.value) })} />
+              <KeypadInput value={s.service_fee_rate ?? 0} onChange={(n) => setS({ ...s, service_fee_rate: Math.min(100, n) })} title="Service rate" display={(n) => `${n}%`} decimal />
             </div>
           </div>
 
@@ -333,18 +334,13 @@ function GeneralTab() {
             <Label>Using discounts</Label>
             <div className="grid grid-cols-[1fr_9rem] gap-3 items-center">
               <span className="text-sm text-muted-foreground">Maximum discount per bill (%)</span>
-              <div className="relative">
-                <Input
-                  type="number"
-                  min={0}
-                  max={100}
-                  step="0.01"
-                  value={s.max_discount_percent ?? 100}
-                  onChange={(e) => setS({ ...s, max_discount_percent: Math.max(0, Math.min(100, Number(e.target.value))) })}
-                  className="pr-8"
-                />
-                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
-              </div>
+              <KeypadInput
+                value={s.max_discount_percent ?? 100}
+                onChange={(n) => setS({ ...s, max_discount_percent: Math.min(100, n) })}
+                title="Maximum discount"
+                display={(n) => `${n}%`}
+                decimal
+              />
             </div>
           </div>
 
@@ -610,7 +606,7 @@ function KitchenZonesTab() {
           <div className="space-y-3">
             <div><Label>Thai name</Label><Input value={edit?.name_th ?? ""} onChange={(e) => setEdit({ ...edit, name_th: e.target.value })} /></div>
             <div><Label>English name</Label><Input value={edit?.name_en ?? ""} onChange={(e) => setEdit({ ...edit, name_en: e.target.value })} /></div>
-            <div><Label>Sort</Label><Input type="number" value={edit?.sort ?? 0} onChange={(e) => setEdit({ ...edit, sort: Number(e.target.value) })} /></div>
+            <div><Label>Sort</Label><KeypadInput value={edit?.sort ?? 0} onChange={(n) => setEdit({ ...edit, sort: n })} title="Sort" display={(n) => String(n)} /></div>
             <div className="flex items-center justify-between rounded-lg border p-3">
               <Label>Active</Label>
               <Switch checked={edit?.active ?? true} onCheckedChange={(checked) => setEdit({ ...edit, active: checked })} />
@@ -1172,12 +1168,12 @@ function AddonsTab() {
                       className="flex-1 h-8 text-sm"
                     />
                     <span className="text-sm text-muted-foreground shrink-0">฿</span>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0"
+                    <KeypadInput
                       value={opt.price}
-                      onChange={(e) => setOpt(realIdx, { price: Number(e.target.value) })}
+                      onChange={(n) => setOpt(realIdx, { price: n })}
+                      title="Price"
+                      display={(n) => String(n)}
+                      decimal
                       className="w-24 h-8 text-sm"
                     />
                     <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => removeOpt(realIdx)}>
@@ -1394,8 +1390,8 @@ function MenuTab() {
             <div><Label>{t("name_en")}</Label><Input value={edit?.name_en ?? ""} onChange={(e) => setEdit({ ...edit, name_en: e.target.value })} /></div>
             <div><Label>{t("name_my")}</Label><Input className="font-burmese" value={edit?.name_my ?? ""} onChange={(e) => setEdit({ ...edit, name_my: e.target.value })} /></div>
             <div className="grid grid-cols-2 gap-3">
-              <div><Label>{t("price")} (฿)</Label><Input type="number" step="0.01" value={edit?.price ?? 0} onChange={(e) => setEdit({ ...edit, price: Number(e.target.value) })} /></div>
-              <div><Label>Cost (฿)</Label><Input type="number" step="0.01" value={edit?.cost ?? 0} onChange={(e) => setEdit({ ...edit, cost: Number(e.target.value) })} /></div>
+              <div><Label>{t("price")} (฿)</Label><KeypadInput value={edit?.price ?? 0} onChange={(n) => setEdit({ ...edit, price: n })} title={t("price")} decimal /></div>
+              <div><Label>Cost (฿)</Label><KeypadInput value={edit?.cost ?? 0} onChange={(n) => setEdit({ ...edit, cost: n })} title="Cost" decimal /></div>
             </div>
             <MarginIndicator price={Number(edit?.price ?? 0)} cost={Number(edit?.cost ?? 0)} />
             {/* ── Ingredients section ── */}

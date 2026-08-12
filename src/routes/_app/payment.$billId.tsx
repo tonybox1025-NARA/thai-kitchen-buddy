@@ -976,15 +976,14 @@ function PaymentPage() {
             <TabsContent value="percent" className="pt-3 space-y-3">
               <div>
                 <Label>{lang === "th" ? "ลดกี่ %" : "Percentage off"}</Label>
-                <div className="flex items-center gap-2 mt-1">
-                  <Input
-                    type="number" min={0} max={settingsMaxDiscountPercent} step={1}
+                <div className="mt-1">
+                  <KeypadInput
                     value={discPctInput}
-                    onChange={(e) => setDiscPctInput(Math.max(0, Math.min(settingsMaxDiscountPercent, Number(e.target.value))))}
-                    className="text-center text-lg font-bold"
-                    placeholder="0"
+                    onChange={(n) => setDiscPctInput(Math.min(settingsMaxDiscountPercent, n))}
+                    title={lang === "th" ? "ลดกี่ %" : "Percentage off"}
+                    display={(n) => `${n}%`}
+                    placeholder="0%"
                   />
-                  <span className="text-xl font-bold text-muted-foreground">%</span>
                 </div>
                 {/* Quick picks */}
                 <div className="flex gap-1.5 mt-2 flex-wrap">
@@ -1009,13 +1008,9 @@ function PaymentPage() {
             <TabsContent value="fixed" className="pt-3 space-y-3">
               <div>
                 <Label>{lang === "th" ? "ลดเป็นจำนวนเงิน (บาท)" : "Amount to discount (฿)"}</Label>
-                <Input
-                  type="number" min={0} step={1}
-                  value={discFixedInput}
-                  onChange={(e) => setDiscFixedInput(Math.max(0, Number(e.target.value)))}
-                  className="mt-1 text-center text-lg font-bold"
-                  placeholder="0"
-                />
+                <div className="mt-1">
+                  <KeypadInput value={discFixedInput} onChange={setDiscFixedInput} title={lang === "th" ? "ลดเป็นจำนวนเงิน" : "Amount to discount"} placeholder="0" />
+                </div>
                 <div className="flex gap-1.5 mt-2 flex-wrap">
                   {[20, 50, 100, 200, 500].map((a) => (
                     <button key={a} onClick={() => setDiscFixedInput(a)}
@@ -1218,7 +1213,7 @@ function PaymentPage() {
         <DialogContent>
           <DialogHeader><DialogTitle>{t("refund")}</DialogTitle></DialogHeader>
           <Label>{t("amount")}</Label>
-          <Input type="number" value={refundAmt} onChange={(e) => setRefundAmt(Number(e.target.value))} />
+          <KeypadInput value={refundAmt} onChange={setRefundAmt} title={t("refund")} placeholder="0" />
           <Label>{t("refund_reason")}</Label>
           <Textarea value={refundReason} onChange={(e) => setRefundReason(e.target.value)} />
           <DialogFooter>

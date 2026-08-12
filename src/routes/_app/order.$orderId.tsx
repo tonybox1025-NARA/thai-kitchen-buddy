@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth";
 import { thb } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { KeypadInput } from "@/components/KeypadInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -694,7 +695,7 @@ function OrderPage() {
                   <Label>{t("qty")}</Label>
                   <div className="flex items-center gap-2">
                     <Button variant="outline" onClick={() => setQty(Math.max(1, qty - 1))}><Minus className="h-4 w-4" /></Button>
-                    <Input type="number" min={1} value={qty} onChange={(e) => setQty(Math.max(1, Number(e.target.value)))} className="text-center" />
+                    <div className="flex-1"><KeypadInput value={qty} onChange={(n) => setQty(Math.max(1, n))} title={t("qty")} display={(n) => String(n)} className="justify-center" /></div>
                     <Button variant="outline" onClick={() => setQty(qty + 1)}><Plus className="h-4 w-4" /></Button>
                   </div>
                 </div>

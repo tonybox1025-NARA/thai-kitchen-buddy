@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { KeypadInput } from "@/components/KeypadInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -375,7 +376,7 @@ function LoyaltyPage() {
                     </div>
                     <div>
                       <Label>MERI paid amount</Label>
-                      <Input type="number" min={0} step="0.01" value={earnAmount} onChange={(e) => setEarnAmount(e.target.value)} />
+                      <KeypadInput value={Number(earnAmount) || 0} onChange={(n) => setEarnAmount(String(n))} title="MERI paid amount" decimal />
                     </div>
                     <div className="rounded-lg border bg-muted/40 p-3">
                       <div className="text-sm text-muted-foreground">Points to add</div>
@@ -402,7 +403,7 @@ function LoyaltyPage() {
                     </div>
                     <div>
                       <Label>Points to redeem</Label>
-                      <Input type="number" min={0} max={selected.current_points} step="1" value={redeemPoints} onChange={(e) => setRedeemPoints(e.target.value)} />
+                      <KeypadInput value={Number(redeemPoints) || 0} onChange={(n) => setRedeemPoints(String(Math.min(selected.current_points, n)))} title="Points to redeem" display={(n) => `${n} pts`} />
                     </div>
                     <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
                       <div className="text-sm text-muted-foreground">Enter this discount in MERI</div>
