@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth";
 import { thb } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { KeypadInput } from "@/components/KeypadInput";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -817,7 +818,7 @@ function PaymentPage() {
               )}
               <div>
                 <Label className="text-xs">{t("member_discount")}</Label>
-                <Input type="number" min={0} value={memberDisc} onChange={(e) => setMemberDisc(Math.max(0, Number(e.target.value)))} />
+                <KeypadInput value={memberDisc} onChange={setMemberDisc} title={t("member_discount")} placeholder="0" />
               </div>
             </div>
 
@@ -853,7 +854,7 @@ function PaymentPage() {
               <TabsContent value="qr" className="pt-3 space-y-2">
                 <div>
                   <Label className="text-xs">{t("amount")}</Label>
-                  <Input type="number" min={0} step="0.01" value={qrAmt} onChange={(e) => setQrAmt(Math.max(0, Number(e.target.value)))} />
+                  <KeypadInput value={qrAmt} onChange={setQrAmt} title={t("amount")} />
                 </div>
                 <div className="text-sm flex justify-between bg-muted rounded px-2 py-1.5">
                   <span>Balance remaining</span>
@@ -861,7 +862,7 @@ function PaymentPage() {
                 </div>
                 <div>
                   <Label className="text-xs">Tip (optional)</Label>
-                  <Input type="number" min={0} step="0.01" value={qrTip} onChange={(e) => setQrTip(Math.max(0, Number(e.target.value)))} placeholder="0.00" />
+                  <KeypadInput value={qrTip} onChange={setQrTip} title="Tip" placeholder="0" />
                   <p className="text-xs text-muted-foreground mt-0.5">Tips collected via QR are paid out to staff in cash.</p>
                 </div>
                 {qrTip > 0 && (
@@ -879,8 +880,7 @@ function PaymentPage() {
                 <TabsContent value="gov_qr" className="pt-3 space-y-2">
                   <div>
                     <Label className="text-xs">{govQrLabel} {t("amount")}</Label>
-                    <Input type="number" min={0} step="0.01" value={govQrAmt}
-                      onChange={(e) => setGovQrAmt(Math.max(0, Number(e.target.value)))} />
+                    <KeypadInput value={govQrAmt} onChange={setGovQrAmt} title={`${govQrLabel} ${t("amount")}`} />
                   </div>
                   <div className="text-sm flex justify-between bg-muted rounded px-2 py-1.5">
                     <span>Balance remaining</span>
@@ -898,7 +898,7 @@ function PaymentPage() {
               <TabsContent value="card" className="pt-3 space-y-2">
                 <div>
                   <Label className="text-xs">{t("amount")}</Label>
-                  <Input type="number" min={0} step="0.01" value={cardAmt} onChange={(e) => setCardAmt(Math.max(0, Number(e.target.value)))} />
+                  <KeypadInput value={cardAmt} onChange={setCardAmt} title={t("amount")} />
                 </div>
                 <div className="text-sm flex justify-between bg-muted rounded px-2 py-1.5">
                   <span>Balance remaining</span>
@@ -906,7 +906,7 @@ function PaymentPage() {
                 </div>
                 <div>
                   <Label className="text-xs">Tip (optional)</Label>
-                  <Input type="number" min={0} step="0.01" value={cardTip} onChange={(e) => setCardTip(Math.max(0, Number(e.target.value)))} placeholder="0.00" />
+                  <KeypadInput value={cardTip} onChange={setCardTip} title="Tip" placeholder="0" />
                   <p className="text-xs text-muted-foreground mt-0.5">Tips collected via card are paid out to staff in cash.</p>
                 </div>
                 {cardTip > 0 && (
@@ -1165,7 +1165,7 @@ function PaymentPage() {
           <DialogHeader><DialogTitle>{t("cash_received")}</DialogTitle></DialogHeader>
           <div>
             <Label>{t("amount")}</Label>
-            <Input type="number" value={cashAmount} onChange={(e) => setCashAmount(Number(e.target.value))} />
+            <KeypadInput value={cashAmount} onChange={setCashAmount} title={t("amount")} />
           </div>
           <div className="flex items-center justify-between pt-1">
             <Label className="text-xs text-muted-foreground">Tap a note/coin to add · − to remove one</Label>
@@ -1465,11 +1465,7 @@ function SplitBillDialog({
       {payMethod === "cash" && (
         <div className="space-y-2">
           <Label className="text-xs">{t("cash_received")}</Label>
-          <Input type="number" min={amount} step={1}
-            value={cashReceived || ""}
-            onChange={(e) => setCashReceived(Math.max(0, Number(e.target.value)))}
-            placeholder={String(Math.ceil(amount))}
-            className="text-lg font-bold text-center" />
+          <KeypadInput value={cashReceived} onChange={setCashReceived} title={t("cash_received")} placeholder={String(Math.ceil(amount))} />
           {cashReceived > 0 && (
             <div className="flex justify-between text-sm bg-muted rounded px-3 py-2">
               <span>{t("change")}</span>
@@ -1494,7 +1490,7 @@ function SplitBillDialog({
           </div>
           <div>
             <Label className="text-xs">{lang === "th" ? "ทิป (ถ้ามี)" : "Tip (optional)"}</Label>
-            <Input type="number" min={0} step={1} value={qrTip || ""} onChange={(e) => setQrTip(Math.max(0, Number(e.target.value)))} placeholder="0" />
+            <KeypadInput value={qrTip} onChange={setQrTip} title={lang === "th" ? "ทิป" : "Tip"} placeholder="0" />
           </div>
           {qrTip > 0 && (
             <div className="flex justify-between text-sm bg-muted rounded px-3 py-2">
@@ -1583,9 +1579,7 @@ function SplitBillDialog({
               </div>
               <div>
                 <Label className="text-xs">{t("amount")}</Label>
-                <Input type="number" min={0} max={remaining} step="0.01" value={amountEntry}
-                  onChange={(e) => setAmountEntry(Math.max(0, Math.min(remaining, Number(e.target.value))))}
-                  className="text-lg font-bold text-center" />
+                <KeypadInput value={amountEntry} onChange={(n) => setAmountEntry(Math.min(remaining, n))} title={t("amount")} />
               </div>
               <div className="flex justify-between text-sm bg-muted rounded px-3 py-2">
                 <span>{lang === "th" ? "คงเหลือหลังชำระ" : "Balance after this"}</span>
