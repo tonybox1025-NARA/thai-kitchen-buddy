@@ -5,8 +5,8 @@ import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CountKeypad } from "@/components/CountKeypad";
 import { Bell, Users, X, ShoppingBag, UtensilsCrossed, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { playAlertBeep } from "@/lib/audio-alert";
@@ -83,7 +83,7 @@ function PosPage() {
   const onTableClick = async (tbl: RTable) => {
     if (tbl.status === "available") {
       setOpenTable(tbl);
-      setGuests(2);
+      setGuests(0); // keypad starts empty so the tapped number lands directly
     } else {
       // Use limit(1) + data?.[0] instead of maybeSingle() so that duplicate
       // open orders (e.g. from a previous crashed session) don't return null.
@@ -306,11 +306,13 @@ function PosPage() {
           <DialogHeader><DialogTitle>{t("open_table")} — {openTable?.code}</DialogTitle></DialogHeader>
           <div>
             <Label>{t("num_guests")}</Label>
-            <Input type="number" min={1} max={20} value={guests} onChange={(e) => setGuests(Math.max(1, Number(e.target.value)))} />
+            <div className="mt-2">
+              <CountKeypad value={guests} onChange={setGuests} />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpenTable(null)}>{t("cancel")}</Button>
-            <Button onClick={startTable}>{t("start")}</Button>
+            <Button onClick={startTable} disabled={guests < 1}>{t("start")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

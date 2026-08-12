@@ -615,6 +615,9 @@ function PaymentPage() {
   };
 
   const openCash = () => { setCashCount({}); setCashAmount(remaining); setCashOpen(true); };
+  // Tap a denomination to add one; the "−" badge removes one (fixes an over-tap).
+  const addDenom = (d: number, delta: number) =>
+    setCashCount((prev) => ({ ...prev, [d]: Math.max(0, (prev[d] ?? 0) + delta) }));
   const cashTotal = Object.entries(cashCount).reduce((s, [d, c]) => s + Number(d) * (c || 0), 0);
   const change = Math.max(0, cashTotal - cashAmount);
   const submitCash = async () => {
@@ -1164,21 +1167,48 @@ function PaymentPage() {
             <Label>{t("amount")}</Label>
             <Input type="number" value={cashAmount} onChange={(e) => setCashAmount(Number(e.target.value))} />
           </div>
+          <div className="flex items-center justify-between pt-1">
+            <Label className="text-xs text-muted-foreground">Tap a note/coin to add · − to remove one</Label>
+            {cashTotal > 0 && (
+              <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setCashCount({})}>Clear</Button>
+            )}
+          </div>
           <div className="grid grid-cols-4 gap-2">
-            {DENOMS.map((d) => (
-              <div key={d}>
-                <Label className="text-xs">{d}฿</Label>
-                <Input type="number" min={0} value={cashCount[d] ?? 0} onChange={(e) => setCashCount({ ...cashCount, [d]: Math.max(0, Number(e.target.value)) })} />
-              </div>
-            ))}
+            {DENOMS.map((d) => {
+              const count = cashCount[d] ?? 0;
+              return (
+                <div key={d} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => addDenom(d, 1)}
+                    className={`w-full rounded-xl border-2 py-3 text-center transition-transform active:scale-95 ${count > 0 ? "border-primary bg-primary/10" : "border-muted hover:bg-muted/50"}`}
+                  >
+                    <div className="text-lg font-bold tabular-nums">฿{d}</div>
+                    <div className={`text-xs mt-0.5 ${count > 0 ? "text-primary font-semibold" : "text-muted-foreground"}`}>
+                      {count > 0 ? `× ${count}` : "add"}
+                    </div>
+                  </button>
+                  {count > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => addDenom(d, -1)}
+                      aria-label={`Remove one ${d} baht`}
+                      className="absolute -top-2 -right-2 h-7 w-7 rounded-full bg-destructive text-destructive-foreground grid place-content-center text-xl font-bold leading-none shadow"
+                    >−</button>
+                  )}
+                </div>
+              );
+            })}
           </div>
           <div className="text-sm space-y-1 pt-2">
             <Row label={t("cash_received")} value={thb(cashTotal)} />
-            <Row label={t("change")} value={thb(change)} />
+            <div className={`flex justify-between font-bold ${change > 0 ? "text-primary" : ""}`}>
+              <span>{t("change")}</span><span className="tabular-nums">{thb(change)}</span>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCashOpen(false)}>{t("cancel")}</Button>
-            <Button onClick={submitCash}>{t("confirm")}</Button>
+            <Button onClick={submitCash} disabled={cashTotal < cashAmount}>{t("confirm")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
