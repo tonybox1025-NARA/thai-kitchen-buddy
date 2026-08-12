@@ -268,16 +268,18 @@ function MenuImage({ src }: { src: string }) {
     <img
       src={src}
       alt=""
+      width={96}
+      height={96}
       loading="lazy"
       decoding="async"
-      className="w-full aspect-square object-cover bg-muted"
+      className="h-24 w-24 rounded-lg object-cover shrink-0 bg-muted"
       onError={() => setFailed(true)}
     />
   );
 }
 function PlaceholderImg() {
   return (
-    <div className="w-full aspect-square bg-muted grid place-items-center text-4xl select-none" aria-hidden>
+    <div className="h-24 w-24 rounded-lg bg-muted shrink-0 grid place-items-center text-3xl select-none" aria-hidden>
       🍽️
     </div>
   );
@@ -500,8 +502,8 @@ function CustomerMenu() {
         </div>
       </header>
 
-      {/* ── Menu grid — photo-forward cards so guests can browse by picture ── */}
-      <main className="max-w-2xl mx-auto px-3 py-4 grid grid-cols-2 gap-3">
+      {/* ── Menu list — compact rows with a larger thumbnail ── */}
+      <main className="max-w-2xl mx-auto px-4 py-4 pb-28 grid grid-cols-1 sm:grid-cols-2 gap-3">
         {filtered.length === 0 && (
           <p className="col-span-2 text-center text-muted-foreground py-12">{lang === "th" ? "ไม่มีเมนูในหมวดนี้" : "No items in this category"}</p>
         )}
@@ -509,13 +511,13 @@ function CustomerMenu() {
           <button
             key={m.id}
             onClick={() => openAdd(m)}
-            className="text-left bg-card border rounded-xl overflow-hidden active:scale-[0.98] transition-transform hover:border-primary/40 flex flex-col"
+            className="text-left bg-card border rounded-xl p-3 active:scale-[0.98] transition-transform flex gap-3 hover:border-primary/40"
           >
             {m.image_url ? <MenuImage src={m.image_url} /> : <PlaceholderImg />}
-            <div className="p-2.5 flex flex-1 flex-col">
-              <div className="font-medium leading-tight line-clamp-2 text-sm">{name(m)}</div>
-              <div className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5">{sub(m)}</div>
-              <div className="mt-auto pt-1.5 font-bold text-primary">฿{Number(m.price).toFixed(0)}</div>
+            <div className="min-w-0 flex-1">
+              <div className="font-medium leading-tight line-clamp-2">{name(m)}</div>
+              <div className="text-xs text-muted-foreground truncate mt-0.5">{sub(m)}</div>
+              <div className="mt-1.5 font-bold text-primary">฿{Number(m.price).toFixed(0)}</div>
             </div>
           </button>
         ))}
