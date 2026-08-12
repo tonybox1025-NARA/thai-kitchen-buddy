@@ -250,6 +250,32 @@ function buildKitchen(p) {
   return buf(...parts);
 }
 
+// ── QR slip formatter (counter printer) — native ESC/POS 2D QR code ───────────
+function qrData(text) {
+  const bytes = Buffer.from(text, "utf8");
+  const len = bytes.length + 3;
+  const pL = len & 0xff, pH = (len >> 8) & 0xff;
+  return Buffer.concat([
+    Buffer.from([GS, 0x28, 0x6b, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00]), // select model 2
+    Buffer.from([GS, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x43, 0x07]),       // module size 7
+    Buffer.from([GS, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x45, 0x31]),       // error correction M
+    Buffer.from([GS, 0x28, 0x6b, pL, pH, 0x31, 0x50, 0x30]), bytes,    // store data
+    Buffer.from([GS, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x51, 0x30]),       // print
+  ]);
+}
+function buildQrSlip(p) {
+  const parts = [
+    CMD.INIT, CMD.ALIGN_CENTER,
+    CMD.BOLD_ON, CMD.DSIZE_ON, p.restaurant || "Restaurant", lf(), CMD.DSIZE_OFF,
+    lf(),
+    `TABLE ${p.table ?? "?"}`, lf(),
+    CMD.BOLD_OFF,
+  ];
+  if (p.guests) parts.push(`${p.guests} guests`, lf());
+  parts.push(lf(), "Scan to order", lf(2), qrData(p.url || ""), lf(2), CMD.CUT);
+  return buf(...parts);
+}
+
 // ── TCP send ──────────────────────────────────────────────────────────────────
 // One attempt. Resolves only after the bytes are flushed AND the connection is
 // held briefly so the printer can consume its buffer before we send FIN — these
@@ -317,10 +343,13 @@ async function processJob(job) {
   let data;
   try {
     const kind = typeof payload === "string" ? JSON.parse(payload).kind : payload?.kind;
+    const pl = typeof payload === "string" ? JSON.parse(payload) : payload;
     if (kind === "receipt") {
-      data = buildReceipt(typeof payload === "string" ? JSON.parse(payload) : payload);
+      data = buildReceipt(pl);
+    } else if (kind === "table_qr") {
+      data = buildQrSlip(pl);
     } else if (kind === "order_ticket" || printer === "kitchen") {
-      data = buildKitchen(typeof payload === "string" ? JSON.parse(payload) : payload);
+      data = buildKitchen(pl);
     } else {
       throw new Error(`Unknown job kind: ${kind}`);
     }

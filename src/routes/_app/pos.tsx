@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { CountKeypad } from "@/components/CountKeypad";
-import { Bell, Users, X, ShoppingBag, UtensilsCrossed, Plus } from "lucide-react";
+import { Bell, Users, X, ShoppingBag, UtensilsCrossed, Plus, QrCode } from "lucide-react";
 import { toast } from "sonner";
 import { playAlertBeep } from "@/lib/audio-alert";
 
@@ -108,8 +108,9 @@ function PosPage() {
     }
   };
 
-  const startTable = async () => {
-    if (!openTable || !staff) return;
+  // Ensure a shift, open an order for the table, mark it occupied. Returns order id.
+  const openTableOrder = async (): Promise<string | null> => {
+    if (!openTable || !staff) return null;
     let { data: shift } = await supabase.from("shifts").select("id").eq("status", "open").maybeSingle();
     if (!shift) {
       const today = new Date().toISOString().slice(0, 10);
@@ -121,10 +122,37 @@ function PosPage() {
     const { data: order, error } = await supabase.from("orders").insert({
       table_id: openTable.id, guests, opened_by: staff.id, shift_id: shift?.id, source: "pos",
     }).select("id").single();
-    if (error || !order) { toast.error(error?.message || "Failed"); return; }
+    if (error || !order) { toast.error(error?.message || "Failed"); return null; }
     await supabase.from("restaurant_tables").update({ status: "occupied", guests }).eq("id", openTable.id);
+    return order.id;
+  };
+
+  const startTable = async () => {
+    const id = await openTableOrder();
+    if (!id) return;
     setOpenTable(null);
-    nav({ to: "/order/$orderId", params: { orderId: order.id } });
+    nav({ to: "/order/$orderId", params: { orderId: id } });
+  };
+
+  // Open the table + print a QR slip for the guest to scan and self-order.
+  const printTableQr = async () => {
+    const code = openTable?.code;
+    const seats = guests;
+    const id = await openTableOrder();
+    if (!id || !code) return;
+    const { data: cfg } = await supabase.from("settings").select("restaurant_name").eq("id", 1).maybeSingle();
+    await supabase.from("print_jobs").insert({
+      printer: "counter",
+      payload: {
+        kind: "table_qr",
+        table: code,
+        url: `${window.location.origin}/menu/${encodeURIComponent(code)}`,
+        restaurant: (cfg as { restaurant_name?: string } | null)?.restaurant_name ?? "Restaurant",
+        guests: seats,
+      } as never,
+    });
+    toast.success(`QR printed · ${t("table")} ${code}`);
+    setOpenTable(null);
   };
 
   const createSpecialOrder = async (source: "takeout" | "staff_meal") => {
@@ -310,8 +338,11 @@ function PosPage() {
               <CountKeypad value={guests} onChange={setGuests} />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-2">
             <Button variant="outline" onClick={() => setOpenTable(null)}>{t("cancel")}</Button>
+            <Button variant="outline" onClick={printTableQr} disabled={guests < 1}>
+              <QrCode className="h-4 w-4 mr-1" />Print QR
+            </Button>
             <Button onClick={startTable} disabled={guests < 1}>{t("start")}</Button>
           </DialogFooter>
         </DialogContent>
