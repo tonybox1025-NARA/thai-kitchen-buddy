@@ -135,7 +135,7 @@ function LivePage() {
       {salesNet > 0 && (
         <Card>
           <CardContent className="p-3 grid grid-cols-4 gap-2 text-center">
-            {[["Cash", byMethod.cash], ["QR", byMethod.qr + byMethod.gov_qr], ["Card", byMethod.card], ["Gov QR", byMethod.gov_qr]].map(([label, val]) => (
+            {[["Cash", byMethod.cash], ["QR", byMethod.qr], ["Card", byMethod.card], ["Gov QR", byMethod.gov_qr]].map(([label, val]) => (
               <div key={label as string}>
                 <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
                 <div className="text-sm font-bold tabular-nums">{thb(Number(val))}</div>
