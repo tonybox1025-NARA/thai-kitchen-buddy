@@ -71,6 +71,7 @@ const CMD = {
   UNDERLINE_OFF:[ESC, 0x2d, 0x00],
   LF:           [0x0a],
   CUT:          [GS,  0x56, 0x42, 0x05],  // partial cut with 5-line feed
+  BEEP:         [ESC, 0x42, 0x03, 0x05],  // buzzer: ESC B (3 beeps) — alerts staff on QR orders
 };
 
 function buf(...parts) {
@@ -133,6 +134,7 @@ function buildReceipt(p) {
   const now = fmtDateTime(new Date().toISOString());
   const parts = [
     CMD.INIT,
+    ...(p.source === "qr" ? [CMD.BEEP] : []),
     CMD.ALIGN_CENTER,
     CMD.BOLD_ON, CMD.DSIZE_ON,
     p.restaurant || "Restaurant", lf(),
@@ -210,6 +212,7 @@ function buildKitchen(p) {
   const orderTypeLabel = p.order_type === "added" ? "ADDED ORDER" : "NEW ORDER";
   const parts = [
     CMD.INIT,
+    ...(p.source === "qr" ? [CMD.BEEP] : []),
     CMD.ALIGN_CENTER,
     CMD.BOLD_ON, CMD.DSIZE_ON,
     `TABLE  ${p.table ?? "?"}`, lf(),
