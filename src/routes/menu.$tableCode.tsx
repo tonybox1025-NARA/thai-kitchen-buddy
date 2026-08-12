@@ -32,7 +32,7 @@ const T = {
     menu: "เมนู", table: "โต๊ะ", cart: "ตะกร้า", add: "เพิ่ม", submit: "ส่งออเดอร์",
     qty: "จำนวน", notes: "หมายเหตุ", empty: "ยังไม่มีรายการ", total: "รวม",
     confirm: "ยืนยันสั่ง", cancel: "ยกเลิก",
-    thanks: "ขอบคุณค่ะ! ออเดอร์ของคุณกำลังรอพนักงานยืนยัน",
+    thanks: "ขอบคุณค่ะ! ส่งออเดอร์ไปที่ครัวแล้ว กำลังเตรียมอาหารให้ค่ะ",
     order_more: "สั่งเพิ่ม", all: "ทั้งหมด",
     // set menu
     set_main: "อาหารหลัก", set_sides: "เครื่องเคียง", set_free_drink: "เครื่องดื่มฟรี 🥤",
@@ -46,7 +46,7 @@ const T = {
     menu: "Menu", table: "Table", cart: "Cart", add: "Add", submit: "Submit order",
     qty: "Qty", notes: "Notes", empty: "Cart is empty", total: "Total",
     confirm: "Place order", cancel: "Cancel",
-    thanks: "Thank you! Your order is waiting for staff confirmation.",
+    thanks: "Thank you! Your order has been sent to the kitchen.",
     order_more: "Order more", all: "All",
     // set menu
     set_main: "Main Dish", set_sides: "Side Dishes", set_free_drink: "Free Drink 🥤",
