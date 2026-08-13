@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Gift, MinusCircle, PlusCircle, RefreshCw, Search, UserPlus } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_app/loyalty")({ component: LoyaltyPage });
 
@@ -46,6 +47,7 @@ const cleanPhone = (value: string) => value.replace(/[^\d+]/g, "");
 const formatDate = (value: string) => new Date(value).toLocaleString();
 
 function LoyaltyPage() {
+  const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [members, setMembers] = useState<Member[]>([]);
   const [selected, setSelected] = useState<Member | null>(null);
@@ -163,7 +165,7 @@ function LoyaltyPage() {
       const current = Number((fresh as any).current_points ?? 0);
       const balanceAfter = type === "earn" ? current + points : current - points;
       if (balanceAfter < 0) {
-        toast.error("Not enough points");
+        toast.error(t("loy_not_enough"));
         return;
       }
 
@@ -182,10 +184,10 @@ function LoyaltyPage() {
       });
       if (ledgerErr) throw ledgerErr;
 
-      toast.success(type === "earn" ? `Added ${points.toLocaleString()} points` : `Redeemed ${points.toLocaleString()} points`);
+      toast.success((type === "earn" ? t("loy_added") : t("loy_redeemed")) + points.toLocaleString() + t("loy_points_suffix"));
       await refreshSelected();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Point update failed");
+      toast.error(err instanceof Error ? err.message : t("loy_update_failed"));
     } finally {
       setBusy(false);
     }
@@ -193,9 +195,9 @@ function LoyaltyPage() {
 
   const earn = async () => {
     if (!selected) return;
-    if (!settings.loyalty_enabled) { toast.error("Loyalty is disabled"); return; }
+    if (!settings.loyalty_enabled) { toast.error(t("loy_disabled")); return; }
     const amount = Number(earnAmount || 0);
-    if (amount <= 0 || earnPoints <= 0) { toast.error("Enter MERI paid amount"); return; }
+    if (amount <= 0 || earnPoints <= 0) { toast.error(t("loy_enter_amount")); return; }
     const desc = [
       `MERI earn ${thb(amount)}`,
       earnReceipt.trim() ? `Receipt: ${earnReceipt.trim()}` : null,
@@ -210,9 +212,9 @@ function LoyaltyPage() {
   const redeem = async () => {
     if (!selected) return;
     const points = Math.floor(Number(redeemPoints || 0));
-    if (points <= 0) { toast.error("Enter points to redeem"); return; }
-    if (points > Number(selected.current_points ?? 0)) { toast.error("Not enough points"); return; }
-    const ok = window.confirm(`Redeem ${points.toLocaleString()} points for ${thb(points)} discount?\n\nEnter the same discount in MERI before checkout.`);
+    if (points <= 0) { toast.error(t("loy_enter_points")); return; }
+    if (points > Number(selected.current_points ?? 0)) { toast.error(t("loy_not_enough")); return; }
+    const ok = window.confirm(`${t("loy_redeem_confirm_1")}${points.toLocaleString()}${t("loy_redeem_confirm_2")}${thb(points)}${t("loy_redeem_confirm_3")}`);
     if (!ok) return;
     const desc = [
       `MERI redeem ${thb(points)} discount`,
@@ -228,8 +230,8 @@ function LoyaltyPage() {
   const createMember = async () => {
     const fullName = newName.trim();
     const phone = cleanPhone(newPhone.trim());
-    if (!fullName) { toast.error("Customer name is required"); return; }
-    if (!phone) { toast.error("Phone is required"); return; }
+    if (!fullName) { toast.error(t("loy_name_required")); return; }
+    if (!phone) { toast.error(t("loy_phone_required")); return; }
 
     setBusy(true);
     try {
@@ -258,7 +260,7 @@ function LoyaltyPage() {
         });
       }
 
-      toast.success("Member created");
+      toast.success(t("loy_member_created"));
       setNewOpen(false);
       setNewName("");
       setNewNick("");
@@ -266,7 +268,7 @@ function LoyaltyPage() {
       setMembers((prev) => [data as Member, ...prev]);
       await selectMember(data as Member);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not create member");
+      toast.error(err instanceof Error ? err.message : t("loy_create_failed"));
     } finally {
       setBusy(false);
     }
@@ -278,15 +280,15 @@ function LoyaltyPage() {
     <div className="p-4 md:p-6 space-y-4">
       <div className="flex flex-wrap items-center gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Loyalty Desk</h1>
-          <p className="text-sm text-muted-foreground">Use while MERI handles orders and payments. Staff records point earn/redeem here.</p>
+          <h1 className="text-2xl font-bold">{t("loy_title")}</h1>
+          <p className="text-sm text-muted-foreground">{t("loy_subtitle")}</p>
         </div>
         <div className="ml-auto flex gap-2">
           <Button variant="outline" onClick={() => void searchMembers()} disabled={loading}>
-            <RefreshCw className="h-4 w-4 mr-2" />Refresh
+            <RefreshCw className="h-4 w-4 mr-2" />{t("refresh")}
           </Button>
           <Button onClick={() => setNewOpen(true)}>
-            <UserPlus className="h-4 w-4 mr-2" />New member
+            <UserPlus className="h-4 w-4 mr-2" />{t("loy_new_member")}
           </Button>
         </div>
       </div>
@@ -294,7 +296,7 @@ function LoyaltyPage() {
       <div className="grid gap-4 lg:grid-cols-[minmax(20rem,30rem)_minmax(0,1fr)]">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Find customer</CardTitle>
+            <CardTitle className="text-base">{t("loy_find_customer")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex gap-2">
@@ -302,13 +304,13 @@ function LoyaltyPage() {
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   className="pl-8"
-                  placeholder="Phone, name, nickname..."
+                  placeholder={t("loy_search_ph")}
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") void searchMembers(); }}
                 />
               </div>
-              <Button onClick={() => void searchMembers()} disabled={loading}>Search</Button>
+              <Button onClick={() => void searchMembers()} disabled={loading}>{t("search")}</Button>
             </div>
 
             <div className="space-y-2 max-h-[calc(100vh-18rem)] overflow-auto pr-1">
@@ -323,15 +325,15 @@ function LoyaltyPage() {
                     <div className="min-w-0">
                       <div className="font-semibold truncate">{member.full_name}</div>
                       <div className="text-sm text-muted-foreground truncate">
-                        {[member.nickname, member.phone, member.member_group_en].filter(Boolean).join(" · ") || "No phone"}
+                        {[member.nickname, member.phone, member.member_group_en].filter(Boolean).join(" · ") || t("loy_no_phone")}
                       </div>
                     </div>
-                    <Badge variant="secondary">{Number(member.current_points ?? 0).toLocaleString()} pts</Badge>
+                    <Badge variant="secondary">{Number(member.current_points ?? 0).toLocaleString()} {t("loy_pts")}</Badge>
                   </div>
                 </button>
               ))}
               {!loading && members.length === 0 && (
-                <p className="py-8 text-center text-sm text-muted-foreground">No members found.</p>
+                <p className="py-8 text-center text-sm text-muted-foreground">{t("mem_none")}</p>
               )}
             </div>
           </CardContent>
@@ -341,7 +343,7 @@ function LoyaltyPage() {
           {!selected ? (
             <Card>
               <CardContent className="py-14 text-center text-muted-foreground">
-                Search and select a customer to earn or redeem points.
+                {t("loy_empty_hint")}
               </CardContent>
             </Card>
           ) : (
@@ -357,7 +359,7 @@ function LoyaltyPage() {
                       <p className="text-sm text-muted-foreground">{[selected.nickname, selected.phone, selected.member_group_en].filter(Boolean).join(" · ")}</p>
                     </div>
                     <div className="ml-auto text-right">
-                      <div className="text-sm text-muted-foreground">Current points</div>
+                      <div className="text-sm text-muted-foreground">{t("mem_current_points")}</div>
                       <div className="text-3xl font-bold">{Number(selected.current_points ?? 0).toLocaleString()}</div>
                     </div>
                   </div>
@@ -367,61 +369,61 @@ function LoyaltyPage() {
               <div className="grid gap-4 xl:grid-cols-2">
                 <Card>
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-base"><PlusCircle className="h-4 w-4 text-green-600" />Earn points</CardTitle>
+                    <CardTitle className="flex items-center gap-2 text-base"><PlusCircle className="h-4 w-4 text-green-600" />{t("loy_earn_points")}</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div>
-                      <Label>MERI receipt no.</Label>
-                      <Input value={earnReceipt} onChange={(e) => setEarnReceipt(e.target.value)} placeholder="Optional" />
+                      <Label>{t("loy_meri_receipt")}</Label>
+                      <Input value={earnReceipt} onChange={(e) => setEarnReceipt(e.target.value)} placeholder={t("loy_optional")} />
                     </div>
                     <div>
-                      <Label>MERI paid amount</Label>
-                      <KeypadInput value={Number(earnAmount) || 0} onChange={(n) => setEarnAmount(String(n))} title="MERI paid amount" decimal />
+                      <Label>{t("loy_meri_paid")}</Label>
+                      <KeypadInput value={Number(earnAmount) || 0} onChange={(n) => setEarnAmount(String(n))} title={t("loy_meri_paid")} decimal />
                     </div>
                     <div className="rounded-lg border bg-muted/40 p-3">
-                      <div className="text-sm text-muted-foreground">Points to add</div>
-                      <div className="text-2xl font-bold">{earnPoints.toLocaleString()} pts</div>
+                      <div className="text-sm text-muted-foreground">{t("loy_points_to_add")}</div>
+                      <div className="text-2xl font-bold">{earnPoints.toLocaleString()} {t("loy_pts")}</div>
                     </div>
                     <div>
-                      <Label>Note</Label>
-                      <Textarea value={earnNote} onChange={(e) => setEarnNote(e.target.value)} placeholder="Optional" rows={3} />
+                      <Label>{t("loy_note")}</Label>
+                      <Textarea value={earnNote} onChange={(e) => setEarnNote(e.target.value)} placeholder={t("loy_optional")} rows={3} />
                     </div>
                     <Button className="w-full" onClick={() => void earn()} disabled={busy || earnPoints <= 0}>
-                      Add points
+                      {t("loy_add_points")}
                     </Button>
                   </CardContent>
                 </Card>
 
                 <Card>
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-base"><MinusCircle className="h-4 w-4 text-destructive" />Redeem points</CardTitle>
+                    <CardTitle className="flex items-center gap-2 text-base"><MinusCircle className="h-4 w-4 text-destructive" />{t("loy_redeem_points")}</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div>
-                      <Label>MERI receipt no.</Label>
-                      <Input value={redeemReceipt} onChange={(e) => setRedeemReceipt(e.target.value)} placeholder="Optional" />
+                      <Label>{t("loy_meri_receipt")}</Label>
+                      <Input value={redeemReceipt} onChange={(e) => setRedeemReceipt(e.target.value)} placeholder={t("loy_optional")} />
                     </div>
                     <div>
-                      <Label>Points to redeem</Label>
-                      <KeypadInput value={Number(redeemPoints) || 0} onChange={(n) => setRedeemPoints(String(Math.min(selected.current_points, n)))} title="Points to redeem" display={(n) => `${n} pts`} />
+                      <Label>{t("loy_points_to_redeem")}</Label>
+                      <KeypadInput value={Number(redeemPoints) || 0} onChange={(n) => setRedeemPoints(String(Math.min(selected.current_points, n)))} title={t("loy_points_to_redeem")} display={(n) => `${n} ${t("loy_pts")}`} />
                     </div>
                     <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
-                      <div className="text-sm text-muted-foreground">Enter this discount in MERI</div>
+                      <div className="text-sm text-muted-foreground">{t("loy_enter_discount")}</div>
                       <div className="text-2xl font-bold">{thb(redeemValue)}</div>
                     </div>
                     <div>
-                      <Label>Note</Label>
-                      <Textarea value={redeemNote} onChange={(e) => setRedeemNote(e.target.value)} placeholder="Optional" rows={3} />
+                      <Label>{t("loy_note")}</Label>
+                      <Textarea value={redeemNote} onChange={(e) => setRedeemNote(e.target.value)} placeholder={t("loy_optional")} rows={3} />
                     </div>
                     <Button className="w-full" variant="destructive" onClick={() => void redeem()} disabled={busy || redeemValue <= 0 || redeemValue > Number(selected.current_points ?? 0)}>
-                      Confirm redeem
+                      {t("loy_confirm_redeem")}
                     </Button>
                   </CardContent>
                 </Card>
               </div>
 
               <Card>
-                <CardHeader><CardTitle className="text-base">Recent point history</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="text-base">{t("loy_recent_history")}</CardTitle></CardHeader>
                 <CardContent className="space-y-2">
                   {ledger.map((row) => (
                     <div key={row.id} className="grid gap-2 rounded-lg border p-3 sm:grid-cols-[8rem_7rem_1fr_10rem] sm:items-center">
@@ -433,7 +435,7 @@ function LoyaltyPage() {
                       <div className="text-xs text-muted-foreground sm:text-right">{formatDate(row.created_at)}</div>
                     </div>
                   ))}
-                  {ledger.length === 0 && <p className="py-6 text-center text-sm text-muted-foreground">No point history yet.</p>}
+                  {ledger.length === 0 && <p className="py-6 text-center text-sm text-muted-foreground">{t("loy_no_history")}</p>}
                 </CardContent>
               </Card>
             </>
@@ -443,27 +445,27 @@ function LoyaltyPage() {
 
       <Dialog open={newOpen} onOpenChange={setNewOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>New loyalty member</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{t("loy_new_title")}</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div>
-              <Label>Name</Label>
+              <Label>{t("col_name")}</Label>
               <Input value={newName} onChange={(e) => setNewName(e.target.value)} />
             </div>
             <div>
-              <Label>Nickname</Label>
+              <Label>{t("loy_nickname")}</Label>
               <Input value={newNick} onChange={(e) => setNewNick(e.target.value)} />
             </div>
             <div>
-              <Label>Phone</Label>
+              <Label>{t("col_phone")}</Label>
               <Input value={newPhone} onChange={(e) => setNewPhone(e.target.value)} />
             </div>
             <div className="rounded-lg border bg-muted/40 p-3 text-sm">
-              Signup bonus: <span className="font-bold">{Number(settings.loyalty_signup_bonus ?? 0).toLocaleString()} pts</span>
+              {t("loy_signup_bonus_label")} <span className="font-bold">{Number(settings.loyalty_signup_bonus ?? 0).toLocaleString()} {t("loy_pts")}</span>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setNewOpen(false)}>Cancel</Button>
-            <Button onClick={() => void createMember()} disabled={busy}>Create member</Button>
+            <Button variant="outline" onClick={() => setNewOpen(false)}>{t("cancel")}</Button>
+            <Button onClick={() => void createMember()} disabled={busy}>{t("loy_create_member")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
