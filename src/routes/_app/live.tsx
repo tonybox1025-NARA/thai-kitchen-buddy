@@ -27,7 +27,7 @@ function fmtDuration(min: number): string {
 }
 
 function LivePage() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [tables, setTables] = useState<RTable[]>([]);
   const [openedAt, setOpenedAt] = useState<Map<string, string>>(new Map());
   const [byMethod, setByMethod] = useState<Record<string, number>>({ cash: 0, qr: 0, gov_qr: 0, card: 0 });
@@ -35,7 +35,7 @@ function LivePage() {
   const [billCount, setBillCount] = useState(0);
   const [hasShift, setHasShift] = useState(true);
   const [hourly, setHourly] = useState<{ hour: number; count: number; total: number }[]>([]);
-  const [topItems, setTopItems] = useState<{ name: string; qty: number }[]>([]);
+  const [topItems, setTopItems] = useState<{ name_th: string; name_en: string; qty: number }[]>([]);
   const [updatedAt, setUpdatedAt] = useState<Date>(new Date());
   const [loading, setLoading] = useState(true);
 
@@ -87,12 +87,14 @@ function LivePage() {
       const { data: oi } = orderIds.length
         ? await (supabase as any).from("order_items").select("name_th,name_en,qty,voided_at").in("order_id", orderIds).is("voided_at", null)
         : { data: [] as { name_th: string; name_en: string; qty: number }[] };
-      const iMap = new Map<string, number>();
+      const iMap = new Map<string, { name_th: string; name_en: string; qty: number }>();
       for (const it of (oi ?? []) as { name_th: string; name_en: string; qty: number }[]) {
-        const name = it.name_en || it.name_th || "Item";
-        iMap.set(name, (iMap.get(name) ?? 0) + Number(it.qty));
+        const key = it.name_en || it.name_th || "Item";
+        const cur = iMap.get(key) ?? { name_th: it.name_th, name_en: it.name_en, qty: 0 };
+        cur.qty += Number(it.qty);
+        iMap.set(key, cur);
       }
-      setTopItems([...iMap.entries()].map(([name, qty]) => ({ name, qty })).sort((a, b) => b.qty - a.qty).slice(0, 5));
+      setTopItems([...iMap.values()].sort((a, b) => b.qty - a.qty).slice(0, 5));
     } else {
       setBillCount(0); setSalesNet(0); setByMethod({ cash: 0, qr: 0, gov_qr: 0, card: 0 });
       setHourly([]); setTopItems([]);
@@ -207,9 +209,9 @@ function LivePage() {
           <Card>
             <CardContent className="p-2">
               {topItems.map((it, i) => (
-                <div key={it.name} className="flex items-center gap-3 px-1 py-1.5">
+                <div key={it.name_en || it.name_th} className="flex items-center gap-3 px-1 py-1.5">
                   <span className="grid h-6 w-6 flex-none place-items-center rounded-full bg-primary/10 text-xs font-bold text-primary">{i + 1}</span>
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium">{it.name}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">{lang === "th" ? (it.name_th || it.name_en) : (it.name_en || it.name_th)}</span>
                   <span className="flex-none text-sm font-bold tabular-nums">×{it.qty}</span>
                 </div>
               ))}
