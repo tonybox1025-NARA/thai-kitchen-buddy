@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Check, Gift, Heart, Loader2, Sparkles } from "lucide-react";
+import { walletToken } from "@/lib/wallet";
 
 export const Route = createFileRoute("/loyalty/claim/$token")({
   component: LoyaltyClaimPage,
@@ -31,17 +32,6 @@ type ClaimInfo = {
     member_group_en: string | null;
   };
 };
-
-function walletToken() {
-  const key = "lonmoh_guest_wallet_token";
-  const existing = localStorage.getItem(key);
-  if (existing) return existing;
-  const bytes = new Uint8Array(24);
-  crypto.getRandomValues(bytes);
-  const token = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
-  localStorage.setItem(key, token);
-  return token;
-}
 
 function LoyaltyClaimPage() {
   const { token } = Route.useParams();
@@ -146,9 +136,14 @@ function LoyaltyClaimPage() {
                 Collect my points
               </Button>
             ) : (
-              <div className="rounded-xl bg-green-50 border border-green-200 p-4 text-center text-green-700">
-                <Sparkles className="h-5 w-5 mx-auto mb-1" />
-                Points saved to this phone.
+              <div className="space-y-3">
+                <div className="rounded-xl bg-green-50 border border-green-200 p-4 text-center text-green-700">
+                  <Sparkles className="h-5 w-5 mx-auto mb-1" />
+                  Points saved to this phone.
+                </div>
+                <Button variant="outline" className="w-full h-12 text-base" asChild>
+                  <a href="/wallet">View my membership card</a>
+                </Button>
               </div>
             )}
 

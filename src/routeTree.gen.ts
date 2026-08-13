@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as WalletRouteImport } from './routes/wallet'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
@@ -27,12 +28,18 @@ import { Route as AppDetailGrossRouteImport } from './routes/_app/detail-gross'
 import { Route as AppDetailDiscountsRouteImport } from './routes/_app/detail-discounts'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
 import { Route as LoyaltyClaimTokenRouteImport } from './routes/loyalty/claim.$token'
+import { Route as ApiPublicWalletRouteImport } from './routes/api/public/wallet'
 import { Route as ApiPublicQrOrderRouteImport } from './routes/api/public/qr-order'
 import { Route as AppPaymentBillIdRouteImport } from './routes/_app/payment.$billId'
 import { Route as AppOrderOrderIdRouteImport } from './routes/_app/order.$orderId'
 import { Route as ApiPublicQrMenuTableCodeRouteImport } from './routes/api/public/qr-menu.$tableCode'
 import { Route as ApiPublicLoyaltyClaimTokenRouteImport } from './routes/api/public/loyalty-claim.$token'
 
+const WalletRoute = WalletRouteImport.update({
+  id: '/wallet',
+  path: '/wallet',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -122,6 +129,11 @@ const LoyaltyClaimTokenRoute = LoyaltyClaimTokenRouteImport.update({
   path: '/loyalty/claim/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicWalletRoute = ApiPublicWalletRouteImport.update({
+  id: '/api/public/wallet',
+  path: '/api/public/wallet',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicQrOrderRoute = ApiPublicQrOrderRouteImport.update({
   id: '/api/public/qr-order',
   path: '/api/public/qr-order',
@@ -153,6 +165,7 @@ const ApiPublicLoyaltyClaimTokenRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/wallet': typeof WalletRoute
   '/dashboard': typeof AppDashboardRoute
   '/detail-discounts': typeof AppDetailDiscountsRoute
   '/detail-gross': typeof AppDetailGrossRoute
@@ -170,6 +183,7 @@ export interface FileRoutesByFullPath {
   '/order/$orderId': typeof AppOrderOrderIdRoute
   '/payment/$billId': typeof AppPaymentBillIdRoute
   '/api/public/qr-order': typeof ApiPublicQrOrderRoute
+  '/api/public/wallet': typeof ApiPublicWalletRoute
   '/loyalty/claim/$token': typeof LoyaltyClaimTokenRoute
   '/api/public/loyalty-claim/$token': typeof ApiPublicLoyaltyClaimTokenRoute
   '/api/public/qr-menu/$tableCode': typeof ApiPublicQrMenuTableCodeRoute
@@ -177,6 +191,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/wallet': typeof WalletRoute
   '/dashboard': typeof AppDashboardRoute
   '/detail-discounts': typeof AppDetailDiscountsRoute
   '/detail-gross': typeof AppDetailGrossRoute
@@ -194,6 +209,7 @@ export interface FileRoutesByTo {
   '/order/$orderId': typeof AppOrderOrderIdRoute
   '/payment/$billId': typeof AppPaymentBillIdRoute
   '/api/public/qr-order': typeof ApiPublicQrOrderRoute
+  '/api/public/wallet': typeof ApiPublicWalletRoute
   '/loyalty/claim/$token': typeof LoyaltyClaimTokenRoute
   '/api/public/loyalty-claim/$token': typeof ApiPublicLoyaltyClaimTokenRoute
   '/api/public/qr-menu/$tableCode': typeof ApiPublicQrMenuTableCodeRoute
@@ -203,6 +219,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
+  '/wallet': typeof WalletRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/detail-discounts': typeof AppDetailDiscountsRoute
   '/_app/detail-gross': typeof AppDetailGrossRoute
@@ -220,6 +237,7 @@ export interface FileRoutesById {
   '/_app/order/$orderId': typeof AppOrderOrderIdRoute
   '/_app/payment/$billId': typeof AppPaymentBillIdRoute
   '/api/public/qr-order': typeof ApiPublicQrOrderRoute
+  '/api/public/wallet': typeof ApiPublicWalletRoute
   '/loyalty/claim/$token': typeof LoyaltyClaimTokenRoute
   '/api/public/loyalty-claim/$token': typeof ApiPublicLoyaltyClaimTokenRoute
   '/api/public/qr-menu/$tableCode': typeof ApiPublicQrMenuTableCodeRoute
@@ -229,6 +247,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/wallet'
     | '/dashboard'
     | '/detail-discounts'
     | '/detail-gross'
@@ -246,6 +265,7 @@ export interface FileRouteTypes {
     | '/order/$orderId'
     | '/payment/$billId'
     | '/api/public/qr-order'
+    | '/api/public/wallet'
     | '/loyalty/claim/$token'
     | '/api/public/loyalty-claim/$token'
     | '/api/public/qr-menu/$tableCode'
@@ -253,6 +273,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
+    | '/wallet'
     | '/dashboard'
     | '/detail-discounts'
     | '/detail-gross'
@@ -270,6 +291,7 @@ export interface FileRouteTypes {
     | '/order/$orderId'
     | '/payment/$billId'
     | '/api/public/qr-order'
+    | '/api/public/wallet'
     | '/loyalty/claim/$token'
     | '/api/public/loyalty-claim/$token'
     | '/api/public/qr-menu/$tableCode'
@@ -278,6 +300,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_app'
     | '/login'
+    | '/wallet'
     | '/_app/dashboard'
     | '/_app/detail-discounts'
     | '/_app/detail-gross'
@@ -295,6 +318,7 @@ export interface FileRouteTypes {
     | '/_app/order/$orderId'
     | '/_app/payment/$billId'
     | '/api/public/qr-order'
+    | '/api/public/wallet'
     | '/loyalty/claim/$token'
     | '/api/public/loyalty-claim/$token'
     | '/api/public/qr-menu/$tableCode'
@@ -304,9 +328,11 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
+  WalletRoute: typeof WalletRoute
   MenuTableCodeRoute: typeof MenuTableCodeRoute
   PrintTestKindRoute: typeof PrintTestKindRoute
   ApiPublicQrOrderRoute: typeof ApiPublicQrOrderRoute
+  ApiPublicWalletRoute: typeof ApiPublicWalletRoute
   LoyaltyClaimTokenRoute: typeof LoyaltyClaimTokenRoute
   ApiPublicLoyaltyClaimTokenRoute: typeof ApiPublicLoyaltyClaimTokenRoute
   ApiPublicQrMenuTableCodeRoute: typeof ApiPublicQrMenuTableCodeRoute
@@ -314,6 +340,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/wallet': {
+      id: '/wallet'
+      path: '/wallet'
+      fullPath: '/wallet'
+      preLoaderRoute: typeof WalletRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -440,6 +473,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoyaltyClaimTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/wallet': {
+      id: '/api/public/wallet'
+      path: '/api/public/wallet'
+      fullPath: '/api/public/wallet'
+      preLoaderRoute: typeof ApiPublicWalletRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/qr-order': {
       id: '/api/public/qr-order'
       path: '/api/public/qr-order'
@@ -518,9 +558,11 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRoute,
+  WalletRoute: WalletRoute,
   MenuTableCodeRoute: MenuTableCodeRoute,
   PrintTestKindRoute: PrintTestKindRoute,
   ApiPublicQrOrderRoute: ApiPublicQrOrderRoute,
+  ApiPublicWalletRoute: ApiPublicWalletRoute,
   LoyaltyClaimTokenRoute: LoyaltyClaimTokenRoute,
   ApiPublicLoyaltyClaimTokenRoute: ApiPublicLoyaltyClaimTokenRoute,
   ApiPublicQrMenuTableCodeRoute: ApiPublicQrMenuTableCodeRoute,
