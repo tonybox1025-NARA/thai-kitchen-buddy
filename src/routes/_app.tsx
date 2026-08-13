@@ -64,11 +64,11 @@ function AppLayout() {
   }
 
   const navItems = [
-    { to: "/live", label: "Live", icon: Activity },
+    { to: "/live", label: t("nav_live"), icon: Activity },
     { to: "/dashboard", label: t("nav_dashboard"), icon: BarChart3 },
     { to: "/pos", label: t("nav_pos"), icon: LayoutGrid },
-    { to: "/members", label: "Members", icon: Heart },
-    { to: "/loyalty", label: "Loyalty", icon: BadgePercent },
+    { to: "/members", label: t("nav_members"), icon: Heart },
+    { to: "/loyalty", label: t("nav_loyalty"), icon: BadgePercent },
     { to: "/reports", label: t("nav_reports"), icon: FileText },
     { to: "/settings", label: t("nav_settings"), icon: Settings },
   ];

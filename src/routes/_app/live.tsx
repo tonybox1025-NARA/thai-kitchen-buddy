@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { thb } from "@/lib/format";
+import { useI18n } from "@/lib/i18n";
 import { RefreshCw, Users, Utensils, Receipt } from "lucide-react";
 
 export const Route = createFileRoute("/_app/live")({ component: LivePage });
@@ -26,6 +27,7 @@ function fmtDuration(min: number): string {
 }
 
 function LivePage() {
+  const { t } = useI18n();
   const [tables, setTables] = useState<RTable[]>([]);
   const [openedAt, setOpenedAt] = useState<Map<string, string>>(new Map());
   const [byMethod, setByMethod] = useState<Record<string, number>>({ cash: 0, qr: 0, gov_qr: 0, card: 0 });
@@ -129,12 +131,12 @@ function LivePage() {
     <div className="mx-auto max-w-lg p-4 space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Live</h1>
+          <h1 className="text-2xl font-bold">{t("live_title")}</h1>
           <p className="text-xs text-muted-foreground">
-            Updated {updatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+            {t("live_updated")} {updatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
           </p>
         </div>
-        <button onClick={() => void load()} className="rounded-full border p-2 active:scale-95 transition-transform" aria-label="Refresh">
+        <button onClick={() => void load()} className="rounded-full border p-2 active:scale-95 transition-transform" aria-label={t("live_refresh")}>
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
         </button>
       </div>
@@ -143,20 +145,20 @@ function LivePage() {
       <div className="grid grid-cols-2 gap-3">
         <Card>
           <CardContent className="p-4">
-            <div className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground"><Utensils className="h-3.5 w-3.5" />Tables in use</div>
+            <div className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground"><Utensils className="h-3.5 w-3.5" />{t("live_tables_in_use")}</div>
             <div className="mt-1 text-3xl font-black tabular-nums">{occupied}<span className="text-lg font-semibold text-muted-foreground">/{total}</span></div>
             <div className="mt-2 h-2 rounded-full bg-muted overflow-hidden">
               <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${occPct}%` }} />
             </div>
-            <div className="mt-1.5 flex items-center gap-1 text-xs text-muted-foreground"><Users className="h-3.5 w-3.5" />{seatedGuests} guests seated</div>
+            <div className="mt-1.5 flex items-center gap-1 text-xs text-muted-foreground"><Users className="h-3.5 w-3.5" />{seatedGuests} {t("live_guests_seated")}</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground"><Receipt className="h-3.5 w-3.5" />Sales today</div>
+            <div className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground"><Receipt className="h-3.5 w-3.5" />{t("live_sales_today")}</div>
             <div className="mt-1 text-3xl font-black tabular-nums">{thb(salesNet)}</div>
-            <div className="mt-2 text-xs text-muted-foreground tabular-nums">{billCount} bills · avg {thb(avgBill)}</div>
-            {!hasShift && <div className="mt-1 text-xs text-amber-600">No shift open yet today</div>}
+            <div className="mt-2 text-xs text-muted-foreground tabular-nums">{billCount} {t("live_bills")} · {t("live_avg")} {thb(avgBill)}</div>
+            {!hasShift && <div className="mt-1 text-xs text-amber-600">{t("live_no_shift")}</div>}
           </CardContent>
         </Card>
       </div>
@@ -165,7 +167,7 @@ function LivePage() {
       {salesNet > 0 && (
         <Card>
           <CardContent className="p-3 grid grid-cols-4 gap-2 text-center">
-            {[["Cash", byMethod.cash], ["QR", byMethod.qr], ["Card", byMethod.card], ["Gov QR", byMethod.gov_qr]].map(([label, val]) => (
+            {[[t("pm_cash"), byMethod.cash], [t("pm_qr"), byMethod.qr], [t("pm_card"), byMethod.card], [t("pm_gov_qr"), byMethod.gov_qr]].map(([label, val]) => (
               <div key={label as string}>
                 <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
                 <div className="text-sm font-bold tabular-nums">{thb(Number(val))}</div>
@@ -178,7 +180,7 @@ function LivePage() {
       {/* Busy hours today */}
       {hourly.length > 0 && (
         <div>
-          <h2 className="mb-2 text-sm font-semibold">Busy hours</h2>
+          <h2 className="mb-2 text-sm font-semibold">{t("live_busy_hours")}</h2>
           <Card>
             <CardContent className="p-3 space-y-1.5">
               {(() => {
@@ -189,7 +191,7 @@ function LivePage() {
                     <div className="h-4 flex-1 rounded bg-muted overflow-hidden">
                       <div className="h-full rounded bg-primary/70" style={{ width: `${(h.count / max) * 100}%` }} />
                     </div>
-                    <span className="w-24 flex-none text-right tabular-nums">{h.count} bills · {thb(h.total)}</span>
+                    <span className="w-24 flex-none text-right tabular-nums">{h.count} {t("live_bills")} · {thb(h.total)}</span>
                   </div>
                 ));
               })()}
@@ -201,7 +203,7 @@ function LivePage() {
       {/* Top items today */}
       {topItems.length > 0 && (
         <div>
-          <h2 className="mb-2 text-sm font-semibold">Top items today</h2>
+          <h2 className="mb-2 text-sm font-semibold">{t("live_top_items")}</h2>
           <Card>
             <CardContent className="p-2">
               {topItems.map((it, i) => (
@@ -219,25 +221,25 @@ function LivePage() {
       {/* Active tables */}
       <div>
         <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-sm font-semibold">Active tables</h2>
-          {billRequested > 0 && <Badge variant="destructive">{billRequested} bill requested</Badge>}
+          <h2 className="text-sm font-semibold">{t("live_active_tables")}</h2>
+          {billRequested > 0 && <Badge variant="destructive">{billRequested} {t("live_bill_requested")}</Badge>}
         </div>
         {active.length === 0 ? (
-          <Card><CardContent className="p-6 text-center text-sm text-muted-foreground">All tables free right now 🍃</CardContent></Card>
+          <Card><CardContent className="p-6 text-center text-sm text-muted-foreground">{t("live_all_free")}</CardContent></Card>
         ) : (
           <div className="space-y-2">
-            {active.map((t) => (
-              <Card key={t.id} className={t.status === "bill_requested" ? "border-destructive/50" : ""}>
+            {active.map((tbl) => (
+              <Card key={tbl.id} className={tbl.status === "bill_requested" ? "border-destructive/50" : ""}>
                 <CardContent className="p-3 flex items-center gap-3">
-                  <div className="grid h-11 w-11 flex-none place-items-center rounded-lg bg-primary/10 text-lg font-bold text-primary">{t.code}</div>
+                  <div className="grid h-11 w-11 flex-none place-items-center rounded-lg bg-primary/10 text-lg font-bold text-primary">{tbl.code}</div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="font-semibold">Table {t.code}</span>
-                      {t.status === "bill_requested" && <Badge variant="destructive" className="text-[10px]">Bill requested</Badge>}
+                      <span className="font-semibold">{t("table")} {tbl.code}</span>
+                      {tbl.status === "bill_requested" && <Badge variant="destructive" className="text-[10px]">{t("bill_requested")}</Badge>}
                     </div>
                     <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
-                      <span className="flex items-center gap-1"><Users className="h-3 w-3" />{t.guests || "?"}</span>
-                      {t.minutes > 0 && <span>· {fmtDuration(t.minutes)}</span>}
+                      <span className="flex items-center gap-1"><Users className="h-3 w-3" />{tbl.guests || "?"}</span>
+                      {tbl.minutes > 0 && <span>· {fmtDuration(tbl.minutes)}</span>}
                     </div>
                   </div>
                 </CardContent>
