@@ -465,7 +465,7 @@ function PaymentPage() {
     if (error) { toast.error(error.message); return; }
     setSelectedMember(member);
     setMemberSearchOpen(false);
-    toast.success("Member selected");
+    toast.success(t("pay_member_selected"));
   };
 
   const clearMember = async () => {
@@ -484,7 +484,7 @@ function PaymentPage() {
     if (!bill) return;
     const fullName = newName.trim() || newNick.trim();
     const phone = newPhone.trim().replace(/[^\d+]/g, "") || null;
-    if (!fullName) { toast.error("Name or nickname required"); return; }
+    if (!fullName) { toast.error(t("pay_name_required")); return; }
     setCreatingMember(true);
     try {
       const { data, error } = await supabase
@@ -628,7 +628,7 @@ function PaymentPage() {
   const cashTotal = Object.entries(cashCount).reduce((s, [d, c]) => s + Number(d) * (c || 0), 0);
   const change = Math.max(0, cashTotal - cashAmount);
   const submitCash = async () => {
-    if (cashTotal < cashAmount) { toast.error("Not enough cash"); return; }
+    if (cashTotal < cashAmount) { toast.error(t("pay_not_enough_cash")); return; }
     await addPayment("cash", cashAmount, { cash_received: cashTotal, change_due: change, cash_breakdown: cashCount });
     setCashOpen(false);
   };
@@ -643,7 +643,7 @@ function PaymentPage() {
     await supabase.from("refunds").insert({ bill_id: bill.id, amount: refundAmt, reason: refundReason, refunded_by: staff?.id });
     await supabase.from("bills").update({ status: "partial_refund" }).eq("id", bill.id);
     setRefundOpen(false); setRefundAmt(0); setRefundReason("");
-    toast.success("Refunded");
+    toast.success(t("pay_refunded"));
   };
 
   const paidStatus = bill?.status === "paid" || bill?.status === "partial_refund";
@@ -692,7 +692,7 @@ function PaymentPage() {
                   <tr key={i.id} className={`border-b last:border-0 ${appliedDiscount?.type === "free_item" && appliedDiscount.free_item_id === i.id ? "text-green-600 dark:text-green-400" : ""}`}>
                     <td className="py-1.5">{pickName(i, lang)}
                       {appliedDiscount?.type === "free_item" && appliedDiscount.free_item_id === i.id && (
-                        <span className="ml-1.5 text-xs bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded-full font-medium">FREE</span>
+                        <span className="ml-1.5 text-xs bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded-full font-medium">{t("free")}</span>
                       )}
                     </td>
                     <td className="py-1.5 text-right w-12">{i.qty}</td>
@@ -739,7 +739,7 @@ function PaymentPage() {
 
         {payments.length > 0 && (
           <Card>
-            <CardHeader><CardTitle className="text-base">Payments</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">{t("pay_payments")}</CardTitle></CardHeader>
             <CardContent className="space-y-1 text-sm">
               {payments.map((p) => (
                 <div key={p.id}>
@@ -799,7 +799,7 @@ function PaymentPage() {
                   <Heart className="h-4 w-4 text-primary" />Member
                 </div>
                 {selectedMember ? (
-                  <Button variant="ghost" size="sm" className="h-7 px-2" onClick={clearMember}>Clear</Button>
+                  <Button variant="ghost" size="sm" className="h-7 px-2" onClick={clearMember}>{t("clear")}</Button>
                 ) : (
                   <Button variant="outline" size="sm" className="h-7 px-2" onClick={() => { setMemberSearchOpen(true); void searchMembers(); }}>
                     Find
@@ -863,12 +863,12 @@ function PaymentPage() {
                   <KeypadInput value={qrAmt} onChange={setQrAmt} title={t("amount")} />
                 </div>
                 <div className="text-sm flex justify-between bg-muted rounded px-2 py-1.5">
-                  <span>Balance remaining</span>
+                  <span>{t("pay_balance_remaining")}</span>
                   <span className="font-semibold">{thb(Math.max(0, remaining - qrAmt))}</span>
                 </div>
                 <div>
-                  <Label className="text-xs">Tip (optional)</Label>
-                  <KeypadInput value={qrTip} onChange={setQrTip} title="Tip" placeholder="0" />
+                  <Label className="text-xs">{t("pay_tip_optional")}</Label>
+                  <KeypadInput value={qrTip} onChange={setQrTip} title={t("pay_tip")} placeholder="0" />
                   <p className="text-xs text-muted-foreground mt-0.5">Tips collected via QR are paid out to staff in cash.</p>
                 </div>
                 {qrTip > 0 && (
@@ -889,7 +889,7 @@ function PaymentPage() {
                     <KeypadInput value={govQrAmt} onChange={setGovQrAmt} title={`${govQrLabel} ${t("amount")}`} />
                   </div>
                   <div className="text-sm flex justify-between bg-muted rounded px-2 py-1.5">
-                    <span>Balance remaining</span>
+                    <span>{t("pay_balance_remaining")}</span>
                     <span className="font-semibold">{thb(Math.max(0, remaining - govQrAmt))}</span>
                   </div>
                   <Button className="w-full" size="lg" disabled={remaining <= 0 || govQrAmt <= 0}
@@ -907,17 +907,17 @@ function PaymentPage() {
                   <KeypadInput value={cardAmt} onChange={setCardAmt} title={t("amount")} />
                 </div>
                 <div className="text-sm flex justify-between bg-muted rounded px-2 py-1.5">
-                  <span>Balance remaining</span>
+                  <span>{t("pay_balance_remaining")}</span>
                   <span className="font-semibold">{thb(Math.max(0, remaining - cardAmt))}</span>
                 </div>
                 <div>
-                  <Label className="text-xs">Tip (optional)</Label>
-                  <KeypadInput value={cardTip} onChange={setCardTip} title="Tip" placeholder="0" />
+                  <Label className="text-xs">{t("pay_tip_optional")}</Label>
+                  <KeypadInput value={cardTip} onChange={setCardTip} title={t("pay_tip")} placeholder="0" />
                   <p className="text-xs text-muted-foreground mt-0.5">Tips collected via card are paid out to staff in cash.</p>
                 </div>
                 {cardTip > 0 && (
                   <div className="text-sm flex justify-between bg-muted rounded px-2 py-1.5">
-                    <span>Total card charge</span>
+                    <span>{t("pay_total_card")}</span>
                     <span className="font-semibold">{thb(cardAmt + cardTip)}</span>
                   </div>
                 )}
@@ -1080,15 +1080,15 @@ function PaymentPage() {
             <div className="space-y-3">
               <div>
                 <Label className="text-xs">Name *</Label>
-                <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Customer name" />
+                <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={t("pay_customer_name")} />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <Label className="text-xs">Nickname</Label>
+                  <Label className="text-xs">{t("loy_nickname")}</Label>
                   <Input value={newNick} onChange={(e) => setNewNick(e.target.value)} />
                 </div>
                 <div>
-                  <Label className="text-xs">Phone</Label>
+                  <Label className="text-xs">{t("col_phone")}</Label>
                   <Input value={newPhone} onChange={(e) => setNewPhone(e.target.value)} placeholder="08x-xxx-xxxx" />
                 </div>
               </div>
@@ -1096,7 +1096,7 @@ function PaymentPage() {
                 <p className="text-xs text-muted-foreground">New member gets a {signupBonus.toLocaleString()}-point signup bonus.</p>
               )}
               <DialogFooter>
-                <Button variant="outline" onClick={resetNewMember} disabled={creatingMember}>Back</Button>
+                <Button variant="outline" onClick={resetNewMember} disabled={creatingMember}>{t("back")}</Button>
                 <Button onClick={createMember} disabled={creatingMember || (!newName.trim() && !newNick.trim())}>
                   {creatingMember ? "Creating…" : "Create & select"}
                 </Button>
@@ -1109,13 +1109,13 @@ function PaymentPage() {
                   <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
                     className="pl-8"
-                    placeholder="Search name, nickname, phone..."
+                    placeholder={t("pay_search_ph")}
                     value={memberQuery}
                     onChange={(e) => setMemberQuery(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") void searchMembers(); }}
                   />
                 </div>
-                <Button onClick={searchMembers}>Search</Button>
+                <Button onClick={searchMembers}>{t("search")}</Button>
               </div>
               <div className="max-h-80 overflow-y-auto space-y-2">
                 {memberResults.map((m) => (
@@ -1171,7 +1171,7 @@ function PaymentPage() {
           <div className="flex items-center justify-between pt-1">
             <Label className="text-xs text-muted-foreground">Tap a note/coin to add · − to remove one</Label>
             {cashTotal > 0 && (
-              <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setCashCount({})}>Clear</Button>
+              <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setCashCount({})}>{t("clear")}</Button>
             )}
           </div>
           <div className="grid grid-cols-4 gap-2">
@@ -1254,7 +1254,7 @@ function PaymentPage() {
       <Dialog open={corrOpen} onOpenChange={setCorrOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><PencilLine className="h-4 w-4" />Edit Payment Type</DialogTitle>
+            <DialogTitle className="flex items-center gap-2"><PencilLine className="h-4 w-4" />{t("pay_edit_type")}</DialogTitle>
           </DialogHeader>
           <p className="text-xs text-muted-foreground">Admin / Manager only · logged for audit</p>
           <div className="space-y-3 pt-1">
@@ -1267,10 +1267,10 @@ function PaymentPage() {
                   <Select value={next} onValueChange={(v) => setCorrChanges({ ...corrChanges, [p.id]: v as PaymentMethod })}>
                     <SelectTrigger className="flex-1 h-8"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="cash">{t("pm_cash")}</SelectItem>
                       <SelectItem value="qr">QR Transfer</SelectItem>
                       <SelectItem value="gov_qr">Government QR {govQrLabel}</SelectItem>
-                      <SelectItem value="card">Credit card</SelectItem>
+                      <SelectItem value="card">{t("credit_card")}</SelectItem>
                     </SelectContent>
                   </Select>
                   {changed && <span className="text-xs text-amber-600 shrink-0">{p.method} → {next}</span>}
@@ -1279,7 +1279,7 @@ function PaymentPage() {
             })}
           </div>
           <div>
-            <Label className="text-xs">Reason (optional)</Label>
+            <Label className="text-xs">{t("pay_reason_optional")}</Label>
             <Textarea value={corrReason} onChange={(e) => setCorrReason(e.target.value)}
               placeholder="e.g. Customer paid cash, entered QR by mistake" className="text-sm" rows={2} />
           </div>
@@ -1317,13 +1317,13 @@ function PaymentPage() {
               {memberDisc > 0 && <div className="flex justify-between"><span>{t("member_discount")}</span><span>- {thb(memberDisc)}</span></div>}
             {serviceFeeAmount > 0 && <div className="flex justify-between"><span>Service {settingsServiceFeeRate}%</span><span>{thb(serviceFeeAmount)}</span></div>}
             {settingsVatEnabled && settingsVatMode === "exclusive" && <div className="flex justify-between"><span>VAT {bill?.vat_rate}%</span><span>{thb(vatAmount)}</span></div>}
-            {roundingAdjustment !== 0 && <div className="flex justify-between"><span>Rounding</span><span>{roundingAdjustment > 0 ? "+" : ""}{thb(roundingAdjustment)}</span></div>}
+            {roundingAdjustment !== 0 && <div className="flex justify-between"><span>{t("set_rounding")}</span><span>{roundingAdjustment > 0 ? "+" : ""}{thb(roundingAdjustment)}</span></div>}
           </div>
           <div className="border-t w-full max-w-xs pt-6 text-center mt-4">
             <p className="text-muted-foreground text-lg">{t("total")}</p>
             <p className="text-8xl font-black mt-2 tabular-nums">{thb(total)}</p>
           </div>
-          <p className="text-sm text-muted-foreground mt-16 animate-pulse">Tap anywhere to close</p>
+          <p className="text-sm text-muted-foreground mt-16 animate-pulse">{t("tap_to_close")}</p>
         </div>
       )}
     </div>

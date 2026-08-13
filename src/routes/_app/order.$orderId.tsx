@@ -338,7 +338,7 @@ function OrderPage() {
       amount: voidItem.qty * voidItem.unit_price,
     });
     setVoidItem(null); setVoidReason(""); setVoidPreset("");
-    toast.success("Voided");
+    toast.success(t("voided"));
   };
 
   const goToPayment = async () => {
@@ -425,7 +425,7 @@ function OrderPage() {
       status: "cancelled", closed_at: now,
     }).eq("id", orderId);
 
-    if (cancelErr) { toast.error("Failed to close table"); return; }
+    if (cancelErr) { toast.error(t("ord_close_failed")); return; }
 
     // Step 2 — extended fields added by migration 20260521000002
     // Silently ignored if migration hasn't run yet; will work once columns exist
@@ -476,7 +476,7 @@ function OrderPage() {
       vatAmount: settingsVatMode === "exclusive" ? billVatAmount : 0,
       vat_mode: settingsVatMode, payments: [], language: lang,
     });
-    toast.success("Bill sent to printer");
+    toast.success(t("ord_bill_sent"));
   };
 
   return (
@@ -535,7 +535,7 @@ function OrderPage() {
 
         {/* Category filter bar — sticks to top when scrolling */}
         <div className="sticky top-0 z-10 bg-background border-b px-4 py-2 flex gap-2 flex-wrap">
-          <Button variant={activeCat === "all" ? "default" : "outline"} size="sm" onClick={() => setActiveCat("all")}>All</Button>
+          <Button variant={activeCat === "all" ? "default" : "outline"} size="sm" onClick={() => setActiveCat("all")}>{t("ord_all")}</Button>
           {cats.map((c) => (
             <Button key={c.id} variant={activeCat === c.id ? "default" : "outline"} size="sm" onClick={() => setActiveCat(c.id)}>
               {pickName(c, lang)}
@@ -587,7 +587,7 @@ function OrderPage() {
                           <div key={idx}>🥗 {s.th}{lang === "en" ? ` (${s.en})` : ""}</div>
                         ))}
                         {sc.drink && (
-                          <div>🥤 {sc.drink.th}{lang === "en" ? ` (${sc.drink.en})` : ""} <span className="text-amber-600 font-semibold">FREE</span></div>
+                          <div>🥤 {sc.drink.th}{lang === "en" ? ` (${sc.drink.en})` : ""} <span className="text-amber-600 font-semibold">{t("free")}</span></div>
                         )}
                         <div>🍚 {sc.rice === "rice" ? (lang === "th" ? "ข้าวสวย" : "Steamed Rice") : (lang === "th" ? "โจ๊ก" : "Porridge")}</div>
                       </div>
@@ -980,7 +980,7 @@ function OrderPage() {
             <p className="text-muted-foreground text-lg">{t("total")}</p>
             <p className="text-8xl font-black mt-2 tabular-nums">{thb(billTotal)}</p>
           </div>
-          <p className="text-sm text-muted-foreground mt-16 animate-pulse">Tap anywhere to close</p>
+          <p className="text-sm text-muted-foreground mt-16 animate-pulse">{t("tap_to_close")}</p>
         </div>
       )}
 
