@@ -270,7 +270,7 @@ function Reports() {
       setXCashCount({});
       setXDlg(true);
     } catch {
-      toast.error("Failed to load report");
+      toast.error(t("rep_load_failed"));
     } finally {
       setXLoading(false);
     }
@@ -298,7 +298,7 @@ function Reports() {
       cash_count: cashCount, totals: { ...report, cashTotal, expected, overShort },
     }).eq("id", shift.id);
     setZDlg(false); setShift(null); setReport(null);
-    toast.success("Z report saved · next sale will start a new shift");
+    toast.success(t("rep_z_saved"));
   };
 
   const openAdj = async () => {
@@ -309,7 +309,7 @@ function Reports() {
       const { data: bills } = await supabase
         .from("bills").select("id,total,paid_at,order_id")
         .eq("shift_id", shift.id).eq("status", "paid").order("paid_at");
-      if (!bills?.length) { toast.error("No paid bills this shift"); return; }
+      if (!bills?.length) { toast.error(t("rep_no_bills")); return; }
 
       const billIds = bills.map((b) => b.id);
       const orderIds = bills.map((b) => b.order_id).filter(Boolean) as string[];
@@ -347,7 +347,7 @@ function Reports() {
       setAdjChanges({});
       setAdjDlg(true);
     } catch {
-      toast.error("Failed to load payments");
+      toast.error(t("rep_load_pay_failed"));
     } finally {
       setAdjLoading(false);
     }
@@ -390,11 +390,11 @@ function Reports() {
 
       <Tabs defaultValue="shift">
         <TabsList>
-          <TabsTrigger value="shift">Shift Reports</TabsTrigger>
-          <TabsTrigger value="history">Bill History</TabsTrigger>
+          <TabsTrigger value="shift">{t("rep_shift_reports")}</TabsTrigger>
+          <TabsTrigger value="history">{t("rep_bill_history")}</TabsTrigger>
           <TabsTrigger value="item_sales">{t("item_sales")}</TabsTrigger>
           {(staff?.role === "admin" || staff?.role === "manager") && (
-            <TabsTrigger value="cancelled">Cancelled Orders</TabsTrigger>
+            <TabsTrigger value="cancelled">{t("rep_cancelled")}</TabsTrigger>
           )}
         </TabsList>
 
@@ -524,10 +524,10 @@ function Reports() {
                   <Select value={next} onValueChange={(v) => setAdjChanges({ ...adjChanges, [p.payment_id]: v as "cash" | "qr" | "card" | "gov_qr" })}>
                     <SelectTrigger className="flex-1 h-8 text-xs"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="cash">{t("pm_cash")}</SelectItem>
                       <SelectItem value="qr">QR Transfer</SelectItem>
                       <SelectItem value="gov_qr">Government QR</SelectItem>
-                      <SelectItem value="card">Credit card</SelectItem>
+                      <SelectItem value="card">{t("credit_card")}</SelectItem>
                     </SelectContent>
                   </Select>
                   {changed && (
@@ -541,7 +541,7 @@ function Reports() {
           {/* Before / After summary */}
           {adjSummary && (
             <div className="rounded-lg border bg-muted/40 p-3 text-sm space-y-2">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Before / After</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("rep_before_after")}</p>
               <div className="grid grid-cols-3 gap-2 text-center">
                 {(["cash", "qr", "gov_qr", "card"] as const).map((m) => {
                   const bef = adjSummary.before[m] ?? 0;
@@ -1078,9 +1078,9 @@ ${filtered.map((r, i) => {
                       <th className="text-right px-3 py-3 text-xs uppercase tracking-wide text-muted-foreground">{t("qty_sold")}</th>
                       <th className="text-right px-3 py-3 text-xs uppercase tracking-wide text-muted-foreground hidden sm:table-cell">{t("unit_price")}</th>
                       <th className="text-right px-3 py-3 text-xs uppercase tracking-wide text-muted-foreground">{t("revenue")}</th>
-                      <th className="text-right px-3 py-3 text-xs uppercase tracking-wide text-muted-foreground hidden lg:table-cell">Unit Cost</th>
-                      <th className="text-right px-3 py-3 text-xs uppercase tracking-wide text-muted-foreground hidden lg:table-cell">Total Cost</th>
-                      <th className="text-right px-3 py-3 text-xs uppercase tracking-wide text-muted-foreground hidden lg:table-cell">Profit</th>
+                      <th className="text-right px-3 py-3 text-xs uppercase tracking-wide text-muted-foreground hidden lg:table-cell">{t("rep_unit_cost")}</th>
+                      <th className="text-right px-3 py-3 text-xs uppercase tracking-wide text-muted-foreground hidden lg:table-cell">{t("rep_total_cost")}</th>
+                      <th className="text-right px-3 py-3 text-xs uppercase tracking-wide text-muted-foreground hidden lg:table-cell">{t("rep_profit")}</th>
                       <th className="text-right px-3 py-3 text-xs uppercase tracking-wide text-muted-foreground hidden lg:table-cell">Margin %</th>
                     </tr>
                   </thead>
@@ -1390,6 +1390,7 @@ function CancelledOrderCard({ order: o, expanded, onToggle, showDate }: {
   onToggle: () => void;
   showDate?: boolean;
 }) {
+  const { t } = useI18n();
   return (
     <Card className="hover:bg-muted/20 transition-colors cursor-pointer" onClick={onToggle}>
       <CardContent className="py-3 space-y-2">
@@ -1419,7 +1420,7 @@ function CancelledOrderCard({ order: o, expanded, onToggle, showDate }: {
               </div>
             ))}
             <div className="flex justify-between font-semibold text-foreground border-t pt-1 mt-1">
-              <span>Total</span>
+              <span>{t("lbl_total")}</span>
               <span className="tabular-nums text-destructive">{thb(o.total)}</span>
             </div>
             <div className="text-xs mt-1">
