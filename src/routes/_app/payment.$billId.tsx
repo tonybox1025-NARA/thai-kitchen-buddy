@@ -132,6 +132,8 @@ function PaymentPage() {
   const [newPhone, setNewPhone] = useState("");
   const [creatingMember, setCreatingMember] = useState(false);
   const [receiptLogoUrl, setReceiptLogoUrl] = useState<string | null>(null);
+  const [receiptAddress, setReceiptAddress] = useState<string | null>(null);
+  const [receiptPromo, setReceiptPromo] = useState<string | null>(null);
   const [selectedMember, setSelectedMember] = useState<MemberLookup | null>(null);
   const [memberSearchOpen, setMemberSearchOpen] = useState(false);
   const [memberQuery, setMemberQuery] = useState("");
@@ -178,7 +180,7 @@ function PaymentPage() {
     const [{ data: b }, { data: ps }, { data: s }] = await Promise.all([
       supabase.from("bills").select("*").eq("id", billId).single(),
       supabase.from("payments").select("*").eq("bill_id", billId),
-      supabase.from("settings").select("restaurant_name, receipt_logo_url, vat_enabled, vat_mode, vat_rate, service_fee_rate, rounding_mode, max_discount_percent, loyalty_enabled, loyalty_points_per_baht, loyalty_signup_bonus, gov_qr_enabled, gov_qr_label, gov_qr_customer_percent, gov_qr_government_percent").eq("id", 1).single(),
+      supabase.from("settings").select("restaurant_name, address, receipt_promo, receipt_logo_url, vat_enabled, vat_mode, vat_rate, service_fee_rate, rounding_mode, max_discount_percent, loyalty_enabled, loyalty_points_per_baht, loyalty_signup_bonus, gov_qr_enabled, gov_qr_label, gov_qr_customer_percent, gov_qr_government_percent").eq("id", 1).single(),
     ]);
     if (b) {
       setBill(b as unknown as Bill);
@@ -228,6 +230,8 @@ function PaymentPage() {
       const row = s as any;
       setRestName(row.restaurant_name);
       setReceiptLogoUrl(row.receipt_logo_url ?? null);
+      setReceiptAddress(row.address ?? null);
+      setReceiptPromo(row.receipt_promo ?? null);
       setSettingsVatEnabled(row.vat_enabled ?? true);
       setSettingsVatMode((row.vat_mode as "inclusive" | "exclusive") || "inclusive");
       setSettingsServiceFeeRate(Number(row.service_fee_rate ?? 0));
@@ -600,6 +604,8 @@ function PaymentPage() {
     await printCounter({
       kind: "receipt", bill_id: bill.id, restaurant: restName, table: tableCode,
       logoUrl: receiptLogoUrl || undefined,
+      address: receiptAddress || undefined,
+      promo: receiptPromo || undefined,
       items, total, vatAmount: settingsVatEnabled && settingsVatMode === "exclusive" ? vatAmount : 0,
       vat_mode: settingsVatMode, payments: [...payments], language: lang,
       discountAmount: appliedDiscount?.amount ?? 0,

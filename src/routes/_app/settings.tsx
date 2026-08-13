@@ -60,6 +60,8 @@ type MenuIngredientRow = {
 type RoundingMode = "none" | "nearest_whole" | "up_whole" | "down_whole";
 type Settings = {
   restaurant_name: string;
+  address: string | null;
+  receipt_promo: string | null;
   receipt_logo_url: string | null;
   vat_enabled: boolean;
   vat_mode: "inclusive" | "exclusive";
@@ -271,7 +273,9 @@ function GeneralTab() {
         <Card>
           <CardHeader><CardTitle className="text-base">Store information</CardTitle></CardHeader>
           <CardContent className="space-y-4">
-            <div><Label>{t("restaurant_name")}</Label><Input value={s.restaurant_name} onChange={(e) => setS({ ...s, restaurant_name: e.target.value })} /></div>
+            <div><Label>{t("restaurant_name")}</Label><Input value={s.restaurant_name} onChange={(e) => setS({ ...s, restaurant_name: e.target.value })} /><p className="text-xs text-muted-foreground mt-1">Prints at the top of the receipt. You can use the Thai name.</p></div>
+            <div><Label>Address</Label><Input value={s.address ?? ""} onChange={(e) => setS({ ...s, address: e.target.value })} placeholder="224/1 บางนา บางนาเหนือ กรุงเทพมหานคร 10260" /></div>
+            <div><Label>Receipt promo line</Label><Input value={s.receipt_promo ?? ""} onChange={(e) => setS({ ...s, receipt_promo: e.target.value })} placeholder="สมาชิกรับฟรี! ครบ 500 …" /><p className="text-xs text-muted-foreground mt-1">Optional. Prints under the shop name on the customer receipt.</p></div>
             <div>
               <Label>{t("starting_cash")}</Label>
               <KeypadInput value={s.starting_cash ?? 0} onChange={(n) => setS({ ...s, starting_cash: n })} title={t("starting_cash")} />
