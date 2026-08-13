@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { RefreshCw, Search, Upload } from "lucide-react";
 import { segmentFor, type Segment } from "@/lib/rfm";
+import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_app/members")({ component: MembersPage });
 
@@ -237,6 +238,7 @@ function enrichMember(m: Member, act: MemberActivity | undefined): Member {
 }
 
 function MembersPage() {
+  const { t } = useI18n();
   const [members, setMembers] = useState<Member[]>([]);
   const [settings, setSettings] = useState<LoyaltySettings>({
     loyalty_enabled: true,
@@ -302,7 +304,7 @@ function MembersPage() {
   const saveSettings = async () => {
     const { error } = await supabase.from("settings").update(settings).eq("id", 1);
     if (error) { toast.error(error.message); return; }
-    toast.success("Loyalty settings saved");
+    toast.success(t("mem_toast_saved"));
   };
 
   const onFile = async (file: File | null) => {
@@ -311,7 +313,7 @@ function MembersPage() {
     const rows = mapDotdashRows(text);
     setImportRows(rows);
     setConfirmReplace(false);
-    toast.success(`Ready to import ${rows.length} customers`);
+    toast.success(`${t("mem_toast_ready_1")}${rows.length}${t("mem_toast_ready_2")}`);
   };
 
   const doImport = async () => {
@@ -319,12 +321,12 @@ function MembersPage() {
     setImporting(true);
     try {
       await insertInBatches(importRows);
-      toast.success(`Imported ${importRows.length} members`);
+      toast.success(`${t("mem_toast_imported_1")}${importRows.length}${t("mem_toast_imported_2")}`);
       setImportOpen(false);
       setImportRows([]);
       await load();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Import failed");
+      toast.error(err instanceof Error ? err.message : t("mem_toast_import_failed"));
     } finally {
       setImporting(false);
     }
@@ -341,13 +343,13 @@ function MembersPage() {
       const { error: delErr } = await supabase.from("members").delete().eq("imported_from", "dotdash");
       if (delErr) throw delErr;
       await insertInBatches(importRows);
-      toast.success(`Replaced DotDash members · imported ${importRows.length}`);
+      toast.success(`${t("mem_toast_replaced_1")}${importRows.length}`);
       setImportOpen(false);
       setImportRows([]);
       setConfirmReplace(false);
       await load();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Replace failed");
+      toast.error(err instanceof Error ? err.message : t("mem_toast_replace_failed"));
     } finally {
       setImporting(false);
     }
@@ -375,29 +377,29 @@ function MembersPage() {
     <div className="p-4 md:p-6 space-y-4">
       <div className="flex flex-wrap items-center gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Members</h1>
-          <p className="text-sm text-muted-foreground">LONMOH Loyalty, Dotdash import, points, and customer history.</p>
+          <h1 className="text-2xl font-bold">{t("nav_members")}</h1>
+          <p className="text-sm text-muted-foreground">{t("mem_subtitle")}</p>
         </div>
         <div className="ml-auto flex gap-2">
           <Button variant="outline" onClick={() => void load()} disabled={loading}>
-            <RefreshCw className="h-4 w-4 mr-2" />Refresh
+            <RefreshCw className="h-4 w-4 mr-2" />{t("refresh")}
           </Button>
           <Button onClick={() => setImportOpen(true)}>
-            <Upload className="h-4 w-4 mr-2" />Import Dotdash CSV
+            <Upload className="h-4 w-4 mr-2" />{t("mem_import_csv")}
           </Button>
         </div>
       </div>
 
       <div className="grid gap-3 md:grid-cols-4">
-        <Card><CardHeader><CardTitle className="text-sm">Members</CardTitle></CardHeader><CardContent className="text-2xl font-bold">{stats.count}</CardContent></Card>
-        <Card><CardHeader><CardTitle className="text-sm">With phone</CardTitle></CardHeader><CardContent className="text-2xl font-bold">{stats.withPhone}</CardContent></Card>
-        <Card><CardHeader><CardTitle className="text-sm">Available points</CardTitle></CardHeader><CardContent className="text-2xl font-bold">{stats.points.toLocaleString()}</CardContent></Card>
-        <Card><CardHeader><CardTitle className="text-sm">Total spend</CardTitle></CardHeader><CardContent className="text-2xl font-bold">{thb(stats.spend)}</CardContent></Card>
+        <Card><CardHeader><CardTitle className="text-sm">{t("nav_members")}</CardTitle></CardHeader><CardContent className="text-2xl font-bold">{stats.count}</CardContent></Card>
+        <Card><CardHeader><CardTitle className="text-sm">{t("mem_with_phone")}</CardTitle></CardHeader><CardContent className="text-2xl font-bold">{stats.withPhone}</CardContent></Card>
+        <Card><CardHeader><CardTitle className="text-sm">{t("mem_available_points")}</CardTitle></CardHeader><CardContent className="text-2xl font-bold">{stats.points.toLocaleString()}</CardContent></Card>
+        <Card><CardHeader><CardTitle className="text-sm">{t("mem_total_spend")}</CardTitle></CardHeader><CardContent className="text-2xl font-bold">{thb(stats.spend)}</CardContent></Card>
       </div>
 
       {segmentCounts.length > 0 && (
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Segments (RFM)</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">{t("mem_segments")}</CardTitle></CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-2">
               {segmentCounts.map(([seg, n]) => (
@@ -411,7 +413,7 @@ function MembersPage() {
               ))}
               {segmentFilter && (
                 <button onClick={() => setSegmentFilter(null)} className="rounded-full border px-3 py-1 text-xs text-muted-foreground hover:bg-muted/60">
-                  Clear filter ✕
+                  {t("mem_clear_filter")}
                 </button>
               )}
             </div>
@@ -423,10 +425,10 @@ function MembersPage() {
         <Card>
           <CardHeader>
             <div className="flex flex-wrap items-center gap-3">
-              <CardTitle className="text-base">Customer list</CardTitle>
+              <CardTitle className="text-base">{t("mem_customer_list")}</CardTitle>
               <div className="relative ml-auto w-full sm:w-80">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input className="pl-8" placeholder="Search name, phone, group..." value={query} onChange={(e) => setQuery(e.target.value)} />
+                <Input className="pl-8" placeholder={t("mem_search_ph")} value={query} onChange={(e) => setQuery(e.target.value)} />
               </div>
             </div>
           </CardHeader>
@@ -434,13 +436,13 @@ function MembersPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Phone</TableHead>
-                  <TableHead>Group</TableHead>
-                  <TableHead className="text-right">Points</TableHead>
-                  <TableHead className="text-right">Visits</TableHead>
-                  <TableHead className="text-right">Spend</TableHead>
-                  <TableHead>Last visit</TableHead>
+                  <TableHead>{t("col_name")}</TableHead>
+                  <TableHead>{t("col_phone")}</TableHead>
+                  <TableHead>{t("col_group")}</TableHead>
+                  <TableHead className="text-right">{t("col_points")}</TableHead>
+                  <TableHead className="text-right">{t("col_visits")}</TableHead>
+                  <TableHead className="text-right">{t("col_spend")}</TableHead>
+                  <TableHead>{t("col_last_visit")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -465,32 +467,32 @@ function MembersPage() {
                 ))}
               </TableBody>
             </Table>
-            {filtered.length > 200 && <p className="mt-3 text-xs text-muted-foreground">Showing first 200 matching members. Use search to narrow the list.</p>}
-            {filtered.length === 0 && <p className="py-8 text-center text-sm text-muted-foreground">No members found.</p>}
+            {filtered.length > 200 && <p className="mt-3 text-xs text-muted-foreground">{t("mem_showing_200")}</p>}
+            {filtered.length === 0 && <p className="py-8 text-center text-sm text-muted-foreground">{t("mem_none")}</p>}
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader><CardTitle className="text-base">Loyalty settings</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">{t("mem_loyalty_settings")}</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between rounded-lg border p-3">
-              <Label>Use loyalty</Label>
+              <Label>{t("mem_use_loyalty")}</Label>
               <Switch checked={settings.loyalty_enabled} onCheckedChange={(v) => setSettings({ ...settings, loyalty_enabled: v })} />
             </div>
             <div>
-              <Label>Points per baht</Label>
-              <KeypadInput value={settings.loyalty_points_per_baht} onChange={(n) => setSettings({ ...settings, loyalty_points_per_baht: n })} title="Points per baht" display={(n) => String(n)} decimal />
-              <p className="mt-1 text-xs text-muted-foreground">Dotdash screenshot shows 1 baht = 1 point.</p>
+              <Label>{t("mem_points_per_baht")}</Label>
+              <KeypadInput value={settings.loyalty_points_per_baht} onChange={(n) => setSettings({ ...settings, loyalty_points_per_baht: n })} title={t("mem_points_per_baht")} display={(n) => String(n)} decimal />
+              <p className="mt-1 text-xs text-muted-foreground">{t("mem_ppb_help")}</p>
             </div>
             <div>
-              <Label>Sign-up bonus points</Label>
-              <KeypadInput value={settings.loyalty_signup_bonus} onChange={(n) => setSettings({ ...settings, loyalty_signup_bonus: n })} title="Sign-up bonus points" display={(n) => String(n)} />
+              <Label>{t("mem_signup_bonus")}</Label>
+              <KeypadInput value={settings.loyalty_signup_bonus} onChange={(n) => setSettings({ ...settings, loyalty_signup_bonus: n })} title={t("mem_signup_bonus")} display={(n) => String(n)} />
             </div>
             <div>
-              <Label>Points expire after months</Label>
-              <KeypadInput value={settings.loyalty_points_expire_months} onChange={(n) => setSettings({ ...settings, loyalty_points_expire_months: n })} title="Expire after months" display={(n) => String(n)} />
+              <Label>{t("mem_expire_months")}</Label>
+              <KeypadInput value={settings.loyalty_points_expire_months} onChange={(n) => setSettings({ ...settings, loyalty_points_expire_months: n })} title={t("mem_expire_months")} display={(n) => String(n)} />
             </div>
-            <Button className="w-full" onClick={saveSettings}>Save loyalty settings</Button>
+            <Button className="w-full" onClick={saveSettings}>{t("mem_save_settings")}</Button>
           </CardContent>
         </Card>
       </div>
@@ -503,7 +505,7 @@ function MembersPage() {
       }}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>
-            <DialogTitle>{selectedMember?.full_name ?? "Member detail"}</DialogTitle>
+            <DialogTitle>{selectedMember?.full_name ?? t("mem_detail")}</DialogTitle>
           </DialogHeader>
           {selectedMember && (
             <div className="space-y-4">
@@ -515,29 +517,29 @@ function MembersPage() {
                   <Badge variant="outline" className="font-normal">MERI: {selectedMember.member_group_en}</Badge>
                 )}
                 {selectedMember.member_level && selectedMember.member_level !== "-" && <Badge>{selectedMember.member_level}</Badge>}
-                {selectedMember.guest_token && <Badge variant="outline">Guest wallet linked</Badge>}
+                {selectedMember.guest_token && <Badge variant="outline">{t("mem_guest_wallet")}</Badge>}
               </div>
               <div className="grid gap-3 sm:grid-cols-4">
-                <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">Current points</div><div className="text-xl font-bold">{Number(selectedMember.current_points ?? 0).toLocaleString()}</div></CardContent></Card>
-                <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">Visits</div><div className="text-xl font-bold">{selectedMember.visits}</div>{selectedMember.pos_visits > 0 && <div className="text-[10px] text-muted-foreground mt-0.5">{selectedMember.pos_visits} in POS · {selectedMember.legacy_visit_count} imported</div>}</CardContent></Card>
-                <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">Total spend</div><div className="text-xl font-bold">{thb(selectedMember.spend)}</div>{selectedMember.pos_spend > 0 && <div className="text-[10px] text-muted-foreground mt-0.5">{thb(selectedMember.pos_spend)} in POS</div>}</CardContent></Card>
-                <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">Last visit</div><div className="text-xl font-bold">{selectedMember.last_visit ?? "-"}</div></CardContent></Card>
+                <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">{t("mem_current_points")}</div><div className="text-xl font-bold">{Number(selectedMember.current_points ?? 0).toLocaleString()}</div></CardContent></Card>
+                <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">{t("col_visits")}</div><div className="text-xl font-bold">{selectedMember.visits}</div>{selectedMember.pos_visits > 0 && <div className="text-[10px] text-muted-foreground mt-0.5">{selectedMember.pos_visits} {t("mem_in_pos")} · {selectedMember.legacy_visit_count} {t("mem_imported")}</div>}</CardContent></Card>
+                <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">{t("mem_total_spend")}</div><div className="text-xl font-bold">{thb(selectedMember.spend)}</div>{selectedMember.pos_spend > 0 && <div className="text-[10px] text-muted-foreground mt-0.5">{thb(selectedMember.pos_spend)} {t("mem_in_pos")}</div>}</CardContent></Card>
+                <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">{t("col_last_visit")}</div><div className="text-xl font-bold">{selectedMember.last_visit ?? "-"}</div></CardContent></Card>
               </div>
               <div className="rounded-lg border">
-                <div className="border-b p-3 font-medium">Point history</div>
+                <div className="border-b p-3 font-medium">{t("mem_point_history")}</div>
                 {detailLoading ? (
-                  <div className="p-4 text-sm text-muted-foreground">Loading history...</div>
+                  <div className="p-4 text-sm text-muted-foreground">{t("mem_loading_history")}</div>
                 ) : ledgerRows.length === 0 ? (
-                  <div className="p-4 text-sm text-muted-foreground">No point history yet. Imported Dotdash points are shown as the opening/current balance.</div>
+                  <div className="p-4 text-sm text-muted-foreground">{t("mem_no_history")}</div>
                 ) : (
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Description</TableHead>
-                        <TableHead className="text-right">Points</TableHead>
-                        <TableHead className="text-right">Balance</TableHead>
+                        <TableHead>{t("col_date")}</TableHead>
+                        <TableHead>{t("col_type")}</TableHead>
+                        <TableHead>{t("col_description")}</TableHead>
+                        <TableHead className="text-right">{t("col_points")}</TableHead>
+                        <TableHead className="text-right">{t("col_balance")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -559,7 +561,7 @@ function MembersPage() {
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setSelectedMember(null); setLedgerRows([]); }}>Close</Button>
+            <Button variant="outline" onClick={() => { setSelectedMember(null); setLedgerRows([]); }}>{t("close")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -567,49 +569,48 @@ function MembersPage() {
       <Dialog open={importOpen} onOpenChange={setImportOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Import Dotdash customer CSV</DialogTitle>
+            <DialogTitle>{t("mem_import_title")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>CSV file</Label>
+              <Label>{t("mem_csv_file")}</Label>
               <Input type="file" accept=".csv,text/csv" onChange={(e) => void onFile(e.target.files?.[0] ?? null)} />
             </div>
             <div className="grid gap-3 sm:grid-cols-4">
-              <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">Rows</div><div className="text-xl font-bold">{importRows.length}</div></CardContent></Card>
-              <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">With phone</div><div className="text-xl font-bold">{importRows.filter((r) => r.phone).length}</div></CardContent></Card>
-              <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">With points</div><div className="text-xl font-bold">{importRows.filter((r) => r.current_points > 0).length}</div></CardContent></Card>
-              <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">Points</div><div className="text-xl font-bold">{importRows.reduce((s, r) => s + r.current_points, 0).toLocaleString()}</div></CardContent></Card>
+              <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">{t("mem_rows")}</div><div className="text-xl font-bold">{importRows.length}</div></CardContent></Card>
+              <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">{t("mem_with_phone")}</div><div className="text-xl font-bold">{importRows.filter((r) => r.phone).length}</div></CardContent></Card>
+              <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">{t("mem_with_points")}</div><div className="text-xl font-bold">{importRows.filter((r) => r.current_points > 0).length}</div></CardContent></Card>
+              <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">{t("col_points")}</div><div className="text-xl font-bold">{importRows.reduce((s, r) => s + r.current_points, 0).toLocaleString()}</div></CardContent></Card>
             </div>
             {importRows.length > 0 && (
               <div className="rounded-lg border p-3 text-sm">
-                <div className="font-medium">Preview</div>
+                <div className="font-medium">{t("mem_preview")}</div>
                 <div className="mt-1 text-muted-foreground">
-                  {importRows[0].full_name} · {importRows[0].phone ?? "no phone"} · {importRows[0].current_points.toLocaleString()} points
+                  {importRows[0].full_name} · {importRows[0].phone ?? t("mem_no_phone")} · {importRows[0].current_points.toLocaleString()} {t("mem_points_word")}
                 </div>
               </div>
             )}
             {confirmReplace && (
               <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-3 text-sm space-y-1">
-                <div className="font-semibold text-destructive">Replace previous DotDash import?</div>
+                <div className="font-semibold text-destructive">{t("mem_replace_q")}</div>
                 <p className="text-muted-foreground">
-                  This deletes every member imported from DotDash and re-imports the {importRows.length.toLocaleString()} rows
-                  from this file. Members added or edited inside the POS (not from DotDash) are kept.
+                  {t("mem_replace_warn_1")}{importRows.length.toLocaleString()}{t("mem_replace_warn_2")}
                 </p>
               </div>
             )}
           </div>
           <DialogFooter className="gap-2 sm:gap-2">
-            <Button variant="outline" onClick={() => { setImportOpen(false); setConfirmReplace(false); }}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setImportOpen(false); setConfirmReplace(false); }}>{t("cancel")}</Button>
             <Button variant="outline" onClick={doImport} disabled={importRows.length === 0 || importing}>
-              {importing ? "Working…" : "Add only"}
+              {importing ? t("mem_working") : t("mem_add_only")}
             </Button>
             {confirmReplace ? (
               <Button variant="destructive" onClick={doReplace} disabled={importRows.length === 0 || importing}>
-                {importing ? "Replacing…" : `Confirm — delete old & import ${importRows.length.toLocaleString()}`}
+                {importing ? t("mem_replacing") : `${t("mem_confirm_delete")}${importRows.length.toLocaleString()}`}
               </Button>
             ) : (
               <Button onClick={() => setConfirmReplace(true)} disabled={importRows.length === 0 || importing}>
-                <RefreshCw className="h-4 w-4 mr-2" />Replace previous import
+                <RefreshCw className="h-4 w-4 mr-2" />{t("mem_replace_btn")}
               </Button>
             )}
           </DialogFooter>
