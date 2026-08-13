@@ -200,6 +200,8 @@ function IngredientsTab() {
 function GeneralTab() {
   const { t } = useI18n();
   const [s, setS] = useState<Settings | null>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const logoFileRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     supabase.from("settings").select("*").eq("id", 1).single().then(({ data }) => {
       if (!data) return;
@@ -207,6 +209,23 @@ function GeneralTab() {
     });
   }, []);
   if (!s) return null;
+  // Upload a logo file to the public-assets bucket and use its public URL.
+  const uploadLogo = async (file: File) => {
+    setUploadingLogo(true);
+    try {
+      const ext = (file.name.split(".").pop() || "png").toLowerCase();
+      const path = `receipt-logo-${Date.now()}.${ext}`;
+      const { error } = await supabase.storage.from("public-assets").upload(path, file, { cacheControl: "3600", upsert: true });
+      if (error) throw error;
+      const { data } = supabase.storage.from("public-assets").getPublicUrl(path);
+      setS((prev) => (prev ? { ...prev, receipt_logo_url: data.publicUrl } : prev));
+      toast.success("Logo uploaded — press Save to keep it");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Upload failed");
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
   const save = async () => {
     // Drop any half-filled time windows so the report/detail views stay clean.
     const cleaned: Settings = { ...s, qr_time_buckets: s.qr_time_buckets.filter(isValidBucket) };
@@ -269,19 +288,34 @@ function GeneralTab() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="rounded-lg border p-3 space-y-2">
-            <Label>Receipt logo URL</Label>
+            <Label>Receipt logo</Label>
+            <input
+              ref={logoFileRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLogo(f); e.currentTarget.value = ""; }}
+            />
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={() => logoFileRef.current?.click()} disabled={uploadingLogo}>
+                {uploadingLogo ? "Uploading…" : "Upload logo"}
+              </Button>
+              {s.receipt_logo_url && (
+                <Button variant="outline" size="sm" onClick={() => setS({ ...s, receipt_logo_url: "" })}>
+                  Clear logo
+                </Button>
+              )}
+            </div>
+            {s.receipt_logo_url && (
+              <img src={s.receipt_logo_url} alt="Receipt logo" className="mt-1 max-h-16 rounded border bg-white p-1 object-contain" />
+            )}
             <Input
               type="url"
-              placeholder="https://..."
+              placeholder="https://…  (or use Upload)"
               value={s.receipt_logo_url ?? ""}
               onChange={(e) => setS({ ...s, receipt_logo_url: e.target.value })}
             />
-            <p className="text-xs text-muted-foreground">Use a direct PNG/JPG logo URL. Square or wide transparent PNG works best.</p>
-            {s.receipt_logo_url && (
-              <Button variant="outline" size="sm" onClick={() => setS({ ...s, receipt_logo_url: "" })}>
-                Clear logo
-              </Button>
-            )}
+            <p className="text-xs text-muted-foreground">Pick a PNG/JPG file, or paste a direct image URL. Wide transparent PNG works best.</p>
           </div>
 
           <div className="rounded-lg border p-3 space-y-3">
