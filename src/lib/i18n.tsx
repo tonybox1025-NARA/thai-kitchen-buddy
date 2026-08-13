@@ -34,7 +34,7 @@ const dict: Dict = {
   pm_cash: { th: "เงินสด", en: "Cash" },
   pm_qr: { th: "QR", en: "QR" },
   pm_card: { th: "บัตร", en: "Card" },
-  pm_gov_qr: { th: "QR รัฐ", en: "Gov QR" },
+  pm_gov_qr: { th: "60/40", en: "60/40" },
   // generic / shared
   refresh: { th: "รีเฟรช", en: "Refresh" },
   close: { th: "ปิด", en: "Close" },

@@ -137,7 +137,7 @@ function Dashboard() {
           </div>
           {stats.byMethod.gov_qr > 0 && (
             <div className="grid grid-cols-3 gap-4">
-              <StatCard title="Government QR" value={thb(stats.byMethod.gov_qr)} />
+              <StatCard title={t("pm_gov_qr")} value={thb(stats.byMethod.gov_qr)} />
             </div>
           )}
           {stats.tipTotal > 0 && (
