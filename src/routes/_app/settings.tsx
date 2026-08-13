@@ -28,6 +28,7 @@ type RTable = { id: string; code: string; capacity: number };
 type Menu = { id: string; category_id: string | null; name_th: string; name_en: string; name_my: string; price: number; cost: number; available: boolean; image_url?: string | null };
 
 function MarginIndicator({ price, cost }: { price: number; cost: number }) {
+  const { t } = useI18n();
   const margin = price > 0 ? ((price - cost) / price) * 100 : 0;
   const clamped = Math.max(0, Math.min(100, margin));
   const barColor = margin > 50 ? "bg-green-500" : margin >= 30 ? "bg-yellow-500" : "bg-red-500";
@@ -35,7 +36,7 @@ function MarginIndicator({ price, cost }: { price: number; cost: number }) {
   return (
     <div className="space-y-1">
       <div className="flex justify-between text-xs">
-        <span className="text-muted-foreground">Margin</span>
+        <span className="text-muted-foreground">{t("set_margin")}</span>
         <span className={`font-medium ${textColor}`}>{margin.toFixed(2)}%</span>
       </div>
       <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
@@ -104,7 +105,7 @@ function SettingsPage() {
           <TabsTrigger value="menu">{t("menu_management")}</TabsTrigger>
           <TabsTrigger value="ingredients">{t("ingredients")}</TabsTrigger>
           <TabsTrigger value="addons">{t("add_ons")}</TabsTrigger>
-          <TabsTrigger value="kitchen-zones">Kitchen zones</TabsTrigger>
+          <TabsTrigger value="kitchen-zones">{t("set_kitchen_zones")}</TabsTrigger>
           <TabsTrigger value="printers">{t("printers")}</TabsTrigger>
           <TabsTrigger value="qr">{t("qr_codes")}</TabsTrigger>
           <TabsTrigger value="staff">{t("staff")}</TabsTrigger>
@@ -125,6 +126,7 @@ function SettingsPage() {
 type Ingredient = { id: string; name_thai: string; name_english: string | null; unit: string; cost_per_unit: number };
 // ── Ingredients master list tab ───────────────────────────────────────────────
 function IngredientsTab() {
+  const { t } = useI18n();
   const [list, setList] = useState<Ingredient[]>([]);
   const [edit, setEdit] = useState<Partial<Ingredient> | null>(null);
 
@@ -136,7 +138,7 @@ function IngredientsTab() {
 
   const save = async () => {
     if (!edit) return;
-    if (!edit.name_thai?.trim()) { toast.error("Thai name required"); return; }
+    if (!edit.name_thai?.trim()) { toast.error(t("set_thai_name_required")); return; }
     const payload = {
       name_thai: edit.name_thai.trim(),
       name_english: edit.name_english?.trim() || null,
@@ -147,11 +149,11 @@ function IngredientsTab() {
       ? await supabase.from("ingredients").update(payload).eq("id", edit.id)
       : await supabase.from("ingredients").insert(payload);
     if (error) { toast.error(error.message); return; }
-    setEdit(null); load(); toast.success("Saved");
+    setEdit(null); load(); toast.success(t("saved"));
   };
 
   const del = async (i: Ingredient) => {
-    if (!confirm(`Delete ${i.name_thai}?`)) return;
+    if (!confirm(`${t("set_delete_q")}${i.name_thai}?`)) return;
     const { error } = await supabase.from("ingredients").delete().eq("id", i.id);
     if (error) { toast.error(error.message); return; }
     load();
@@ -159,7 +161,7 @@ function IngredientsTab() {
 
   return (
     <div className="mt-4 space-y-4">
-      <Button onClick={() => setEdit({})}><Plus className="h-4 w-4 mr-1" />Add Ingredient</Button>
+      <Button onClick={() => setEdit({})}><Plus className="h-4 w-4 mr-1" />{t("set_add_ingredient")}</Button>
       <div className="grid gap-2">
         {list.map((i) => (
           <Card key={i.id}>
@@ -170,28 +172,28 @@ function IngredientsTab() {
               </div>
               <div className="w-24 text-sm text-muted-foreground">{i.unit}</div>
               <div className="w-28 text-right font-bold">฿{Number(i.cost_per_unit).toFixed(2)}</div>
-              <Button variant="outline" size="sm" onClick={() => setEdit(i)}>Edit</Button>
+              <Button variant="outline" size="sm" onClick={() => setEdit(i)}>{t("edit")}</Button>
               <Button variant="ghost" size="sm" onClick={() => del(i)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
             </CardContent>
           </Card>
         ))}
-        {list.length === 0 && <p className="text-sm text-muted-foreground">No ingredients yet.</p>}
+        {list.length === 0 && <p className="text-sm text-muted-foreground">{t("set_no_ingredients")}</p>}
       </div>
 
       <Dialog open={!!edit} onOpenChange={(o) => !o && setEdit(null)}>
         <DialogContent>
-          <DialogHeader><DialogTitle>{edit?.id ? "Edit Ingredient" : "Add Ingredient"}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{edit?.id ? t("set_edit_ingredient") : t("set_add_ingredient")}</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div><Label>Thai name *</Label><Input value={edit?.name_thai ?? ""} onChange={(e) => setEdit({ ...edit, name_thai: e.target.value })} /></div>
-            <div><Label>English name</Label><Input value={edit?.name_english ?? ""} onChange={(e) => setEdit({ ...edit, name_english: e.target.value })} /></div>
+            <div><Label>{t("set_thai_name_req")}</Label><Input value={edit?.name_thai ?? ""} onChange={(e) => setEdit({ ...edit, name_thai: e.target.value })} /></div>
+            <div><Label>{t("set_english_name")}</Label><Input value={edit?.name_english ?? ""} onChange={(e) => setEdit({ ...edit, name_english: e.target.value })} /></div>
             <div className="grid grid-cols-2 gap-3">
-              <div><Label>Unit</Label><Input placeholder="กก., กรัม, ลิตร, มล., ชิ้น" value={edit?.unit ?? ""} onChange={(e) => setEdit({ ...edit, unit: e.target.value })} /></div>
-              <div><Label>Cost per unit (฿)</Label><KeypadInput value={edit?.cost_per_unit ?? 0} onChange={(n) => setEdit({ ...edit, cost_per_unit: n })} title="Cost per unit" decimal /></div>
+              <div><Label>{t("set_unit")}</Label><Input placeholder="กก., กรัม, ลิตร, มล., ชิ้น" value={edit?.unit ?? ""} onChange={(e) => setEdit({ ...edit, unit: e.target.value })} /></div>
+              <div><Label>{t("set_cost_per_unit")}</Label><KeypadInput value={edit?.cost_per_unit ?? 0} onChange={(n) => setEdit({ ...edit, cost_per_unit: n })} title={t("set_cost_per_unit_title")} decimal /></div>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEdit(null)}>Cancel</Button>
-            <Button onClick={save}>Save</Button>
+            <Button variant="outline" onClick={() => setEdit(null)}>{t("cancel")}</Button>
+            <Button onClick={save}>{t("save")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -221,7 +223,7 @@ function GeneralTab() {
       if (error) throw error;
       const { data } = supabase.storage.from("public-assets").getPublicUrl(path);
       setS((prev) => (prev ? { ...prev, receipt_logo_url: data.publicUrl } : prev));
-      toast.success("Logo uploaded — press Save to keep it");
+      toast.success(t("set_logo_uploaded"));
     } catch (e: any) {
       toast.error(e?.message ?? "Upload failed");
     } finally {
@@ -234,7 +236,7 @@ function GeneralTab() {
     const { error } = await (supabase as any).from("settings").update(cleaned).eq("id", 1);
     if (error) { toast.error(error.message); return; }
     setS(cleaned);
-    toast.success("Saved");
+    toast.success(t("saved"));
   };
   const previewSubtotal = sampleReceipt.subtotal;
   const previewService = previewSubtotal * Number(s.service_fee_rate ?? 0) / 100;
@@ -262,7 +264,7 @@ function GeneralTab() {
     <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(20rem,28rem)_minmax(0,36rem)]">
       <div className="space-y-4">
         <Card>
-          <CardHeader><CardTitle className="text-base">Receipt preview</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">{t("set_receipt_preview")}</CardTitle></CardHeader>
           <CardContent>
             <div className="rounded-lg border bg-muted/30 py-5">
               <ReceiptPreview72 data={receiptPreview} />
@@ -271,11 +273,11 @@ function GeneralTab() {
         </Card>
 
         <Card>
-          <CardHeader><CardTitle className="text-base">Store information</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">{t("set_store_info")}</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div><Label>{t("restaurant_name")}</Label><Input value={s.restaurant_name} onChange={(e) => setS({ ...s, restaurant_name: e.target.value })} /><p className="text-xs text-muted-foreground mt-1">Prints at the top of the receipt. You can use the Thai name.</p></div>
-            <div><Label>Address</Label><Input value={s.address ?? ""} onChange={(e) => setS({ ...s, address: e.target.value })} placeholder="224/1 บางนา บางนาเหนือ กรุงเทพมหานคร 10260" /></div>
-            <div><Label>Receipt promo line</Label><Input value={s.receipt_promo ?? ""} onChange={(e) => setS({ ...s, receipt_promo: e.target.value })} placeholder="สมาชิกรับฟรี! ครบ 500 …" /><p className="text-xs text-muted-foreground mt-1">Optional. Prints under the shop name on the customer receipt.</p></div>
+            <div><Label>{t("set_address")}</Label><Input value={s.address ?? ""} onChange={(e) => setS({ ...s, address: e.target.value })} placeholder="224/1 บางนา บางนาเหนือ กรุงเทพมหานคร 10260" /></div>
+            <div><Label>{t("set_promo_line")}</Label><Input value={s.receipt_promo ?? ""} onChange={(e) => setS({ ...s, receipt_promo: e.target.value })} placeholder="สมาชิกรับฟรี! ครบ 500 …" /><p className="text-xs text-muted-foreground mt-1">{t("set_promo_help")}</p></div>
             <div>
               <Label>{t("starting_cash")}</Label>
               <KeypadInput value={s.starting_cash ?? 0} onChange={(n) => setS({ ...s, starting_cash: n })} title={t("starting_cash")} />
@@ -288,11 +290,11 @@ function GeneralTab() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Receipt setup</CardTitle>
+          <CardTitle className="text-base">{t("set_receipt_setup")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="rounded-lg border p-3 space-y-2">
-            <Label>Receipt logo</Label>
+            <Label>{t("set_receipt_logo")}</Label>
             <input
               ref={logoFileRef}
               type="file"
@@ -315,7 +317,7 @@ function GeneralTab() {
             )}
             <Input
               type="url"
-              placeholder="https://…  (or use Upload)"
+              placeholder={t("set_logo_url_ph")}
               value={s.receipt_logo_url ?? ""}
               onChange={(e) => setS({ ...s, receipt_logo_url: e.target.value })}
             />
@@ -325,7 +327,7 @@ function GeneralTab() {
           <div className="rounded-lg border p-3 space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <Label>Value Added Tax (VAT)</Label>
+                <Label>{t("set_vat")}</Label>
                 <p className="text-xs text-muted-foreground">Enable or hide VAT on bills and receipts.</p>
               </div>
               <Switch checked={s.vat_enabled} onCheckedChange={(checked) => setS({ ...s, vat_enabled: checked })} />
@@ -348,19 +350,19 @@ function GeneralTab() {
           </div>
 
           <div className="rounded-lg border p-3 space-y-2">
-            <Label>Service fee</Label>
+            <Label>{t("set_service_fee")}</Label>
             <div className="grid grid-cols-[1fr_9rem] gap-3 items-center">
-              <span className="text-sm text-muted-foreground">Service rate</span>
-              <KeypadInput value={s.service_fee_rate ?? 0} onChange={(n) => setS({ ...s, service_fee_rate: Math.min(100, n) })} title="Service rate" display={(n) => `${n}%`} decimal />
+              <span className="text-sm text-muted-foreground">{t("set_service_rate")}</span>
+              <KeypadInput value={s.service_fee_rate ?? 0} onChange={(n) => setS({ ...s, service_fee_rate: Math.min(100, n) })} title={t("set_service_rate")} display={(n) => `${n}%`} decimal />
             </div>
           </div>
 
           <div className="rounded-lg border p-3 space-y-2">
-            <Label>Rounding</Label>
+            <Label>{t("set_rounding")}</Label>
             <Select value={s.rounding_mode ?? "none"} onValueChange={(v) => setS({ ...s, rounding_mode: v as RoundingMode })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">No rounding</SelectItem>
+                <SelectItem value="none">{t("set_no_rounding")}</SelectItem>
                 <SelectItem value="nearest_whole">Round to nearest ฿1</SelectItem>
                 <SelectItem value="up_whole">Round up to ฿1</SelectItem>
                 <SelectItem value="down_whole">Round down to ฿1</SelectItem>
@@ -369,13 +371,13 @@ function GeneralTab() {
           </div>
 
           <div className="rounded-lg border p-3 space-y-2">
-            <Label>Using discounts</Label>
+            <Label>{t("set_using_discounts")}</Label>
             <div className="grid grid-cols-[1fr_9rem] gap-3 items-center">
               <span className="text-sm text-muted-foreground">Maximum discount per bill (%)</span>
               <KeypadInput
                 value={s.max_discount_percent ?? 100}
                 onChange={(n) => setS({ ...s, max_discount_percent: Math.min(100, n) })}
-                title="Maximum discount"
+                title={t("set_max_discount")}
                 display={(n) => `${n}%`}
                 decimal
               />
@@ -385,14 +387,14 @@ function GeneralTab() {
           <div className="rounded-lg border p-3 space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <Label>Government co-pay QR</Label>
+                <Label>{t("set_gov_qr")}</Label>
                 <p className="text-xs text-muted-foreground">A named QR payment (e.g. 60/40). The cashier enters the amount the customer uses; the balance is paid by cash or card.</p>
               </div>
               <Switch checked={s.gov_qr_enabled ?? false} onCheckedChange={(checked) => setS({ ...s, gov_qr_enabled: checked })} />
             </div>
             {s.gov_qr_enabled && (
               <div className="sm:max-w-[12rem]">
-                <Label>Label</Label>
+                <Label>{t("lbl_label")}</Label>
                 <Input value={s.gov_qr_label ?? "60/40"} onChange={(e) => setS({ ...s, gov_qr_label: e.target.value })} />
               </div>
             )}
@@ -400,7 +402,7 @@ function GeneralTab() {
 
           <div className="rounded-lg border p-3 space-y-3">
             <div>
-              <Label>QR sales by time</Label>
+              <Label>{t("set_qr_by_time")}</Label>
               <p className="text-xs text-muted-foreground">Split the QR payment total into time windows on the QR detail page and the X/Z report. Add an optional label (e.g. "OPEN-23:00") to name each window.</p>
             </div>
             {s.qr_time_buckets.length > 0 && (
@@ -422,7 +424,7 @@ function GeneralTab() {
                     />
                     <Input
                       type="text"
-                      placeholder="Label (optional)"
+                      placeholder={t("set_label_optional")}
                       value={b.label ?? ""}
                       onChange={(e) => setS({ ...s, qr_time_buckets: s.qr_time_buckets.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })}
                       className="flex-1 min-w-0"
@@ -471,7 +473,7 @@ function PrintersTab() {
   const save = async () => {
     const { error } = await supabase.from("settings").update({ printer_counter_ip: s.printer_counter_ip, printer_kitchen_ip: s.printer_kitchen_ip }).eq("id", 1);
     if (error) { toast.error(`Save failed: ${error.message}`); return; }
-    toast.success("Saved");
+    toast.success(t("saved"));
   };
 
   const sendTestPrint = async () => {
@@ -479,7 +481,7 @@ function PrintersTab() {
       printer: "counter",
       payload: { kind: "receipt", restaurant: "TEST PRINT", table: "T01", items: [{ name_en: "Test Item", qty: 1, unit_price: 99 }], total: 99, vatAmount: 0, vat_mode: "inclusive", payments: [{ method: "cash", amount: 99 }] },
     });
-    toast.success("Test print job queued");
+    toast.success(t("set_test_queued"));
   };
 
   const bridgeAlive = recentJob && new Date(recentJob.printed_at ?? 0).getTime() > Date.now() - 60_000;
@@ -505,8 +507,8 @@ function PrintersTab() {
           <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-1">
             <div className="flex items-center gap-2 font-medium">
               {bridgeAlive
-                ? <><Wifi className="h-4 w-4 text-green-500" /><span className="text-green-600">Print bridge online</span></>
-                : <><WifiOff className="h-4 w-4 text-muted-foreground" /><span className="text-muted-foreground">Print bridge not detected</span></>}
+                ? <><Wifi className="h-4 w-4 text-green-500" /><span className="text-green-600">{t("set_bridge_online")}</span></>
+                : <><WifiOff className="h-4 w-4 text-muted-foreground" /><span className="text-muted-foreground">{t("set_bridge_offline")}</span></>}
             </div>
             <p className="text-muted-foreground">
               Run the bridge on any device on the same LAN as the printer:
@@ -531,7 +533,7 @@ function PrintersTab() {
 }
 
 function KitchenZonesTab() {
-  const { lang } = useI18n();
+  const { t, lang } = useI18n();
   const [zones, setZones] = useState<KitchenZone[]>([]);
   const [cats, setCats] = useState<Category[]>([]);
   const [edit, setEdit] = useState<Partial<KitchenZone> | null>(null);
@@ -549,7 +551,7 @@ function KitchenZonesTab() {
 
   const saveZone = async () => {
     if (!edit?.name_th?.trim() || !edit?.name_en?.trim()) {
-      toast.error("Zone name is required");
+      toast.error(t("set_zone_name_required"));
       return;
     }
     const payload = {
@@ -565,7 +567,7 @@ function KitchenZonesTab() {
     if (error) { toast.error(error.message); return; }
     setEdit(null);
     await load();
-    toast.success("Saved");
+    toast.success(t("saved"));
   };
 
   const deleteZone = async (zone: KitchenZone) => {
@@ -590,23 +592,23 @@ function KitchenZonesTab() {
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between gap-3">
-            <CardTitle className="text-base">Kitchen zones</CardTitle>
+            <CardTitle className="text-base">{t("set_kitchen_zones")}</CardTitle>
             <Button size="sm" onClick={() => setEdit({ active: true, print_to_kitchen: true, sort: zones.length * 10 + 10 })}>
-              <Plus className="h-4 w-4 mr-1" />Add zone
+              <Plus className="h-4 w-4 mr-1" />{t("set_add_zone")}
             </Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-2">
-          {zones.length === 0 && <p className="text-sm text-muted-foreground">No kitchen zones yet.</p>}
+          {zones.length === 0 && <p className="text-sm text-muted-foreground">{t("set_no_zones")}</p>}
           {zones.map((zone) => (
             <div key={zone.id} className="flex items-center gap-3 rounded-lg border p-3">
               <div className="flex-1 min-w-0">
                 <div className="font-semibold truncate">{zoneName(zone)}</div>
                 <div className="text-xs text-muted-foreground truncate">
-                  {zone.name_th} · {zone.name_en} · sort {zone.sort} · {zone.print_to_kitchen ? "prints to kitchen" : "counter only"}
+                  {zone.name_th} · {zone.name_en} · {t("lbl_sort")} {zone.sort} · {zone.print_to_kitchen ? t("set_prints_kitchen") : t("set_counter_only")}
                 </div>
               </div>
-              <Button variant="outline" size="sm" onClick={() => setEdit(zone)}>Edit</Button>
+              <Button variant="outline" size="sm" onClick={() => setEdit(zone)}>{t("edit")}</Button>
               <Button variant="ghost" size="icon" onClick={() => deleteZone(zone)}>
                 <Trash2 className="h-4 w-4 text-destructive" />
               </Button>
@@ -616,7 +618,7 @@ function KitchenZonesTab() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle className="text-base">Assign categories to zones</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base">{t("set_assign_zones")}</CardTitle></CardHeader>
         <CardContent className="space-y-2">
           {cats.map((cat) => (
             <div key={cat.id} className="grid grid-cols-[1fr_14rem] gap-3 items-center rounded-lg border p-3">
@@ -627,7 +629,7 @@ function KitchenZonesTab() {
               <Select value={cat.kitchen_zone_id ?? "__none__"} onValueChange={(v) => assignCategory(cat.id, v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__none__">Unassigned / Main ticket</SelectItem>
+                  <SelectItem value="__none__">{t("set_unassigned")}</SelectItem>
                   {zones.map((zone) => (
                     <SelectItem key={zone.id} value={zone.id}>{zoneName(zone)}</SelectItem>
                   ))}
@@ -640,26 +642,26 @@ function KitchenZonesTab() {
 
       <Dialog open={!!edit} onOpenChange={(open) => !open && setEdit(null)}>
         <DialogContent>
-          <DialogHeader><DialogTitle>{edit?.id ? "Edit kitchen zone" : "Add kitchen zone"}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{edit?.id ? t("set_edit_zone") : t("set_add_zone_title")}</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div><Label>Thai name</Label><Input value={edit?.name_th ?? ""} onChange={(e) => setEdit({ ...edit, name_th: e.target.value })} /></div>
-            <div><Label>English name</Label><Input value={edit?.name_en ?? ""} onChange={(e) => setEdit({ ...edit, name_en: e.target.value })} /></div>
-            <div><Label>Sort</Label><KeypadInput value={edit?.sort ?? 0} onChange={(n) => setEdit({ ...edit, sort: n })} title="Sort" display={(n) => String(n)} /></div>
+            <div><Label>{t("set_thai_name")}</Label><Input value={edit?.name_th ?? ""} onChange={(e) => setEdit({ ...edit, name_th: e.target.value })} /></div>
+            <div><Label>{t("set_english_name")}</Label><Input value={edit?.name_en ?? ""} onChange={(e) => setEdit({ ...edit, name_en: e.target.value })} /></div>
+            <div><Label>{t("lbl_sort")}</Label><KeypadInput value={edit?.sort ?? 0} onChange={(n) => setEdit({ ...edit, sort: n })} title={t("lbl_sort")} display={(n) => String(n)} /></div>
             <div className="flex items-center justify-between rounded-lg border p-3">
-              <Label>Active</Label>
+              <Label>{t("active")}</Label>
               <Switch checked={edit?.active ?? true} onCheckedChange={(checked) => setEdit({ ...edit, active: checked })} />
             </div>
             <div className="flex items-center justify-between rounded-lg border p-3">
               <div>
-                <Label>Send to kitchen</Label>
-                <p className="text-xs text-muted-foreground">Turn off for drinks, alcohol, or counter-only items.</p>
+                <Label>{t("send_to_kitchen")}</Label>
+                <p className="text-xs text-muted-foreground">{t("set_send_kitchen_help")}</p>
               </div>
               <Switch checked={edit?.print_to_kitchen ?? true} onCheckedChange={(checked) => setEdit({ ...edit, print_to_kitchen: checked })} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEdit(null)}>Cancel</Button>
-            <Button onClick={saveZone}>Save</Button>
+            <Button variant="outline" onClick={() => setEdit(null)}>{t("cancel")}</Button>
+            <Button onClick={saveZone}>{t("save")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -668,6 +670,7 @@ function KitchenZonesTab() {
 }
 
 function BrowserPrintTestCard() {
+  const { t } = useI18n();
   const [driver, setDriver] = useState<DriverId>("browser");
   const [preview, setPreview] = useState<null | "receipt" | "kitchen">(null);
   const [splitPreview, setSplitPreview] = useState(false);
@@ -724,7 +727,7 @@ function BrowserPrintTestCard() {
       </CardHeader>
       <CardContent className="space-y-4">
         <div>
-          <Label>Driver</Label>
+          <Label>{t("set_driver")}</Label>
           <Select value={driver} onValueChange={(v) => setDriver(v as DriverId)}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -781,7 +784,7 @@ function BrowserPrintTestCard() {
               Shown at actual 72mm width. Desktop PDF preview may still render on A4 — pick a 72mm/80mm paper size on a thermal printer.
             </p>
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setPreview(null)}>Close</Button>
+              <Button variant="outline" onClick={() => setPreview(null)}>{t("close")}</Button>
               <Button
                 onClick={async () => {
                   const kind = preview === "receipt" ? "receipt" : "kitchen_ticket";
@@ -822,7 +825,7 @@ function BrowserPrintTestCard() {
               All {splitTickets.length} department tickets stacked for inspection. "Print All" sends them as one browser print job with page breaks between tickets, so the thermal printer cuts/separates per ticket. Labels above each ticket are hidden during print.
             </p>
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setSplitPreview(false)}>Close</Button>
+              <Button variant="outline" onClick={() => setSplitPreview(false)}>{t("close")}</Button>
               <Button
                 onClick={async () => {
                   setSplitPreview(false);
@@ -1081,7 +1084,7 @@ function AddonsTab() {
 
   const saveGroup = async () => {
     if (!editGroup) return;
-    if (!editGroup.name.trim()) { toast.error("Group name required"); return; }
+    if (!editGroup.name.trim()) { toast.error(t("set_group_name_required")); return; }
 
     const groupPayload = {
       name: editGroup.name.trim(),
@@ -1112,7 +1115,7 @@ function AddonsTab() {
       if (optErr) { toast.error(`Options: ${optErr.message}`); return; }
     }
 
-    toast.success("Saved");
+    toast.success(t("saved"));
     setEditGroup(null);
     load();
   };
@@ -1209,7 +1212,7 @@ function AddonsTab() {
                     <KeypadInput
                       value={opt.price}
                       onChange={(n) => setOpt(realIdx, { price: n })}
-                      title="Price"
+                      title={t("lbl_price")}
                       display={(n) => String(n)}
                       decimal
                       className="w-24 h-8 text-sm"
@@ -1429,7 +1432,7 @@ function MenuTab() {
             <div><Label>{t("name_my")}</Label><Input className="font-burmese" value={edit?.name_my ?? ""} onChange={(e) => setEdit({ ...edit, name_my: e.target.value })} /></div>
             <div className="grid grid-cols-2 gap-3">
               <div><Label>{t("price")} (฿)</Label><KeypadInput value={edit?.price ?? 0} onChange={(n) => setEdit({ ...edit, price: n })} title={t("price")} decimal /></div>
-              <div><Label>Cost (฿)</Label><KeypadInput value={edit?.cost ?? 0} onChange={(n) => setEdit({ ...edit, cost: n })} title="Cost" decimal /></div>
+              <div><Label>{t("lbl_cost")} (฿)</Label><KeypadInput value={edit?.cost ?? 0} onChange={(n) => setEdit({ ...edit, cost: n })} title={t("lbl_cost")} decimal /></div>
             </div>
             <MarginIndicator price={Number(edit?.price ?? 0)} cost={Number(edit?.cost ?? 0)} />
             {/* ── Ingredients section ── */}
@@ -1483,7 +1486,7 @@ function StaffTab() {
   useEffect(() => { load(); }, []);
 
   const create = async () => {
-    if (!name || pin.length < 4) { toast.error("Name and PIN required"); return; }
+    if (!name || pin.length < 4) { toast.error(t("set_name_pin_required")); return; }
     const { error } = await supabase.rpc("create_staff", { _name: name, _role: role, _pin: pin });
     if (error) { toast.error(error.message); return; }
     setAdd(false); setName(""); setPin(""); setRole("staff"); load();
@@ -1509,7 +1512,7 @@ function StaffTab() {
         <DialogContent>
           <DialogHeader><DialogTitle>{t("add")} — {t("staff")}</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div><Label>Name</Label><Input value={name} onChange={(e) => setName(e.target.value)} /></div>
+            <div><Label>{t("col_name")}</Label><Input value={name} onChange={(e) => setName(e.target.value)} /></div>
             <div><Label>{t("role")}</Label>
               <Select value={role} onValueChange={(v) => setRole(v as Staff["role"])}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
