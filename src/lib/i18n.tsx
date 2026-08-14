@@ -228,6 +228,10 @@ const dict: Dict = {
   pay_search_ph: { th: "ค้นหาชื่อ ชื่อเล่น เบอร์โทร...", en: "Search name, nickname, phone..." },
   pay_edit_type: { th: "แก้ไขประเภทการชำระเงิน", en: "Edit Payment Type" },
   pay_reason_optional: { th: "เหตุผล (ไม่บังคับ)", en: "Reason (optional)" },
+  pay_use_points: { th: "ใช้แต้ม", en: "Use points" },
+  pay_points_used: { th: "ใช้แต้ม", en: "Points used" },
+  pay_points_max: { th: "สูงสุด", en: "Max" },
+  pay_not_enough_points: { th: "แต้มไม่พอ", en: "Not enough points" },
   // order page (gaps)
   ord_close_failed: { th: "ปิดโต๊ะไม่สำเร็จ", en: "Failed to close table" },
   ord_bill_sent: { th: "ส่งบิลไปเครื่องพิมพ์แล้ว", en: "Bill sent to printer" },

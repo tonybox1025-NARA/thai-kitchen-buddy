@@ -113,6 +113,7 @@ function PaymentPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [appliedDiscount, setAppliedDiscount] = useState<BillDiscount | null>(null);
   const [memberDisc, setMemberDisc] = useState(0);
+  const [pointsRedeemed, setPointsRedeemed] = useState(0);
   const [tableCode, setTableCode] = useState("");
   const [restName, setRestName] = useState("");
   const [settingsVatEnabled, setSettingsVatEnabled] = useState(true);
@@ -185,6 +186,7 @@ function PaymentPage() {
     if (b) {
       setBill(b as unknown as Bill);
       setMemberDisc(Number(b.member_discount_amount));
+      setPointsRedeemed(Math.max(0, Math.floor(Number((b as any).points_redeemed ?? 0))));
       if ((b as any).member_id) {
         const { data: memberRow } = await supabase
           .from("members")
@@ -250,7 +252,13 @@ function PaymentPage() {
   // ── Derived totals ──────────────────────────────────────────────────────────
   const subtotal = items.reduce((s, i) => s + i.qty * Number(i.unit_price), 0);
   const totalDisc = appliedDiscount?.amount ?? 0;
-  const afterDisc = Math.max(0, subtotal - totalDisc - memberDisc);
+  // Redeemed loyalty points act as a discount: 1 point = 1 THB off.
+  const pointsDiscount = pointsRedeemed;
+  // Can't spend more points than the member has, nor more than the pre-points bill.
+  const maxRedeem = selectedMember
+    ? Math.min(Math.floor(Number(selectedMember.current_points ?? 0)), Math.max(0, Math.floor(subtotal - totalDisc - memberDisc)))
+    : 0;
+  const afterDisc = Math.max(0, subtotal - totalDisc - memberDisc - pointsDiscount);
   const { serviceFeeAmount, vatAmount, roundingAdjustment, total } = bill
     ? computeTotals(
       afterDisc,
@@ -278,6 +286,7 @@ function PaymentPage() {
     await (supabase as any).from("bills").update({
       subtotal,
       member_discount_amount: memberDisc,
+      points_redeemed: pointsRedeemed,
       service_fee_rate: settingsServiceFeeRate,
       service_fee_amount: serviceFeeAmount,
       rounding_mode: settingsRoundingMode,
@@ -287,7 +296,7 @@ function PaymentPage() {
     }).eq("id", bill.id);
   };
 
-  useEffect(() => { persistBill(); /* eslint-disable-next-line */ }, [memberDisc, bill?.id, subtotal, settingsVatEnabled, settingsVatMode, settingsServiceFeeRate, settingsRoundingMode]);
+  useEffect(() => { persistBill(); /* eslint-disable-next-line */ }, [memberDisc, pointsRedeemed, bill?.id, subtotal, settingsVatEnabled, settingsVatMode, settingsServiceFeeRate, settingsRoundingMode]);
 
   // Sync QR field with remaining balance
   useEffect(() => { setQrAmt(remaining); }, [remaining]);
@@ -310,14 +319,14 @@ function PaymentPage() {
   })();
   const discPreviewTotal = bill
     ? computeTotals(
-      Math.max(0, subtotal - discPreviewAmt - memberDisc),
+      Math.max(0, subtotal - discPreviewAmt - memberDisc - pointsDiscount),
       settingsVatEnabled,
       settingsVatMode,
       Number(bill.vat_rate),
       settingsServiceFeeRate,
       settingsRoundingMode,
     ).total
-    : Math.max(0, subtotal - discPreviewAmt - memberDisc);
+    : Math.max(0, subtotal - discPreviewAmt - memberDisc - pointsDiscount);
 
   const applyDiscount = async () => {
     if (!bill || !staff) return;
@@ -359,7 +368,7 @@ function PaymentPage() {
     });
 
     // Recompute totals with new discount and persist to bill
-    const newAfterDisc = Math.max(0, subtotal - amount - memberDisc);
+    const newAfterDisc = Math.max(0, subtotal - amount - memberDisc - pointsDiscount);
     const { serviceFeeAmount: newService, vatAmount: newVat, roundingAdjustment: newRounding, total: newTotal } = computeTotals(
       newAfterDisc,
       settingsVatEnabled,
@@ -386,7 +395,7 @@ function PaymentPage() {
   const removeDiscount = async () => {
     if (!bill) return;
     await (supabase as any).from("bill_discounts").delete().eq("bill_id", bill.id);
-    const newAfterDisc = Math.max(0, subtotal - memberDisc);
+    const newAfterDisc = Math.max(0, subtotal - memberDisc - pointsDiscount);
     const { serviceFeeAmount: newService, vatAmount: newVat, roundingAdjustment: newRounding, total: newTotal } = computeTotals(
       newAfterDisc,
       settingsVatEnabled,
@@ -464,6 +473,7 @@ function PaymentPage() {
     const { error } = await supabase.from("bills").update({ member_id: member.id }).eq("id", bill.id);
     if (error) { toast.error(error.message); return; }
     setSelectedMember(member);
+    setPointsRedeemed(0);
     setMemberSearchOpen(false);
     toast.success(t("pay_member_selected"));
   };
@@ -473,6 +483,7 @@ function PaymentPage() {
     const { error } = await supabase.from("bills").update({ member_id: null }).eq("id", bill.id);
     if (error) { toast.error(error.message); return; }
     setSelectedMember(null);
+    setPointsRedeemed(0);
   };
 
   const resetNewMember = () => {
@@ -514,6 +525,43 @@ function PaymentPage() {
     } finally {
       setCreatingMember(false);
     }
+  };
+
+  // Deduct redeemed points from the member and log it. Mirrors awardLoyaltyPoints:
+  // idempotent per bill (won't double-deduct if finalize runs twice).
+  const redeemLoyaltyPoints = async () => {
+    if (!bill || !selectedMember || pointsRedeemed <= 0) return;
+    const { data: existing } = await supabase
+      .from("member_point_ledger")
+      .select("id")
+      .eq("bill_id", bill.id)
+      .eq("type", "redeem")
+      .maybeSingle();
+    if (existing) return;
+
+    const { data: freshMember, error: memberErr } = await supabase
+      .from("members").select("current_points").eq("id", selectedMember.id).single();
+    if (memberErr || !freshMember) { toast.error(memberErr?.message ?? "Could not load member points"); return; }
+
+    const current = Number((freshMember as any).current_points ?? 0);
+    const use = Math.min(pointsRedeemed, current); // never go negative
+    if (use <= 0) return;
+    const balanceAfter = current - use;
+
+    const { error: updateErr } = await supabase
+      .from("members").update({ current_points: balanceAfter, updated_at: new Date().toISOString() }).eq("id", selectedMember.id);
+    if (updateErr) { toast.error(updateErr.message); return; }
+
+    const { error: ledgerErr } = await supabase.from("member_point_ledger").insert({
+      member_id: selectedMember.id,
+      bill_id: bill.id,
+      type: "redeem",
+      points: -use,
+      balance_after: balanceAfter,
+      description: `Redeemed on bill ${bill.id}`,
+    });
+    if (ledgerErr) { toast.error(ledgerErr.message); return; }
+    setSelectedMember({ ...selectedMember, current_points: balanceAfter });
   };
 
   const awardLoyaltyPoints = async () => {
@@ -599,6 +647,7 @@ function PaymentPage() {
     if (ord?.table_id) {
       await supabase.from("restaurant_tables").update({ status: "available", guests: 0, has_qr_alert: false }).eq("id", ord.table_id);
     }
+    await redeemLoyaltyPoints();
     await awardLoyaltyPoints();
     const loyaltyClaim = await ensureLoyaltyClaim();
     await printCounter({
@@ -610,6 +659,7 @@ function PaymentPage() {
       vat_mode: settingsVatMode, payments: [...payments], language: lang,
       discountAmount: appliedDiscount?.amount ?? 0,
       memberDiscountAmount: memberDisc,
+      pointsDiscountAmount: pointsDiscount,
       serviceFeeAmount,
       roundingAdjustment,
       discount: appliedDiscount ? { type: appliedDiscount.type, label: discTypeLabel(appliedDiscount), amount: appliedDiscount.amount } : null,
@@ -724,6 +774,7 @@ function PaymentPage() {
               )}
 
               {memberDisc > 0 && <Row label={t("member_discount")} value={`- ${thb(memberDisc)}`} />}
+              {pointsDiscount > 0 && <Row label={`${t("pay_points_used")} (${pointsRedeemed.toLocaleString()})`} value={`- ${thb(pointsDiscount)}`} />}
               {serviceFeeAmount > 0 && <Row label={`Service ${settingsServiceFeeRate}%`} value={thb(serviceFeeAmount)} />}
               {settingsVatEnabled && settingsVatMode === "exclusive" && <Row label={`${t("vat")} ${bill.vat_rate}%`} value={thb(vatAmount)} />}
               {roundingAdjustment !== 0 && <Row label="Rounding" value={`${roundingAdjustment > 0 ? "+" : ""}${thb(roundingAdjustment)}`} />}
@@ -826,6 +877,25 @@ function PaymentPage() {
                 <Label className="text-xs">{t("member_discount")}</Label>
                 <KeypadInput value={memberDisc} onChange={setMemberDisc} title={t("member_discount")} placeholder="0" />
               </div>
+              {selectedMember && Number(selectedMember.current_points ?? 0) > 0 && (
+                <div>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">
+                      {t("pay_use_points")} <span className="text-muted-foreground">({Number(selectedMember.current_points ?? 0).toLocaleString()} {t("loy_pts")})</span>
+                    </Label>
+                    <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setPointsRedeemed(maxRedeem)} disabled={maxRedeem <= 0}>
+                      {t("pay_points_max")}
+                    </Button>
+                  </div>
+                  <KeypadInput
+                    value={pointsRedeemed}
+                    onChange={(n) => setPointsRedeemed(Math.max(0, Math.min(maxRedeem, Math.floor(n))))}
+                    title={t("pay_use_points")}
+                    placeholder="0"
+                  />
+                  {pointsRedeemed > 0 && <p className="mt-1 text-xs font-medium text-primary">−{thb(pointsDiscount)}</p>}
+                </div>
+              )}
             </div>
 
             {/* Split Bill */}
@@ -1315,6 +1385,7 @@ function PaymentPage() {
               </div>
             )}
               {memberDisc > 0 && <div className="flex justify-between"><span>{t("member_discount")}</span><span>- {thb(memberDisc)}</span></div>}
+              {pointsDiscount > 0 && <div className="flex justify-between"><span>{t("pay_points_used")} ({pointsRedeemed.toLocaleString()})</span><span>- {thb(pointsDiscount)}</span></div>}
             {serviceFeeAmount > 0 && <div className="flex justify-between"><span>Service {settingsServiceFeeRate}%</span><span>{thb(serviceFeeAmount)}</span></div>}
             {settingsVatEnabled && settingsVatMode === "exclusive" && <div className="flex justify-between"><span>VAT {bill?.vat_rate}%</span><span>{thb(vatAmount)}</span></div>}
             {roundingAdjustment !== 0 && <div className="flex justify-between"><span>{t("set_rounding")}</span><span>{roundingAdjustment > 0 ? "+" : ""}{thb(roundingAdjustment)}</span></div>}
