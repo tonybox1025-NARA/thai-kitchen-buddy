@@ -5,8 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Heart, Loader2, Gift, Cake, Home, MessageCircle } from "lucide-react";
-import { walletToken } from "@/lib/wallet";
+import { Heart, Loader2, Gift, Cake, Home, MessageCircle, Check } from "lucide-react";
+import { walletToken, LINE_LIFF_ID } from "@/lib/wallet";
 
 export const Route = createFileRoute("/wallet")({
   component: WalletPage,
@@ -28,6 +28,7 @@ type Member = {
   birthday: string | null;
   phone: string | null;
   created_at: string | null;
+  line_user_id: string | null;
 };
 type LedgerRow = {
   id: string;
@@ -47,7 +48,8 @@ const STR = {
     addInfo: "เพิ่มข้อมูล", name: "ชื่อ", namePh: "ชื่อของคุณ", birthday: "วันเกิด", cancel: "ยกเลิก", save: "บันทึก",
     promos: "โปรโมชัน", noPromos: "ยังไม่มีโปรโมชันในขณะนี้ กลับมาดูใหม่เร็วๆ นี้ 🎉",
     history: "ประวัติแต้ม", noHistory: "ยังไม่มีประวัติแต้ม",
-    lineTitle: "เชื่อมต่อ LINE", lineHint: "เร็วๆ นี้ — เก็บแต้มข้ามเครื่องและรับข่าวสาร", soon: "เร็วๆ นี้",
+    lineTitle: "เชื่อมต่อ LINE", lineHint: "เก็บแต้มข้ามเครื่องและรับข่าวสารโปรโมชัน", lineBtn: "เชื่อมต่อ",
+    lineConnected: "เชื่อมต่อ LINE แล้ว", lineConnecting: "กำลังเชื่อมต่อ…", lineFail: "เชื่อมต่อ LINE ไม่สำเร็จ",
     home: "เพิ่มหน้านี้ไปที่หน้าจอหลักเพื่อเปิดบัตรสมาชิกได้ง่ายๆ", loading: "กำลังโหลด…", loadFail: "โหลดไม่สำเร็จ",
     locale: "th-TH",
   },
@@ -58,13 +60,29 @@ const STR = {
     addInfo: "Add details", name: "Name", namePh: "Your name", birthday: "Birthday", cancel: "Cancel", save: "Save",
     promos: "Promotions", noPromos: "No promotions right now — check back soon 🎉",
     history: "Point history", noHistory: "No point history yet",
-    lineTitle: "Connect LINE", lineHint: "Coming soon — keep points across devices and get news", soon: "Soon",
+    lineTitle: "Connect LINE", lineHint: "Keep your points across devices and get promo news", lineBtn: "Connect",
+    lineConnected: "LINE connected", lineConnecting: "Connecting…", lineFail: "Couldn’t connect LINE",
     home: "Add this page to your home screen for quick access", loading: "Loading…", loadFail: "Couldn’t load",
     locale: "en-GB",
   },
 } as const;
 
 const isNamed = (m: Member) => !!m.full_name && m.full_name !== "Guest Member";
+
+// Load the LINE LIFF SDK on demand (public wallet page — external scripts are fine).
+async function loadLiff(): Promise<any> {
+  const w = window as any;
+  if (w.liff) return w.liff;
+  await new Promise<void>((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://static.line-scdn.net/liff/edge/2/sdk.js";
+    s.async = true;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error("LIFF SDK failed to load"));
+    document.head.appendChild(s);
+  });
+  return (window as any).liff;
+}
 
 function WalletPage() {
   const [lang, setLang] = useState<Lang>("th");
@@ -79,6 +97,7 @@ function WalletPage() {
   const [name, setName] = useState("");
   const [birthday, setBirthday] = useState("");
   const [saving, setSaving] = useState(false);
+  const [lineBusy, setLineBusy] = useState(false);
 
   useEffect(() => {
     const saved = typeof window !== "undefined" ? (localStorage.getItem("lonmoh_wallet_lang") as Lang | null) : null;
@@ -99,7 +118,47 @@ function WalletPage() {
     return data.member as Member;
   };
 
-  useEffect(() => { setLoading(true); void load().finally(() => setLoading(false)); }, []);
+  useEffect(() => { setLoading(true); void load().finally(() => { setLoading(false); void initLiff(); }); }, []);
+
+  // Send a verified LINE ID token to link this wallet to the customer's LINE id.
+  const linkLine = async (idToken: string) => {
+    const res = await fetch("/api/public/wallet-line", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ guest_token: walletToken(), id_token: idToken }),
+    });
+    const data = await res.json().catch(() => null);
+    if (res.ok) { setMember(data.member as Member); setHistory((data.history ?? []) as LedgerRow[]); }
+    else setError(data?.error ?? STR.th.lineFail);
+  };
+
+  // On load: if the user already logged in with LINE (e.g. just returned from the
+  // login redirect), link automatically.
+  const initLiff = async () => {
+    try {
+      const liff = await loadLiff();
+      await liff.init({ liffId: LINE_LIFF_ID });
+      if (liff.isLoggedIn()) {
+        const idToken = liff.getIDToken();
+        if (idToken) await linkLine(idToken);
+      }
+    } catch { /* LINE is optional — ignore init failures */ }
+  };
+
+  const connectLine = async () => {
+    setLineBusy(true);
+    try {
+      const liff = await loadLiff();
+      await liff.init({ liffId: LINE_LIFF_ID });
+      if (!liff.isLoggedIn()) { liff.login(); return; } // redirects to LINE, then back here
+      const idToken = liff.getIDToken();
+      if (idToken) await linkLine(idToken);
+    } catch (e: any) {
+      setError(e?.message ?? s.lineFail);
+    } finally {
+      setLineBusy(false);
+    }
+  };
 
   const saveProfile = async () => {
     if (!name.trim() && !birthday) { setEditOpen(false); return; }
@@ -216,15 +275,17 @@ function WalletPage() {
           </CardContent>
         </Card>
 
-        {/* LINE placeholder */}
-        <Card className="border-dashed">
+        {/* LINE connect */}
+        <Card className={member?.line_user_id ? "border-green-300 bg-green-50" : "border-dashed"}>
           <CardContent className="p-4 flex items-center gap-3">
             <MessageCircle className="h-5 w-5 text-green-600 flex-none" />
             <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium">{s.lineTitle}</div>
-              <div className="text-xs text-muted-foreground">{s.lineHint}</div>
+              <div className="text-sm font-medium">{member?.line_user_id ? s.lineConnected : s.lineTitle}</div>
+              {!member?.line_user_id && <div className="text-xs text-muted-foreground">{s.lineHint}</div>}
             </div>
-            <Button variant="outline" size="sm" disabled>{s.soon}</Button>
+            {member?.line_user_id
+              ? <Check className="h-5 w-5 text-green-600 flex-none" />
+              : <Button size="sm" onClick={connectLine} disabled={lineBusy}>{lineBusy ? s.lineConnecting : s.lineBtn}</Button>}
           </CardContent>
         </Card>
 

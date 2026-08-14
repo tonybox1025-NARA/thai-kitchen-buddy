@@ -16,7 +16,7 @@ function createPublicServerClient() {
   });
 }
 
-const MEMBER_COLS = "id,full_name,nickname,current_points,member_level,member_group_en,birthday,phone,created_at";
+const MEMBER_COLS = "id,full_name,nickname,current_points,member_level,member_group_en,birthday,phone,created_at,line_user_id";
 
 const Body = z.object({
   guest_token: z.string().min(20).max(120),
