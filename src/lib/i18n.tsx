@@ -232,6 +232,8 @@ const dict: Dict = {
   ord_close_failed: { th: "ปิดโต๊ะไม่สำเร็จ", en: "Failed to close table" },
   ord_bill_sent: { th: "ส่งบิลไปเครื่องพิมพ์แล้ว", en: "Bill sent to printer" },
   ord_all: { th: "ทั้งหมด", en: "All" },
+  net_reconnecting: { th: "กำลังเชื่อมต่อใหม่…", en: "Reconnecting…" },
+  net_offline: { th: "ออฟไลน์", en: "Offline" },
   // login
   device_login: { th: "เข้าใช้งานเครื่อง", en: "Device sign in" },
   email: { th: "อีเมล", en: "Email" },

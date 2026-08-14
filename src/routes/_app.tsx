@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import { LanguageToggle } from "@/components/LanguageToggle";
+import { ConnectionStatus } from "@/components/ConnectionStatus";
 import { PinKeypad } from "@/components/PinKeypad";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -95,6 +96,7 @@ function AppLayout() {
           })}
         </nav>
         <div className="ml-auto flex items-center gap-2">
+          <ConnectionStatus />
           <LanguageToggle />
           <Button variant="outline" size="sm" onClick={() => setStaff(null)} className="gap-2">
             <UserCircle2 className="h-4 w-4" />

@@ -41,6 +41,7 @@ const T = {
     set_select1: "เลือก 1", set_select2: "เลือก 2", set_free: "ฟรี",
     // add-ons
     add_ons: "ท็อปปิ้ง / เพิ่มเติม",
+    submit_slow: "การเชื่อมต่อช้า ยังไม่ได้ส่งออเดอร์ ลองอีกครั้งหรือแจ้งพนักงานค่ะ",
   },
   en: {
     menu: "Menu", table: "Table", cart: "Cart", add: "Add", submit: "Submit order",
@@ -55,6 +56,7 @@ const T = {
     set_select1: "Select 1", set_select2: "Select 2", set_free: "FREE",
     // add-ons
     add_ons: "Add-ons",
+    submit_slow: "Connection is slow — your order was not sent. Please try again or tell staff.",
   },
 };
 
@@ -427,10 +429,16 @@ function CustomerMenu() {
   const submit = async () => {
     if (cart.length === 0) return;
     setSubmitting(true);
+    // Time out after 15s so a stalled connection shows a clear message instead of
+    // spinning forever. No auto-retry (would risk double-submitting the order) —
+    // the customer taps again, warned that it may not have gone through.
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 15000);
     try {
       const res = await fetch("/api/public/qr-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: ac.signal,
         body: JSON.stringify({
           table_code: tableCode,
           items: cart.map((c) => ({
@@ -446,8 +454,11 @@ function CustomerMenu() {
       setCart([]);
       setSubmitted(true);
     } catch (e) {
-      toast.error(String((e as Error).message));
+      const err = e as Error;
+      const slow = err.name === "AbortError" || err.message === "Failed to fetch";
+      toast.error(slow ? tr.submit_slow : String(err.message));
     } finally {
+      clearTimeout(timer);
       setSubmitting(false);
     }
   };
