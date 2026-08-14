@@ -272,7 +272,9 @@ function PaymentPage() {
 
   const paid = payments.reduce((s, p) => s + Number(p.amount), 0);
   const remaining = Math.max(0, total - paid);
-  const earnPoints = loyaltyEnabled && selectedMember ? Math.max(0, Math.floor(total * loyaltyPointsPerBaht)) : 0;
+  // Rule (placeholder until owner confirms with manager): no earning on a bill
+  // where points were redeemed, so redeemed points actually deplete the balance.
+  const earnPoints = loyaltyEnabled && selectedMember && pointsRedeemed <= 0 ? Math.max(0, Math.floor(total * loyaltyPointsPerBaht)) : 0;
   const paymentMethodLabel = (method: PaymentMethod) => (
     method === "cash" ? t("cash")
     : method === "qr" ? t("qr_transfer")
@@ -620,7 +622,7 @@ function PaymentPage() {
     }
 
     const token = makeClaimToken();
-    const points = Math.max(0, Math.floor(total * loyaltyPointsPerBaht));
+    const points = pointsRedeemed > 0 ? 0 : Math.max(0, Math.floor(total * loyaltyPointsPerBaht));
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString();
     const { error } = await supabase.from("loyalty_claim_tokens").insert({
       token,
