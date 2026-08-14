@@ -141,10 +141,12 @@ export type Database = {
           discount_amount: number
           discount_note: string | null
           id: string
+          is_test: boolean
           member_discount_amount: number
           member_id: string | null
           order_id: string
           paid_at: string | null
+          points_redeemed: number
           rounding_adjustment: number
           rounding_mode: string
           service_fee_amount: number
@@ -163,10 +165,12 @@ export type Database = {
           discount_amount?: number
           discount_note?: string | null
           id?: string
+          is_test?: boolean
           member_discount_amount?: number
           member_id?: string | null
           order_id: string
           paid_at?: string | null
+          points_redeemed?: number
           rounding_adjustment?: number
           rounding_mode?: string
           service_fee_amount?: number
@@ -185,10 +189,12 @@ export type Database = {
           discount_amount?: number
           discount_note?: string | null
           id?: string
+          is_test?: boolean
           member_discount_amount?: number
           member_id?: string | null
           order_id?: string
           paid_at?: string | null
+          points_redeemed?: number
           rounding_adjustment?: number
           rounding_mode?: string
           service_fee_amount?: number
@@ -765,6 +771,7 @@ export type Database = {
           order_number: string | null
           shift_id: string | null
           source: Database["public"]["Enums"]["order_source"]
+          is_test: boolean
           status: Database["public"]["Enums"]["order_status"]
           table_id: string | null
         }
@@ -779,6 +786,7 @@ export type Database = {
           order_number?: string | null
           shift_id?: string | null
           source?: Database["public"]["Enums"]["order_source"]
+          is_test?: boolean
           status?: Database["public"]["Enums"]["order_status"]
           table_id?: string | null
         }
@@ -793,6 +801,7 @@ export type Database = {
           order_number?: string | null
           shift_id?: string | null
           source?: Database["public"]["Enums"]["order_source"]
+          is_test?: boolean
           status?: Database["public"]["Enums"]["order_status"]
           table_id?: string | null
         }
@@ -984,6 +993,7 @@ export type Database = {
           created_at: string
           guests: number
           has_qr_alert: boolean
+          is_test: boolean
           id: string
           pos_x: number
           pos_y: number
@@ -995,6 +1005,7 @@ export type Database = {
           created_at?: string
           guests?: number
           has_qr_alert?: boolean
+          is_test?: boolean
           id?: string
           pos_x?: number
           pos_y?: number
@@ -1006,6 +1017,7 @@ export type Database = {
           created_at?: string
           guests?: number
           has_qr_alert?: boolean
+          is_test?: boolean
           id?: string
           pos_x?: number
           pos_y?: number

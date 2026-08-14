@@ -56,7 +56,7 @@ export const Route = createFileRoute("/api/public/qr-order")({
         const { table_code, guests, items } = parsed.data;
 
         const { data: table, error: tableErr } = await supabase
-          .from("restaurant_tables").select("id,status,guests").eq("code", table_code).maybeSingle();
+          .from("restaurant_tables").select("id,status,guests,is_test").eq("code", table_code).maybeSingle();
         if (tableErr) return new Response(`DB error: ${tableErr.message}`, { status: 500 });
         if (!table) return new Response("Table not found", { status: 404 });
 
@@ -109,6 +109,7 @@ export const Route = createFileRoute("/api/public/qr-order")({
             guests: guests ?? Math.max(1, table.guests || 1),
             shift_id: shift?.id ?? null,
             source: "qr",
+            is_test: (table as any).is_test ?? false,
           }).select("id").single();
           if (orderErr || !newOrder) return new Response(orderErr?.message ?? "Failed to create order", { status: 500 });
           order = newOrder;

@@ -40,9 +40,9 @@ function Dashboard() {
       }
       const [{ data: b }, { data: voidRows }, { data: cancelledOrds }] = await Promise.all([
         supabase.from("bills").select("id,order_id,total,subtotal,discount_amount,member_discount_amount")
-          .eq("status","paid").in("shift_id", shiftIds),
+          .eq("status","paid").in("shift_id", shiftIds).not("is_test", "is", true),
         supabase.from("voids").select("amount").in("shift_id", shiftIds),
-        supabase.from("orders").select("id").in("shift_id", shiftIds).eq("status","cancelled"),
+        supabase.from("orders").select("id").in("shift_id", shiftIds).eq("status","cancelled").not("is_test", "is", true),
       ]);
       setBills((b ?? []) as typeof bills);
       setVoidsTotal((voidRows ?? []).reduce((s, v) => s + Number(v.amount), 0));

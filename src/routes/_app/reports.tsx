@@ -182,7 +182,7 @@ function Reports() {
   }, []);
 
   const buildReport = async (s: Shift): Promise<ReportData> => {
-    const { data: bills } = await supabase.from("bills").select("id,total,subtotal,discount_amount,member_discount_amount,order_id").eq("shift_id", s.id).eq("status", "paid");
+    const { data: bills } = await supabase.from("bills").select("id,total,subtotal,discount_amount,member_discount_amount,order_id").eq("shift_id", s.id).eq("status", "paid").not("is_test", "is", true);
     const billIds = (bills ?? []).map((b) => b.id);
     const orderIds = (bills ?? []).map((b) => (b as any).order_id).filter(Boolean) as string[];
     const [{ data: pays }, { data: voids }, { data: refunds }, { data: cancelledOrds }, { data: orderSources }, { data: billDiscs }] = await Promise.all([
@@ -191,7 +191,7 @@ function Reports() {
         : Promise.resolve({ data: [] as { method: string; amount: number; tip_amount: number; created_at: string }[], error: null }),
       supabase.from("voids").select("amount").eq("shift_id", s.id),
       supabase.from("refunds").select("amount").eq("shift_id", s.id),
-      supabase.from("orders").select("id").eq("shift_id", s.id).eq("status", "cancelled"),
+      supabase.from("orders").select("id").eq("shift_id", s.id).eq("status", "cancelled").not("is_test", "is", true),
       orderIds.length
         ? supabase.from("orders").select("id,source").in("id", orderIds)
         : Promise.resolve({ data: [] as { id: string; source: string }[], error: null }),
@@ -308,7 +308,7 @@ function Reports() {
       // Fetch paid bills for this shift
       const { data: bills } = await supabase
         .from("bills").select("id,total,paid_at,order_id")
-        .eq("shift_id", shift.id).eq("status", "paid").order("paid_at");
+        .eq("shift_id", shift.id).eq("status", "paid").not("is_test", "is", true).order("paid_at");
       if (!bills?.length) { toast.error(t("rep_no_bills")); return; }
 
       const billIds = bills.map((b) => b.id);
@@ -621,6 +621,7 @@ function BillHistoryTab() {
       const { data: rawBills } = await supabase
         .from("bills")
         .select("id,total,paid_at,order_id")
+        .not("is_test", "is", true)
         .eq("status", "paid")
         .gte("paid_at", fromDt.toISOString())
         .lte("paid_at", toDt.toISOString())
@@ -800,6 +801,7 @@ function ItemSalesTab() {
       const { data: bills } = await supabase
         .from("bills")
         .select("id,order_id")
+        .not("is_test", "is", true)
         .eq("status", "paid")
         .gte("paid_at", fromDt.toISOString())
         .lte("paid_at", toDt.toISOString())
@@ -1172,6 +1174,7 @@ function CancelledOrdersSection({ shiftId }: { shiftId: string }) {
           .from("orders")
           .select("*")
           .eq("shift_id", shiftId)
+          .not("is_test", "is", true)
           .eq("status", "cancelled")
           .order("closed_at", { ascending: false });
 
@@ -1270,6 +1273,7 @@ function CancelledOrdersTab() {
         .from("orders")
         .select("id,cancel_reason,closed_at,table_id,closed_by")
         .eq("status", "cancelled")
+        .not("is_test", "is", true)
         .gte("closed_at", fromDt.toISOString())
         .lte("closed_at", toDt.toISOString())
         .order("closed_at", { ascending: false })

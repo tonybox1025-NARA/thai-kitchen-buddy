@@ -16,7 +16,7 @@ export const Route = createFileRoute("/_app/pos")({ component: PosPage });
 type RTable = {
   id: string; code: string; capacity: number;
   status: "available" | "occupied" | "bill_requested";
-  guests: number; pos_x: number; pos_y: number; has_qr_alert: boolean;
+  guests: number; pos_x: number; pos_y: number; has_qr_alert: boolean; is_test?: boolean;
 };
 
 type SpecialOrder = {
@@ -121,6 +121,7 @@ function PosPage() {
     }
     const { data: order, error } = await supabase.from("orders").insert({
       table_id: openTable.id, guests, opened_by: staff.id, shift_id: shift?.id, source: "pos",
+      is_test: openTable.is_test ?? openTable.code === "TEST",
     }).select("id").single();
     if (error || !order) { toast.error(error?.message || "Failed"); return null; }
     await supabase.from("restaurant_tables").update({ status: "occupied", guests }).eq("id", openTable.id);
@@ -306,7 +307,7 @@ function PosPage() {
           <button
             key={tbl.id}
             onClick={() => onTableClick(tbl)}
-            className={`relative aspect-square rounded-xl shadow-sm hover:shadow-md transition-all ${tbl.has_qr_alert ? "alert-flash" : tbl.code === "TEST" ? "bg-amber-500 text-white ring-2 ring-amber-300" : colorFor(tbl.status)} flex flex-col items-center justify-center gap-1 p-2`}
+            className={`relative aspect-square rounded-xl shadow-sm hover:shadow-md transition-all ${tbl.has_qr_alert ? "alert-flash" : (tbl.is_test ?? tbl.code === "TEST") ? "bg-black text-white ring-2 ring-neutral-500" : colorFor(tbl.status)} flex flex-col items-center justify-center gap-1 p-2`}
           >
             {tbl.has_qr_alert && (
               <>

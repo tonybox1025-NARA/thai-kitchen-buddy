@@ -649,9 +649,13 @@ function PaymentPage() {
     if (ord?.table_id) {
       await supabase.from("restaurant_tables").update({ status: "available", guests: 0, has_qr_alert: false }).eq("id", ord.table_id);
     }
-    await redeemLoyaltyPoints();
-    await awardLoyaltyPoints();
-    const loyaltyClaim = await ensureLoyaltyClaim();
+    // Test tables must not touch real member points or issue loyalty claims.
+    const isTestBill = (bill as any).is_test === true;
+    if (!isTestBill) {
+      await redeemLoyaltyPoints();
+      await awardLoyaltyPoints();
+    }
+    const loyaltyClaim = isTestBill ? null : await ensureLoyaltyClaim();
     await printCounter({
       kind: "receipt", bill_id: bill.id, restaurant: restName, table: tableCode,
       logoUrl: receiptLogoUrl || undefined,

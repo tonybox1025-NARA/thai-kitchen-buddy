@@ -42,8 +42,8 @@ function LivePage() {
   const load = async () => {
     // Tables + open orders (for how long each table has been seated)
     const [{ data: tbls }, { data: openOrders }, { data: shift }] = await Promise.all([
-      supabase.from("restaurant_tables").select("id,code,capacity,status,guests").order("code"),
-      supabase.from("orders").select("table_id,opened_at").eq("status", "open").not("table_id", "is", null),
+      supabase.from("restaurant_tables").select("id,code,capacity,status,guests").not("is_test", "is", true).order("code"),
+      supabase.from("orders").select("table_id,opened_at").eq("status", "open").not("table_id", "is", null).not("is_test", "is", true),
       supabase.from("shifts").select("id").eq("status", "open").maybeSingle(),
     ]);
     setTables((tbls ?? []) as RTable[]);
@@ -56,7 +56,7 @@ function LivePage() {
     // Today's paid sales for the open shift
     setHasShift(!!shift);
     if (shift?.id) {
-      const { data: bills } = await supabase.from("bills").select("id,total,paid_at").eq("status", "paid").eq("shift_id", shift.id);
+      const { data: bills } = await supabase.from("bills").select("id,total,paid_at").eq("status", "paid").eq("shift_id", shift.id).not("is_test", "is", true);
       const ids = (bills ?? []).map((b) => b.id);
       setBillCount((bills ?? []).length);
       setSalesNet((bills ?? []).reduce((s, b) => s + Number(b.total), 0));
@@ -76,7 +76,7 @@ function LivePage() {
         ids.length
           ? supabase.from("payments").select("method,amount").in("bill_id", ids)
           : Promise.resolve({ data: [] as { method: string; amount: number }[] }),
-        supabase.from("orders").select("id").eq("shift_id", shift.id),
+        supabase.from("orders").select("id").eq("shift_id", shift.id).not("is_test", "is", true),
       ]);
       const m: Record<string, number> = { cash: 0, qr: 0, gov_qr: 0, card: 0 };
       for (const p of pays ?? []) m[p.method] = (m[p.method] ?? 0) + Number(p.amount);

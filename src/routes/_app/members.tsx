@@ -199,6 +199,7 @@ async function fetchMemberActivity(): Promise<Map<string, MemberActivity>> {
       .from("bills")
       .select("member_id,total,paid_at")
       .not("member_id", "is", null)
+      .not("is_test", "is", true)
       .in("status", ["paid", "partial_refund"])
       .range(from, from + pageSize - 1);
     if (error) throw error;
