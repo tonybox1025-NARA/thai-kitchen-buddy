@@ -21,18 +21,28 @@ function createPublicServerClient() {
 
 const sum = (rows: any[], f: (r: any) => number) => rows.reduce((s, r) => s + (Number(f(r)) || 0), 0);
 
+// Called cross-origin from the LONMOH Manager app, so allow CORS.
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Headers": "*",
+};
+const json = (obj: unknown, status = 200) =>
+  new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json", ...CORS } });
+
 export const Route = createFileRoute("/api/public/daily-summary")({
   server: {
     handlers: {
+      OPTIONS: async () => new Response(null, { status: 204, headers: CORS }),
       GET: async ({ request }) => {
         const supabase = createPublicServerClient();
-        if (!supabase) return new Response("Unavailable", { status: 503 });
+        if (!supabase) return new Response("Unavailable", { status: 503, headers: CORS });
 
         const url = new URL(request.url);
         const date = url.searchParams.get("date"); // YYYY-MM-DD (business day)
         const key = url.searchParams.get("key");
-        if (key !== SYNC_KEY) return Response.json({ error: "Unauthorized" }, { status: 401 });
-        if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return Response.json({ error: "Bad date" }, { status: 400 });
+        if (key !== SYNC_KEY) return json({ error: "Unauthorized" }, 401);
+        if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return json({ error: "Bad date" }, 400);
 
         const sb = supabase as any;
 
@@ -40,7 +50,7 @@ export const Route = createFileRoute("/api/public/daily-summary")({
         const { data: shifts } = await sb.from("shifts").select("id").eq("business_day", date);
         const shiftIds = (shifts ?? []).map((s: any) => s.id);
         if (shiftIds.length === 0) {
-          return Response.json({ date, bill_count: 0, has_data: false });
+          return json({ date, bill_count: 0, has_data: false });
         }
 
         const { data: bills } = await sb.from("bills")
@@ -58,7 +68,7 @@ export const Route = createFileRoute("/api/public/daily-summary")({
         const payRows = pays ?? [];
         const byMethod = (m: string) => sum(payRows.filter((p: any) => p.method === m), (p: any) => p.amount);
 
-        return Response.json({
+        return json({
           date,
           has_data: billRows.length > 0,
           bill_count: billRows.length,
