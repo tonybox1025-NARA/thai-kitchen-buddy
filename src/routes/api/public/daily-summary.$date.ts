@@ -49,7 +49,7 @@ export const Route = createFileRoute("/api/public/daily-summary/$date")({
         if (shiftIds.length === 0) return json({ date, bill_count: 0, has_data: false });
 
         const { data: bills } = await sb.from("bills")
-          .select("id,subtotal,total,member_discount_amount,discount_amount,vat_amount")
+          .select("id,subtotal,total,member_discount_amount,points_redeemed,discount_amount,vat_amount")
           .in("shift_id", shiftIds).eq("status", "paid").not("is_test", "is", true);
         const billRows = bills ?? [];
         const billIds = billRows.map((b: any) => b.id);
@@ -69,7 +69,9 @@ export const Route = createFileRoute("/api/public/daily-summary/$date")({
           bill_count: billRows.length,
           total_product_sales: sum(billRows, (b) => b.subtotal),
           refund: sum(refunds ?? [], (r) => r.amount),
-          mb_discount: sum(billRows, (b) => b.member_discount_amount),
+          // MB Discount = all member-related reductions: member discount + points used
+          // (1 point = 1 THB), matching the owner's "everything member goes here" habit.
+          mb_discount: sum(billRows, (b) => b.member_discount_amount) + sum(billRows, (b) => b.points_redeemed),
           discount: sum(billRows, (b) => b.discount_amount),
           vat: sum(billRows, (b) => b.vat_amount),
           net_sales: sum(billRows, (b) => b.total),
