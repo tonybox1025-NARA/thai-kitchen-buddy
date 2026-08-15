@@ -466,6 +466,7 @@ export type Database = {
           legacy_source_row: number | null
           legacy_total_spend: number
           legacy_visit_count: number
+          line_user_id: string | null
           member_code: string | null
           member_group_en: string | null
           member_group_th: string | null
@@ -494,6 +495,7 @@ export type Database = {
           legacy_source_row?: number | null
           legacy_total_spend?: number
           legacy_visit_count?: number
+          line_user_id?: string | null
           member_code?: string | null
           member_group_en?: string | null
           member_group_th?: string | null
@@ -522,6 +524,7 @@ export type Database = {
           legacy_source_row?: number | null
           legacy_total_spend?: number
           legacy_visit_count?: number
+          line_user_id?: string | null
           member_code?: string | null
           member_group_en?: string | null
           member_group_th?: string | null
@@ -766,12 +769,12 @@ export type Database = {
           closed_by: string | null
           guests: number
           id: string
+          is_test: boolean
           opened_at: string
           opened_by: string | null
           order_number: string | null
           shift_id: string | null
           source: Database["public"]["Enums"]["order_source"]
-          is_test: boolean
           status: Database["public"]["Enums"]["order_status"]
           table_id: string | null
         }
@@ -781,12 +784,12 @@ export type Database = {
           closed_by?: string | null
           guests?: number
           id?: string
+          is_test?: boolean
           opened_at?: string
           opened_by?: string | null
           order_number?: string | null
           shift_id?: string | null
           source?: Database["public"]["Enums"]["order_source"]
-          is_test?: boolean
           status?: Database["public"]["Enums"]["order_status"]
           table_id?: string | null
         }
@@ -796,12 +799,12 @@ export type Database = {
           closed_by?: string | null
           guests?: number
           id?: string
+          is_test?: boolean
           opened_at?: string
           opened_by?: string | null
           order_number?: string | null
           shift_id?: string | null
           source?: Database["public"]["Enums"]["order_source"]
-          is_test?: boolean
           status?: Database["public"]["Enums"]["order_status"]
           table_id?: string | null
         }
@@ -993,8 +996,8 @@ export type Database = {
           created_at: string
           guests: number
           has_qr_alert: boolean
-          is_test: boolean
           id: string
+          is_test: boolean
           pos_x: number
           pos_y: number
           status: Database["public"]["Enums"]["table_status"]
@@ -1005,8 +1008,8 @@ export type Database = {
           created_at?: string
           guests?: number
           has_qr_alert?: boolean
-          is_test?: boolean
           id?: string
+          is_test?: boolean
           pos_x?: number
           pos_y?: number
           status?: Database["public"]["Enums"]["table_status"]
@@ -1017,8 +1020,8 @@ export type Database = {
           created_at?: string
           guests?: number
           has_qr_alert?: boolean
-          is_test?: boolean
           id?: string
+          is_test?: boolean
           pos_x?: number
           pos_y?: number
           status?: Database["public"]["Enums"]["table_status"]
@@ -1027,6 +1030,7 @@ export type Database = {
       }
       settings: {
         Row: {
+          address: string | null
           current_business_day: string
           gov_qr_customer_percent: number
           gov_qr_enabled: boolean
@@ -1042,6 +1046,7 @@ export type Database = {
           printer_kitchen_ip: string | null
           qr_time_buckets: Json
           receipt_logo_url: string | null
+          receipt_promo: string | null
           restaurant_name: string
           rounding_mode: string
           service_fee_rate: number
@@ -1052,6 +1057,7 @@ export type Database = {
           vat_rate: number
         }
         Insert: {
+          address?: string | null
           current_business_day?: string
           gov_qr_customer_percent?: number
           gov_qr_enabled?: boolean
@@ -1067,6 +1073,7 @@ export type Database = {
           printer_kitchen_ip?: string | null
           qr_time_buckets?: Json
           receipt_logo_url?: string | null
+          receipt_promo?: string | null
           restaurant_name?: string
           rounding_mode?: string
           service_fee_rate?: number
@@ -1077,6 +1084,7 @@ export type Database = {
           vat_rate?: number
         }
         Update: {
+          address?: string | null
           current_business_day?: string
           gov_qr_customer_percent?: number
           gov_qr_enabled?: boolean
@@ -1092,6 +1100,7 @@ export type Database = {
           printer_kitchen_ip?: string | null
           qr_time_buckets?: Json
           receipt_logo_url?: string | null
+          receipt_promo?: string | null
           restaurant_name?: string
           rounding_mode?: string
           service_fee_rate?: number
