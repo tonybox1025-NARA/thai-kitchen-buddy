@@ -1268,6 +1268,24 @@ export type Database = {
       }
     }
     Views: {
+      settings_public: {
+        Row: {
+          id: number | null
+          restaurant_name: string | null
+          starting_cash: number | null
+        }
+        Insert: {
+          id?: number | null
+          restaurant_name?: string | null
+          starting_cash?: number | null
+        }
+        Update: {
+          id?: number | null
+          restaurant_name?: string | null
+          starting_cash?: number | null
+        }
+        Relationships: []
+      }
       staff_public: {
         Row: {
           active: boolean | null
@@ -1296,13 +1314,17 @@ export type Database = {
     Functions: {
       create_staff: {
         Args: {
+          _admin_pin?: string
           _name: string
           _pin: string
           _role: Database["public"]["Enums"]["app_role"]
         }
         Returns: string
       }
-      delete_staff: { Args: { _id: string }; Returns: undefined }
+      delete_staff: {
+        Args: { _admin_pin?: string; _id: string }
+        Returns: undefined
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1310,6 +1332,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_admin_pin: { Args: { _pin: string }; Returns: boolean }
       list_staff: {
         Args: never
         Returns: {
@@ -1320,7 +1343,7 @@ export type Database = {
         }[]
       }
       set_staff_pin: {
-        Args: { _pin: string; _staff_id: string }
+        Args: { _admin_pin?: string; _pin: string; _staff_id: string }
         Returns: undefined
       }
       verify_staff_pin: {
