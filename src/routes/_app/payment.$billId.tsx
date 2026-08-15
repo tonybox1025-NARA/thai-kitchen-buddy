@@ -20,6 +20,16 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/payment/$billId")({ component: PaymentPage });
 
+// Loyalty redemption coupon tiers (shop rule): fixed points → baht discount.
+const REDEEM_TIERS = [
+  { points: 500, baht: 25 },
+  { points: 1000, baht: 50 },
+  { points: 2000, baht: 100 },
+  { points: 5000, baht: 300 },
+  { points: 10000, baht: 600 },
+  { points: 15000, baht: 1000 },
+];
+
 type Bill = {
   id: string; order_id: string; subtotal: number; discount_amount: number;
   member_id: string | null;
@@ -252,12 +262,10 @@ function PaymentPage() {
   // ── Derived totals ──────────────────────────────────────────────────────────
   const subtotal = items.reduce((s, i) => s + i.qty * Number(i.unit_price), 0);
   const totalDisc = appliedDiscount?.amount ?? 0;
-  // Redeemed loyalty points act as a discount: 1 point = 1 THB off.
-  const pointsDiscount = pointsRedeemed;
-  // Can't spend more points than the member has, nor more than the pre-points bill.
-  const maxRedeem = selectedMember
-    ? Math.min(Math.floor(Number(selectedMember.current_points ?? 0)), Math.max(0, Math.floor(subtotal - totalDisc - memberDisc)))
-    : 0;
+  // Redemption uses fixed coupon tiers: pointsRedeemed holds the tier's point cost,
+  // and the baht discount comes from that tier (not 1:1).
+  const pointsDiscount = REDEEM_TIERS.find((tt) => tt.points === pointsRedeemed)?.baht ?? 0;
+  const maxRedeemBaht = Math.max(0, subtotal - totalDisc - memberDisc);
   const afterDisc = Math.max(0, subtotal - totalDisc - memberDisc - pointsDiscount);
   const { serviceFeeAmount, vatAmount, roundingAdjustment, total } = bill
     ? computeTotals(
@@ -272,9 +280,10 @@ function PaymentPage() {
 
   const paid = payments.reduce((s, p) => s + Number(p.amount), 0);
   const remaining = Math.max(0, total - paid);
-  // Rule (placeholder until owner confirms with manager): no earning on a bill
-  // where points were redeemed, so redeemed points actually deplete the balance.
-  const earnPoints = loyaltyEnabled && selectedMember && pointsRedeemed <= 0 ? Math.max(0, Math.floor(total * loyaltyPointsPerBaht)) : 0;
+  // Earn on the amount actually paid (net total, after any points redemption).
+  // Redemption tiers cost far more points than the discount is worth, so points
+  // still deplete meaningfully even with normal earning.
+  const earnPoints = loyaltyEnabled && selectedMember ? Math.max(0, Math.floor(total * loyaltyPointsPerBaht)) : 0;
   const paymentMethodLabel = (method: PaymentMethod) => (
     method === "cash" ? t("cash")
     : method === "qr" ? t("qr_transfer")
@@ -622,7 +631,7 @@ function PaymentPage() {
     }
 
     const token = makeClaimToken();
-    const points = pointsRedeemed > 0 ? 0 : Math.max(0, Math.floor(total * loyaltyPointsPerBaht));
+    const points = Math.max(0, Math.floor(total * loyaltyPointsPerBaht));
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString();
     const { error } = await supabase.from("loyalty_claim_tokens").insert({
       token,
@@ -883,23 +892,36 @@ function PaymentPage() {
                 <Label className="text-xs">{t("member_discount")}</Label>
                 <KeypadInput value={memberDisc} onChange={setMemberDisc} title={t("member_discount")} placeholder="0" />
               </div>
-              {selectedMember && Number(selectedMember.current_points ?? 0) > 0 && (
-                <div>
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs">
-                      {t("pay_use_points")} <span className="text-muted-foreground">({Number(selectedMember.current_points ?? 0).toLocaleString()} {t("loy_pts")})</span>
-                    </Label>
-                    <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setPointsRedeemed(maxRedeem)} disabled={maxRedeem <= 0}>
-                      {t("pay_points_max")}
-                    </Button>
+              {selectedMember && Number(selectedMember.current_points ?? 0) >= REDEEM_TIERS[0].points && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs">
+                    {t("pay_use_points")} <span className="text-muted-foreground">({Number(selectedMember.current_points ?? 0).toLocaleString()} {t("loy_pts")})</span>
+                  </Label>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {REDEEM_TIERS.map((tier) => {
+                      const canAfford = Number(selectedMember.current_points ?? 0) >= tier.points && tier.baht <= maxRedeemBaht;
+                      const isSel = pointsRedeemed === tier.points;
+                      return (
+                        <Button
+                          key={tier.points}
+                          type="button"
+                          variant={isSel ? "default" : "outline"}
+                          size="sm"
+                          className="h-auto flex-col py-1.5 leading-tight"
+                          disabled={!canAfford && !isSel}
+                          onClick={() => setPointsRedeemed(isSel ? 0 : tier.points)}
+                        >
+                          <span className="text-xs font-semibold">−{thb(tier.baht)}</span>
+                          <span className="text-[10px] opacity-70">{tier.points.toLocaleString()} {t("loy_pts")}</span>
+                        </Button>
+                      );
+                    })}
                   </div>
-                  <KeypadInput
-                    value={pointsRedeemed}
-                    onChange={(n) => setPointsRedeemed(Math.max(0, Math.min(maxRedeem, Math.floor(n))))}
-                    title={t("pay_use_points")}
-                    placeholder="0"
-                  />
-                  {pointsRedeemed > 0 && <p className="mt-1 text-xs font-medium text-primary">−{thb(pointsDiscount)}</p>}
+                  {pointsRedeemed > 0 && (
+                    <p className="text-xs font-medium text-primary">
+                      −{thb(pointsDiscount)} · {t("mem_current_points")}: {(Number(selectedMember.current_points ?? 0) - pointsRedeemed).toLocaleString()}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
