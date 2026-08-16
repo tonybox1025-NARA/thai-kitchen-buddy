@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Trash2, Plus, Printer, QrCode, Wifi, WifiOff, ChevronDown } from "lucide-react";
+import { Trash2, Plus, Printer, QrCode, Wifi, WifiOff, ChevronDown, LayoutGrid } from "lucide-react";
 import { toast } from "sonner";
 import { makeDriver, printInDedicatedDocument, type DriverId } from "@/lib/print/PrintService";
 import {
@@ -111,6 +111,7 @@ function SettingsPage() {
           <TabsTrigger value="ingredients">{t("ingredients")}</TabsTrigger>
           <TabsTrigger value="addons">{t("add_ons")}</TabsTrigger>
           <TabsTrigger value="kitchen-zones">{t("set_kitchen_zones")}</TabsTrigger>
+          <TabsTrigger value="tables">{t("set_tables")}</TabsTrigger>
           <TabsTrigger value="printers">{t("printers")}</TabsTrigger>
           <TabsTrigger value="qr">{t("qr_codes")}</TabsTrigger>
           <TabsTrigger value="staff">{t("staff")}</TabsTrigger>
@@ -120,6 +121,7 @@ function SettingsPage() {
         <TabsContent value="ingredients"><IngredientsTab /></TabsContent>
         <TabsContent value="addons"><AddonsTab /></TabsContent>
         <TabsContent value="kitchen-zones"><KitchenZonesTab /></TabsContent>
+        <TabsContent value="tables"><TablesTab /></TabsContent>
         <TabsContent value="printers"><PrintersTab /></TabsContent>
         <TabsContent value="qr"><QrCodesTab /></TabsContent>
         <TabsContent value="staff"><StaffTab /></TabsContent>
@@ -1664,6 +1666,104 @@ function StaffTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// Owner-editable table list: seat capacity, add / rename / delete. Writes go
+// through the logged-in admin session (RLS), so no code change needed to adjust.
+function TablesTab() {
+  const { t } = useI18n();
+  type Row = { id: string; code: string; capacity: number; is_test: boolean };
+  const [rows, setRows] = useState<Row[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const load = async () => {
+    const { data } = await supabase.from("restaurant_tables").select("id,code,capacity,is_test").order("code");
+    setRows(((data ?? []) as { id: string; code: string; capacity: number | null; is_test: boolean | null }[]).map((r) => ({
+      id: r.id, code: r.code, capacity: r.capacity ?? 0, is_test: r.is_test ?? false,
+    })));
+    setLoading(false);
+  };
+  useEffect(() => { void load(); }, []);
+
+  const setRow = (id: string, patch: Partial<Row>) =>
+    setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+
+  const saveAll = async () => {
+    setSaving(true);
+    try {
+      for (const r of rows) {
+        const code = r.code.trim();
+        if (!code) continue;
+        const { error } = await supabase.from("restaurant_tables").update({ code, capacity: r.capacity }).eq("id", r.id);
+        if (error) throw error;
+      }
+      toast.success(t("saved"));
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const addTable = async () => {
+    const nums = rows.map((r) => { const m = /^T(\d+)$/.exec(r.code); return m ? Number(m[1]) : 0; });
+    const next = String(Math.max(0, ...nums) + 1).padStart(2, "0");
+    const { error } = await supabase.from("restaurant_tables").insert({ code: `T${next}`, capacity: 4 });
+    if (error) { toast.error(error.message); return; }
+    await load();
+  };
+
+  const removeTable = async (r: Row) => {
+    if (!window.confirm(`${t("tbl_delete_confirm")} ${r.code}`)) return;
+    const { error } = await supabase.from("restaurant_tables").delete().eq("id", r.id);
+    if (error) { toast.error(error.message); return; }
+    setRows((rs) => rs.filter((x) => x.id !== r.id));
+    toast.success(t("saved"));
+  };
+
+  if (loading) return null;
+
+  return (
+    <div className="space-y-4 mt-4">
+      <Card className="max-w-xl">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <LayoutGrid className="h-4 w-4" /> {t("set_tables")}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-[1fr_7rem_2.5rem] items-center gap-2 px-1 text-xs text-muted-foreground">
+            <div>{t("tbl_code")}</div>
+            <div className="text-center">{t("tbl_seats")}</div>
+            <div />
+          </div>
+          {rows.map((r) => (
+            <div key={r.id} className="grid grid-cols-[1fr_7rem_2.5rem] items-center gap-2">
+              <div className="flex items-center gap-2">
+                <Input value={r.code} onChange={(e) => setRow(r.id, { code: e.target.value })} className="max-w-32" />
+                {r.is_test && <span className="rounded bg-black px-1.5 py-0.5 text-[10px] text-white">{t("tbl_is_test")}</span>}
+              </div>
+              <KeypadInput
+                value={r.capacity}
+                onChange={(n) => setRow(r.id, { capacity: Math.max(0, Math.floor(n)) })}
+                title={`${t("tbl_seats")} — ${r.code}`}
+                display={(n) => String(n)}
+              />
+              <Button variant="ghost" size="icon" onClick={() => removeTable(r)} aria-label="delete">
+                <Trash2 className="h-4 w-4 text-destructive" />
+              </Button>
+            </div>
+          ))}
+          <div className="flex gap-2 pt-2">
+            <Button variant="outline" onClick={addTable}><Plus className="mr-1 h-4 w-4" />{t("tbl_add")}</Button>
+            <Button onClick={saveAll} disabled={saving}>{saving ? "…" : t("save")}</Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
