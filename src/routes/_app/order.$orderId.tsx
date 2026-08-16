@@ -14,7 +14,7 @@ import { Plus, Minus, Trash2, ChefHat, Receipt, ArrowLeft, AlertTriangle, ArrowL
 import { ManagerPinDialog } from "@/components/ManagerPinDialog";
 import { SetMenuDialog } from "@/components/SetMenuDialog";
 import { SETS, type SetConfig } from "@/lib/set-menu";
-import { printCounter, type CounterPrintPayload } from "@/lib/counter-printer";
+import { printCounter, printKitchenJobs, type CounterPrintPayload } from "@/lib/counter-printer";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/order/$orderId")({ component: OrderPage });
@@ -309,7 +309,9 @@ function OrderPage() {
         ticketTotal: all.length,
       },
     }));
-    if (kitchenJobs.length > 0) await supabase.from("print_jobs").insert(kitchenJobs);
+    // Route through the active transport: direct raster print in the APK, or the
+    // print_jobs queue (picked up by the bridge) otherwise — same as before on web.
+    if (kitchenJobs.length > 0) await printKitchenJobs(kitchenJobs);
     await printCounter({ ...ticketPayload, language: "th" });
     toast.success(t("send_to_kitchen") + " ✓");
   };
