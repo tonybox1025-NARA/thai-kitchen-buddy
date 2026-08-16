@@ -15,6 +15,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Trash2, Plus, Printer, QrCode, Wifi, WifiOff, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { makeDriver, printInDedicatedDocument, type DriverId } from "@/lib/print/PrintService";
+import {
+  canPrintDirect, getPrintTransport, setPrintTransport, type PrintTransport,
+  getCounterLink, setCounterLink, type CounterLink, printDirect, probePrinter,
+} from "@/lib/counter-printer";
 import type { PrintJob } from "@/lib/print/types";
 import { ReceiptPreview72, receiptToHtml } from "@/components/print/ReceiptPreview72";
 import { KitchenTicketPreview72, kitchenToHtml } from "@/components/print/KitchenTicketPreview72";
@@ -528,6 +532,8 @@ function PrintersTab() {
         </CardContent>
       </Card>
 
+      <DirectPrintCard />
+
       <BrowserPrintTestCard />
     </div>
   );
@@ -667,6 +673,124 @@ function KitchenZonesTab() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+// Direct printing = the Android app composes ESC/POS (raster, so Thai + Burmese
+// print) and writes straight to the printer over LAN/USB/SUNMI. No bridge machine.
+// Only works inside the APK; a browser always falls back to the print_jobs queue.
+function DirectPrintCard() {
+  const { t } = useI18n();
+  const [transport, setTransport] = useState<PrintTransport>(getPrintTransport());
+  const [link, setLink] = useState<CounterLink>(getCounterLink());
+  const [busy, setBusy] = useState<string | null>(null);
+  const native = canPrintDirect();
+
+  const chooseTransport = (direct: boolean) => {
+    const next: PrintTransport = direct ? "direct" : "queue";
+    setPrintTransport(next);
+    setTransport(next);
+  };
+  const chooseLink = (usb: boolean) => {
+    const next: CounterLink = usb ? "usb" : "network";
+    setCounterLink(next);
+    setLink(next);
+  };
+
+  const testCounter = async () => {
+    setBusy("counter");
+    try {
+      await printDirect("counter", {
+        kind: "receipt",
+        restaurant: "ล้นหม้อ · LONMOH",
+        table: "TEST",
+        items: [{ name_th: "ผัดไทยกุ้งสด", name_en: "Pad Thai", qty: 1, unit_price: 120 }],
+        total: 120,
+        payments: [{ method: "cash", amount: 120 }],
+      });
+      toast.success("Test receipt sent ✓");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Print failed");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const testKitchen = async () => {
+    setBusy("kitchen");
+    try {
+      await printDirect("kitchen", {
+        kind: "order_ticket",
+        table: "TEST",
+        order_type: "new",
+        source: "pos",
+        sent_at: new Date().toISOString(),
+        lines: [{ qty: 2, name_th: "ผัดกะเพราหมู", name_my: "ဝက်သားနှင့်ကြက်သွန်ဖြူကြော်", name_en: "Basil Pork" }],
+      });
+      toast.success("Test kitchen ticket (TH + MY) sent ✓");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Print failed");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const probe = async (printer: "counter" | "kitchen") => {
+    setBusy(`probe-${printer}`);
+    try {
+      const r = await probePrinter(printer);
+      if (r.reachable) toast.success(`${printer} printer reachable ✓`);
+      else toast.error(`${printer}: ${r.error ?? "unreachable"}`);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Probe failed");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <Card className="max-w-xl">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Printer className="h-4 w-4" /> Direct printing (this device)
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {!native && (
+          <div className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
+            Direct printing runs only inside the LONMOH POS Android app. In a browser, jobs go to the print queue.
+          </div>
+        )}
+        <div className="flex items-center justify-between">
+          <div>
+            <Label>Print directly from this device</Label>
+            <p className="text-xs text-muted-foreground">Off = queue jobs for the bridge (default).</p>
+          </div>
+          <Switch checked={transport === "direct"} onCheckedChange={chooseTransport} disabled={!native} />
+        </div>
+        <div className="flex items-center justify-between">
+          <div>
+            <Label>Counter printer over USB</Label>
+            <p className="text-xs text-muted-foreground">Off = LAN (recommended). On = USB cable to this tablet.</p>
+          </div>
+          <Switch checked={link === "usb"} onCheckedChange={chooseLink} disabled={!native} />
+        </div>
+        <div className="flex flex-wrap gap-2 pt-1">
+          <Button variant="outline" size="sm" onClick={testCounter} disabled={!native || !!busy}>
+            <Printer className="h-4 w-4 mr-2" /> Test receipt
+          </Button>
+          <Button variant="outline" size="sm" onClick={testKitchen} disabled={!native || !!busy}>
+            <Printer className="h-4 w-4 mr-2" /> Test kitchen (TH+MY)
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => probe("counter")} disabled={!native || !!busy}>
+            Probe counter
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => probe("kitchen")} disabled={!native || !!busy}>
+            Probe kitchen
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

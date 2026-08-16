@@ -10,6 +10,7 @@ import { CountKeypad } from "@/components/CountKeypad";
 import { Bell, Users, X, ShoppingBag, UtensilsCrossed, Plus, QrCode } from "lucide-react";
 import { toast } from "sonner";
 import { playAlertBeep } from "@/lib/audio-alert";
+import { printCounter } from "@/lib/counter-printer";
 
 export const Route = createFileRoute("/_app/pos")({ component: PosPage });
 
@@ -142,15 +143,12 @@ function PosPage() {
     const id = await openTableOrder();
     if (!id || !code) return;
     const { data: cfg } = await supabase.from("settings").select("restaurant_name").eq("id", 1).maybeSingle();
-    await supabase.from("print_jobs").insert({
-      printer: "counter",
-      payload: {
-        kind: "table_qr",
-        table: code,
-        url: `${window.location.origin}/menu/${encodeURIComponent(code)}`,
-        restaurant: (cfg as { restaurant_name?: string } | null)?.restaurant_name ?? "Restaurant",
-        guests: seats,
-      } as never,
+    await printCounter({
+      kind: "table_qr",
+      table: code,
+      url: `${window.location.origin}/menu/${encodeURIComponent(code)}`,
+      restaurant: (cfg as { restaurant_name?: string } | null)?.restaurant_name ?? "Restaurant",
+      guests: seats,
     });
     toast.success(`QR printed · ${t("table")} ${code}`);
     setOpenTable(null);
