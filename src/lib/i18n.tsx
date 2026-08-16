@@ -151,6 +151,12 @@ const dict: Dict = {
   lbl_sort: { th: "ลำดับ", en: "Sort" },
   // settings page
   set_kitchen_zones: { th: "โซนครัว", en: "Kitchen zones" },
+  set_tables: { th: "โต๊ะ", en: "Tables" },
+  tbl_seats: { th: "ที่นั่ง", en: "Seats" },
+  tbl_add: { th: "เพิ่มโต๊ะ", en: "Add table" },
+  tbl_code: { th: "รหัสโต๊ะ", en: "Code" },
+  tbl_delete_confirm: { th: "ลบโต๊ะนี้?", en: "Delete this table?" },
+  tbl_is_test: { th: "โต๊ะทดสอบ", en: "Test table" },
   set_thai_name_required: { th: "ต้องกรอกชื่อภาษาไทย", en: "Thai name required" },
   set_add_ingredient: { th: "เพิ่มวัตถุดิบ", en: "Add Ingredient" },
   set_thai_name_req: { th: "ชื่อภาษาไทย *", en: "Thai name *" },
