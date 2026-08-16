@@ -11,6 +11,7 @@ import { Bell, Users, X, ShoppingBag, UtensilsCrossed, Plus, QrCode } from "luci
 import { toast } from "sonner";
 import { playAlertBeep } from "@/lib/audio-alert";
 import { printCounter } from "@/lib/counter-printer";
+import { isOffline } from "@/lib/online-status";
 
 export const Route = createFileRoute("/_app/pos")({ component: PosPage });
 
@@ -112,6 +113,7 @@ function PosPage() {
   // Ensure a shift, open an order for the table, mark it occupied. Returns order id.
   const openTableOrder = async (): Promise<string | null> => {
     if (!openTable || !staff) return null;
+    if (isOffline()) { toast.error(t("err_offline")); return null; }
     let { data: shift } = await supabase.from("shifts").select("id").eq("status", "open").maybeSingle();
     if (!shift) {
       const today = new Date().toISOString().slice(0, 10);
@@ -156,6 +158,7 @@ function PosPage() {
 
   const createSpecialOrder = async (source: "takeout" | "staff_meal") => {
     if (!staff) return;
+    if (isOffline()) { toast.error(t("err_offline")); return; }
     // Ensure shift is open
     let { data: shift } = await supabase.from("shifts").select("id").eq("status", "open").maybeSingle();
     if (!shift) {

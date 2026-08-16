@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { LayoutGrid, BarChart3, FileText, Settings, LogOut, UserCircle2, Heart, UtensilsCrossed, BadgePercent, Activity } from "lucide-react";
 import { installAudioUnlockListeners, unlockAudio } from "@/lib/audio-alert";
 import { useQrAlertCount } from "@/lib/qr-alert-count";
+import { OfflineBanner } from "@/components/OfflineBanner";
 
 export const Route = createFileRoute("/_app")({ component: AppLayout });
 
@@ -108,6 +109,7 @@ function AppLayout() {
           </Button>
         </div>
       </header>
+      <OfflineBanner />
       <main className="flex-1">
         <Outlet />
       </main>

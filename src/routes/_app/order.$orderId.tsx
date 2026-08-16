@@ -15,6 +15,7 @@ import { ManagerPinDialog } from "@/components/ManagerPinDialog";
 import { SetMenuDialog } from "@/components/SetMenuDialog";
 import { SETS, type SetConfig } from "@/lib/set-menu";
 import { printCounter, printKitchenJobs, type CounterPrintPayload } from "@/lib/counter-printer";
+import { isOffline } from "@/lib/online-status";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/order/$orderId")({ component: OrderPage });
@@ -207,6 +208,7 @@ function OrderPage() {
 
   const addToOrder = async () => {
     if (!selected) return;
+    if (isOffline()) { toast.error(t("err_offline")); return; }
     const addonsArr = Array.from(selectedAddons.values()).filter((a) => a.qty > 0);
     const addonPrice = addonsArr.reduce((s, a) => s + a.price * a.qty, 0);
     const unit_price = selected.price + addonPrice;
@@ -258,6 +260,7 @@ function OrderPage() {
   const sendToKitchen = async () => {
     const pending = items.filter((i) => i.status === "pending");
     if (pending.length === 0) { toast.info(t("empty_order")); return; }
+    if (isOffline()) { toast.error(t("err_offline")); return; }
     const orderType = items.some((i) => i.status === "sent") ? "added" : "new";
     const ids = pending.map((p) => p.id);
     const sentAt = new Date().toISOString();

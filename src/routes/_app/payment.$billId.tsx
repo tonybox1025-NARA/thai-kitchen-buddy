@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Textarea } from "@/components/ui/textarea";
 import { ManagerPinDialog } from "@/components/ManagerPinDialog";
 import { printCounter } from "@/lib/counter-printer";
+import { isOffline } from "@/lib/online-status";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/payment/$billId")({ component: PaymentPage });
@@ -454,6 +455,7 @@ function PaymentPage() {
   // ── Payment helpers ─────────────────────────────────────────────────────────
   const addPayment = async (method: Payment["method"], amount: number, extras: Record<string, unknown> = {}) => {
     if (!bill || amount <= 0) return;
+    if (isOffline()) { toast.error(t("err_offline")); return; }
     await supabase.from("payments").insert({ bill_id: bill.id, method, amount, ...extras });
     await load();
     if (paid + amount + 0.001 >= total) await finalize();
@@ -652,6 +654,7 @@ function PaymentPage() {
 
   const finalize = async () => {
     if (!bill) return;
+    if (isOffline()) { toast.error(t("err_offline")); return; }
     await supabase.from("bills").update({ status: "paid", paid_at: new Date().toISOString(), cashier_id: staff?.id }).eq("id", bill.id);
     await supabase.from("orders").update({ status: "closed", closed_at: new Date().toISOString() }).eq("id", bill.order_id);
     const { data: ord } = await supabase.from("orders").select("table_id").eq("id", bill.order_id).single();

@@ -144,6 +144,7 @@ const dict: Dict = {
   // shared
   active: { th: "เปิดใช้งาน", en: "Active" },
   saved: { th: "บันทึกแล้ว", en: "Saved" },
+  err_offline: { th: "ออฟไลน์ — บันทึกไม่ได้ ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่", en: "Offline — can't save. Check the connection and try again." },
   lbl_label: { th: "ป้ายกำกับ", en: "Label" },
   lbl_price: { th: "ราคา", en: "Price" },
   lbl_cost: { th: "ต้นทุน", en: "Cost" },
