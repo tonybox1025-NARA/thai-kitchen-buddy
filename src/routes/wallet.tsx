@@ -84,6 +84,19 @@ async function loadLiff(): Promise<any> {
   return (window as any).liff;
 }
 
+// LINE ID tokens are short-lived and the LIFF SDK caches the one from the last
+// login without refreshing it. Decoding `exp` lets us skip verifying a stale
+// token (which would make LINE return "IdToken expired") and re-login instead.
+function idTokenExpired(token: string | null | undefined): boolean {
+  if (!token) return true;
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return !payload.exp || payload.exp * 1000 < Date.now() + 10_000;
+  } catch {
+    return true;
+  }
+}
+
 function WalletPage() {
   const [lang, setLang] = useState<Lang>("th");
   const s = STR[lang];
@@ -118,10 +131,17 @@ function WalletPage() {
     return data.member as Member;
   };
 
-  useEffect(() => { setLoading(true); void load().finally(() => { setLoading(false); void initLiff(); }); }, []);
+  useEffect(() => {
+    setLoading(true);
+    void load()
+      .then((m) => { if (m && !m.line_user_id) void initLiff(); }) // only auto-link if not already linked
+      .finally(() => setLoading(false));
+  }, []);
 
   // Send a verified LINE ID token to link this wallet to the customer's LINE id.
-  const linkLine = async (idToken: string) => {
+  // `silent` is used for the automatic on-load attempt: a background failure (e.g.
+  // a race) shouldn't flash a scary error banner — only the explicit tap should.
+  const linkLine = async (idToken: string, silent = false) => {
     const res = await fetch("/api/public/wallet-line", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -129,18 +149,21 @@ function WalletPage() {
     });
     const data = await res.json().catch(() => null);
     if (res.ok) { setMember(data.member as Member); setHistory((data.history ?? []) as LedgerRow[]); }
-    else setError(data?.error ?? STR.th.lineFail);
+    else if (!silent) setError(data?.error ?? STR.th.lineFail);
   };
 
-  // On load: if the user already logged in with LINE (e.g. just returned from the
-  // login redirect), link automatically.
+  // On load: if the user just returned from the LINE login redirect with a FRESH
+  // token, link automatically. If the cached token is expired we do nothing (no
+  // error) — the wallet already loaded the right member by device token, and the
+  // customer can tap Connect to refresh. This avoids the "token expired" banner
+  // that used to appear on every revisit.
   const initLiff = async () => {
     try {
       const liff = await loadLiff();
       await liff.init({ liffId: LINE_LIFF_ID });
       if (liff.isLoggedIn()) {
         const idToken = liff.getIDToken();
-        if (idToken) await linkLine(idToken);
+        if (idToken && !idTokenExpired(idToken)) await linkLine(idToken, true);
       }
     } catch { /* LINE is optional — ignore init failures */ }
   };
@@ -150,9 +173,11 @@ function WalletPage() {
     try {
       const liff = await loadLiff();
       await liff.init({ liffId: LINE_LIFF_ID });
-      if (!liff.isLoggedIn()) { liff.login(); return; } // redirects to LINE, then back here
-      const idToken = liff.getIDToken();
-      if (idToken) await linkLine(idToken);
+      const idToken = liff.isLoggedIn() ? liff.getIDToken() : null;
+      // Not logged in, or the cached token is stale → (re)login to get a fresh one.
+      // LINE redirects back here and initLiff() links with the new token.
+      if (!liff.isLoggedIn() || idTokenExpired(idToken)) { liff.login(); return; }
+      await linkLine(idToken as string);
     } catch (e: any) {
       setError(e?.message ?? s.lineFail);
     } finally {

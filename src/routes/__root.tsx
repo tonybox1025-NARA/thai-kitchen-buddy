@@ -40,7 +40,18 @@ function ErrorComponent({ error }: { error: Error }) {
 }
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
-  head: () => ({
+  head: (ctx: any) => {
+    // The customer wallet is a separate, public, portrait page — it must NOT adopt
+    // the POS PWA manifest (landscape, start_url "/"), or "Add to Home Screen" on
+    // /wallet would install an icon that opens the POS. Serve a wallet-specific
+    // manifest when the wallet route is active. (TanStack passes the full active
+    // match branch to the root head, so we can detect it here.)
+    const isWallet = (ctx?.matches ?? []).some((m: any) =>
+      String(m?.routeId ?? m?.fullPath ?? m?.pathname ?? "").includes("/wallet"),
+    );
+    const manifestHref = isWallet ? "/wallet.webmanifest" : "/manifest.webmanifest";
+    const appleTitle = isWallet ? "LONMOH" : "POS";
+    return {
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
@@ -48,7 +59,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "theme-color", content: "#0d9488" },
       { name: "apple-mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-status-bar-style", content: "default" },
-      { name: "apple-mobile-web-app-title", content: "POS" },
+      { name: "apple-mobile-web-app-title", content: appleTitle },
       { name: "mobile-web-app-capable", content: "yes" },
       { title: "Restaurant POS" },
       { name: "description", content: "Restaurant POS for Thailand — Thai/English UI, Burmese kitchen tickets" },
@@ -63,7 +74,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     ],
     links: [
       { rel: "stylesheet", href: appCss },
-      { rel: "manifest", href: "/manifest.webmanifest" },
+      { rel: "manifest", href: manifestHref },
       { rel: "apple-touch-icon", href: "/icon-192.png" },
       { rel: "icon", type: "image/png", sizes: "192x192", href: "/icon-192.png" },
       { rel: "icon", type: "image/png", sizes: "512x512", href: "/icon-512.png" },
@@ -71,7 +82,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=Padauk:wght@400;700&display=swap" },
     ],
-  }),
+    };
+  },
   shellComponent: RootShell,
   component: RootComponent,
   notFoundComponent: NotFoundComponent,
