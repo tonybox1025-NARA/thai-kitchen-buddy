@@ -37,3 +37,19 @@ menu_ingredients_insert.sql
 supabase/seed.sql
 scripts/import-meri.js
 scripts/generate-seed-sql.js
+
+# Android / Capacitor build artifacts (the android/ project is committed; its
+# outputs, synced web assets, and signing secrets are not)
+android/build/
+android/app/build/
+android/capacitor-cordova-android-plugins/
+android/.gradle/
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
+android/local.properties
+android/keystore.properties
+*.keystore
+*.jks
+# Built APKs (large binaries; produced by the build, not source)
+apk/
+*.apk
