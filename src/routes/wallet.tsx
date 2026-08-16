@@ -173,11 +173,27 @@ function WalletPage() {
     try {
       const liff = await loadLiff();
       await liff.init({ liffId: LINE_LIFF_ID });
+
+      // Already logged in with a fresh token (e.g. inside the LINE app, or a
+      // browser that kept the session) → link straight away.
       const idToken = liff.isLoggedIn() ? liff.getIDToken() : null;
-      // Not logged in, or the cached token is stale → (re)login to get a fresh one.
-      // LINE redirects back here and initLiff() links with the new token.
-      if (!liff.isLoggedIn() || idTokenExpired(idToken)) { liff.login(); return; }
-      await linkLine(idToken as string);
+      if (liff.isLoggedIn() && !idTokenExpired(idToken)) { await linkLine(idToken as string); return; }
+
+      // iOS home-screen (standalone) apps can't complete a web OAuth round-trip —
+      // the LINE callback lands in Safari, not back in the installed app, so
+      // liff.login() would loop forever showing "Connect". Detect that case and
+      // hand off to the LINE app itself, where login is automatic and reliable.
+      const inLineApp = typeof liff.isInClient === "function" && liff.isInClient();
+      const isStandalone =
+        (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) ||
+        (window.navigator as any).standalone === true;
+      if (!inLineApp && isStandalone) {
+        window.location.href = `https://liff.line.me/${LINE_LIFF_ID}`;
+        return;
+      }
+
+      // Normal browser (Safari/Chrome tab) or inside LINE → web login works.
+      liff.login();
     } catch (e: any) {
       setError(e?.message ?? s.lineFail);
     } finally {
