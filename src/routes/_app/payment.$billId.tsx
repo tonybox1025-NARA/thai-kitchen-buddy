@@ -1171,7 +1171,9 @@ function PaymentPage() {
 
       {/* ── Member search dialog ────────────────────────────────────────────── */}
       <Dialog open={memberSearchOpen} onOpenChange={(o) => { setMemberSearchOpen(o); if (!o) resetNewMember(); }}>
-        <DialogContent className="max-w-xl">
+        {/* Don't auto-focus the search field on open — on a tablet that pops the
+            keyboard over the member list before the cashier even wants to type. */}
+        <DialogContent className="max-w-xl" onOpenAutoFocus={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Heart className="h-4 w-4" />{newMemberMode ? "New member" : "Find member"}
