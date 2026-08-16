@@ -55,7 +55,7 @@ function LoginPage() {
           <form onSubmit={submit} className="space-y-4">
             <div>
               <Label htmlFor="email">{t("email")}</Label>
-              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" autoFocus enterKeyHint="next" />
+              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" enterKeyHint="next" />
             </div>
             <div>
               <Label htmlFor="password">{t("password")}</Label>
