@@ -181,7 +181,7 @@ const dict: Dict = {
   set_no_rounding: { th: "ไม่ปัดเศษ", en: "No rounding" },
   set_using_discounts: { th: "การใช้ส่วนลด", en: "Using discounts" },
   set_max_discount: { th: "ส่วนลดสูงสุด", en: "Maximum discount" },
-  set_gov_qr: { th: "QR รัฐร่วมจ่าย", en: "Government co-pay QR" },
+  set_gov_qr: { th: "60/40", en: "60/40" },
   set_qr_by_time: { th: "ยอดขาย QR ตามช่วงเวลา", en: "QR sales by time" },
   set_label_optional: { th: "ป้ายกำกับ (ไม่บังคับ)", en: "Label (optional)" },
   set_test_queued: { th: "ส่งงานทดสอบพิมพ์แล้ว", en: "Test print job queued" },

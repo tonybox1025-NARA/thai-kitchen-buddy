@@ -1372,7 +1372,7 @@ function PaymentPage() {
                     <SelectContent>
                       <SelectItem value="cash">{t("pm_cash")}</SelectItem>
                       <SelectItem value="qr">QR Transfer</SelectItem>
-                      <SelectItem value="gov_qr">Government QR {govQrLabel}</SelectItem>
+                      <SelectItem value="gov_qr">{govQrLabel}</SelectItem>
                       <SelectItem value="card">{t("credit_card")}</SelectItem>
                     </SelectContent>
                   </Select>
