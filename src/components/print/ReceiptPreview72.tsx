@@ -4,7 +4,7 @@ const fmt = (n: number) => n.toFixed(2);
 const paymentLabel = (method: string) =>
   method === "cash" ? "CASH"
   : method === "qr" ? "QR TRANSFER"
-  : method === "gov_qr" ? "GOVERNMENT QR"
+  : method === "gov_qr" ? "60/40"
   : method === "card" ? "CREDIT CARD"
   : method.toUpperCase();
 

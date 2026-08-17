@@ -527,7 +527,7 @@ function Reports() {
                     <SelectContent>
                       <SelectItem value="cash">{t("pm_cash")}</SelectItem>
                       <SelectItem value="qr">QR Transfer</SelectItem>
-                      <SelectItem value="gov_qr">Government QR</SelectItem>
+                      <SelectItem value="gov_qr">60/40</SelectItem>
                       <SelectItem value="card">{t("credit_card")}</SelectItem>
                     </SelectContent>
                   </Select>
@@ -550,7 +550,7 @@ function Reports() {
                   const diff = aft - bef;
                   return (
                     <div key={m} className={`rounded p-2 ${diff !== 0 ? "bg-amber-100 dark:bg-amber-900/40" : "bg-background"}`}>
-                      <p className="text-xs text-muted-foreground capitalize">{m === "qr" ? "QR Transfer" : m === "gov_qr" ? "Government QR" : m === "card" ? "Credit card" : "Cash"}</p>
+                      <p className="text-xs text-muted-foreground capitalize">{m === "qr" ? "QR Transfer" : m === "gov_qr" ? "60/40" : m === "card" ? "Credit card" : "Cash"}</p>
                       <p className="font-semibold tabular-nums">{thb(aft)}</p>
                       {diff !== 0 && (
                         <p className={`text-xs tabular-nums font-medium ${diff > 0 ? "text-green-600" : "text-red-500"}`}>
