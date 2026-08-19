@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { escapeHtml } from "@/lib/escape-html";
 import { useI18n } from "@/lib/i18n";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1478,6 +1479,7 @@ function StaffTab() {
   const [list, setList] = useState<Staff[]>([]);
   const [add, setAdd] = useState(false);
   const [name, setName] = useState(""); const [role, setRole] = useState<Staff["role"]>("staff"); const [pin, setPin] = useState("");
+  const [adminPin, setAdminPin] = useState("");
 
   const load = async () => {
     const { data } = await supabase.rpc("list_staff");
@@ -1487,15 +1489,21 @@ function StaffTab() {
 
   const create = async () => {
     if (!name || pin.length < 4) { toast.error(t("set_name_pin_required")); return; }
-    const { error } = await supabase.rpc("create_staff", { _name: name, _role: role, _pin: pin });
+    if (adminPin.length < 4) { toast.error("Admin PIN required"); return; }
+    const { error } = await supabase.rpc("create_staff", { _name: name, _role: role, _pin: pin, _admin_pin: adminPin });
     if (error) { toast.error(error.message); return; }
-    setAdd(false); setName(""); setPin(""); setRole("staff"); load();
+    setAdd(false); setName(""); setPin(""); setAdminPin(""); setRole("staff"); load();
   };
 
   const del = async (s: Staff) => {
     if (!confirm(`Delete ${s.name}?`)) return;
-    await supabase.rpc("delete_staff", { _id: s.id }); load();
+    const ap = window.prompt("Admin PIN") ?? "";
+    if (ap.length < 4) { toast.error("Admin PIN required"); return; }
+    const { error } = await supabase.rpc("delete_staff", { _id: s.id, _admin_pin: ap });
+    if (error) { toast.error(error.message); return; }
+    load();
   };
+
 
   return (
     <div className="mt-4 space-y-3">
@@ -1524,6 +1532,7 @@ function StaffTab() {
               </Select>
             </div>
             <div><Label>{t("pin_label")}</Label><Input type="password" inputMode="numeric" maxLength={6} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} /></div>
+            <div><Label>Admin PIN</Label><Input type="password" inputMode="numeric" maxLength={6} value={adminPin} onChange={(e) => setAdminPin(e.target.value.replace(/\D/g, ""))} /></div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAdd(false)}>{t("cancel")}</Button>
@@ -1584,9 +1593,9 @@ function QrCodesTab() {
       <div class="grid">
         ${tables.map((tbl) => `
           <div class="card">
-            <div class="code">${t("table")} ${tbl.code}</div>
-            <img src="${qrs[tbl.id] ?? ""}" alt="QR ${tbl.code}" />
-            <div class="url">${baseUrl}/menu/${tbl.code}</div>
+            <div class="code">${t("table")} ${escapeHtml(tbl.code)}</div>
+            <img src="${qrs[tbl.id] ?? ""}" alt="QR ${escapeHtml(tbl.code)}" />
+            <div class="url">${escapeHtml(baseUrl)}/menu/${escapeHtml(tbl.code)}</div>
             <div style="font-size:12px;color:#666;margin-top:4px">สแกนเพื่อสั่งอาหาร · Scan to order</div>
           </div>
         `).join("")}
@@ -1597,7 +1606,7 @@ function QrCodesTab() {
   };
 
   const printOne = (tbl: RTable) => {
-    const html = `<html><head><title>QR ${tbl.code}</title><style>
+    const html = `<html><head><title>QR ${escapeHtml(tbl.code)}</title><style>
       body{font-family:sans-serif;text-align:center;padding:32px}
       .code{font-size:48px;font-weight:bold;margin-bottom:16px}
       img{width:320px;height:320px}
@@ -1605,10 +1614,10 @@ function QrCodesTab() {
       @media print{.noprint{display:none}}
     </style></head><body>
       <div class="noprint" style="margin-bottom:16px"><button onclick="window.print()">Print</button></div>
-      <div class="code">${t("table")} ${tbl.code}</div>
+      <div class="code">${t("table")} ${escapeHtml(tbl.code)}</div>
       <img src="${qrs[tbl.id] ?? ""}" alt="QR" />
       <div style="font-size:14px;margin-top:16px">สแกนเพื่อสั่งอาหาร<br/>Scan to order</div>
-      <div class="url">${baseUrl}/menu/${tbl.code}</div>
+      <div class="url">${escapeHtml(baseUrl)}/menu/${escapeHtml(tbl.code)}</div>
     </body></html>`;
     const w = window.open("", "_blank");
     if (w) { w.document.write(html); w.document.close(); }
