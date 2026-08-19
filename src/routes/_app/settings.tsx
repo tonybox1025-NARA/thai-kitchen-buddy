@@ -615,7 +615,7 @@ function KitchenZonesTab() {
               <div className="flex-1 min-w-0">
                 <div className="font-semibold truncate">{zoneName(zone)}</div>
                 <div className="text-xs text-muted-foreground truncate">
-                  {zone.name_th} · {zone.sort} · {zone.print_to_kitchen ? t("set_prints_kitchen") : t("set_counter_only")} · {zone.counter_group === "beverage" ? "🍺 Drinks/Bar" : zone.counter_group === "rice" ? "🍚 Rice" : "🍽 Food"}
+                  {zone.name_th} · {zone.sort} · {zone.print_to_kitchen ? `🍳 ${t("set_prints_kitchen")}` : `🧾 ${t("set_counter_only")}`}
                 </div>
               </div>
               <Button variant="outline" size="sm" onClick={() => setEdit(zone)}>{t("edit")}</Button>
@@ -668,20 +668,10 @@ function KitchenZonesTab() {
               </div>
               <Switch checked={edit?.print_to_kitchen ?? true} onCheckedChange={(checked) => setEdit({ ...edit, print_to_kitchen: checked })} />
             </div>
-            <div className="flex items-center justify-between rounded-lg border p-3">
-              <div>
-                <Label>Counter ticket</Label>
-                <p className="text-xs text-muted-foreground">Which counter copy: Food, or Drinks/Bar.</p>
-              </div>
-              <Select value={edit?.counter_group ?? "food"} onValueChange={(v) => setEdit({ ...edit, counter_group: v })}>
-                <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="food">🍽 Food</SelectItem>
-                  <SelectItem value="rice">🍚 Rice / Porridge</SelectItem>
-                  <SelectItem value="beverage">🍺 Drinks / Bar</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <p className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">
+              <strong>On = Kitchen zone</strong> — prints its own kitchen ticket, and its food is also copied onto the counter FOOD ticket for the waitress.<br />
+              <strong>Off = Front zone</strong> — prints only its own counter ticket (e.g. Rice, Drinks, Alcohol).
+            </p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEdit(null)}>{t("cancel")}</Button>

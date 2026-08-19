@@ -280,21 +280,22 @@ function OrderPage() {
       const zone = category?.kitchen_zone_id ? zoneById.get(category.kitchen_zone_id) : null;
       const zoneLabel = zone ? (lang === "th" ? zone.name_th : zone.name_en) : "Main Kitchen";
       const zoneId = zone?.id ?? "__main__";
+      // print_to_kitchen = the zone TYPE: true = Kitchen zone (prints to the
+      // kitchen printer, and its food is also copied onto the counter FOOD ticket);
+      // false = Front zone (prints only its own counter ticket).
       const printToKitchen = zone?.print_to_kitchen ?? true;
-      // The zone's counter_group decides which COUNTER ticket the item lands on
-      // (food / rice / beverage — each group prints its own ticket).
-      const counterGroup = zone?.counter_group || "food";
+      const zoneSort = zone?.sort ?? 999;
       if (sc) {
         const sideStr = sc.sides.map((s) => s.th).join(", ");
         const drinkStr = sc.drink ? ` | ${sc.drink.th}` : "";
         const riceStr = sc.rice === "rice" ? "ข้าวสวย" : "โจ๊ก";
         const setNotes = `หลัก: ${sc.main.th} | ${sideStr}${drinkStr} | ${riceStr}`;
-        return { name_my: p.name_en, name_en: p.name_en, name_th: p.name_th, qty: p.qty, notes: setNotes, modifiers: null, zoneId, zoneLabel, printToKitchen, counterGroup };
+        return { name_my: p.name_en, name_en: p.name_en, name_th: p.name_th, qty: p.qty, notes: setNotes, modifiers: null, zoneId, zoneLabel, printToKitchen, zoneSort };
       }
-      return { name_my: p.name_my, name_en: p.name_en, name_th: p.name_th, qty: p.qty, notes: p.notes, modifiers: (p.modifiers as Modifier[] | null) ?? null, zoneId, zoneLabel, printToKitchen, counterGroup };
+      return { name_my: p.name_my, name_en: p.name_en, name_th: p.name_th, qty: p.qty, notes: p.notes, modifiers: (p.modifiers as Modifier[] | null) ?? null, zoneId, zoneLabel, printToKitchen, zoneSort };
     });
     const displayLabel = orderSource === "takeout" ? `Takeout ${orderNumber ?? ""}` : orderSource === "staff_meal" ? `Staff ${orderNumber ?? ""}` : tableCode;
-    const stripZone = ({ zoneId: _z, zoneLabel: _zl, printToKitchen: _pk, counterGroup: _cg, ...line }: (typeof lines)[number]) => line;
+    const stripZone = ({ zoneId: _z, zoneLabel: _zl, printToKitchen: _pk, zoneSort: _zs, ...line }: (typeof lines)[number]) => line;
     const baseTicket = { kind: "order_ticket" as const, table: displayLabel, order_type: orderType, sent_at: sentAt };
 
     // Kitchen tickets: one per kitchen zone (Main Kitchen / Soup / Salad-Somtum …).
@@ -319,24 +320,24 @@ function OrderPage() {
       },
     }));
 
-    // Counter tickets: one per counter_group (food / rice / beverage) — all to the
-    // counter printer, all labelled COUNTER (waitress copies). A group only prints
-    // when the order has items in it.
-    const COUNTER_LABELS: Record<string, string> = { food: "FOOD", rice: "RICE", beverage: "DRINKS · BAR" };
-    const COUNTER_ORDER = ["food", "rice", "beverage"];
-    const byGroup = new Map<string, ReturnType<typeof stripZone>[]>();
-    for (const line of lines) {
-      const arr = byGroup.get(line.counterGroup) ?? [];
-      arr.push(stripZone(line));
-      byGroup.set(line.counterGroup, arr);
-    }
-    const groupsInOrder = [...COUNTER_ORDER, ...[...byGroup.keys()].filter((g) => !COUNTER_ORDER.includes(g))];
+    // Counter tickets (all to the counter printer, all labelled COUNTER):
+    //  • ONE "FOOD" ticket = a copy of everything the kitchen is cooking, so the
+    //    waitress can see what food each table ordered and what's still coming.
+    //  • one ticket per FRONT zone (rice, drinks, alcohol, …), each made at the
+    //    counter — grouped by zone so the owner controls it purely by assignment.
     const counterTickets: CounterPrintPayload[] = [];
-    for (const g of groupsInOrder) {
-      const grp = byGroup.get(g);
-      if (!grp || grp.length === 0) continue;
-      const label = COUNTER_LABELS[g] ?? g.toUpperCase();
-      counterTickets.push({ ...baseTicket, lines: grp, language: "th", department: label, station: label, footer: "counter" });
+    const foodLines = lines.filter((l) => l.printToKitchen).map(stripZone);
+    if (foodLines.length) counterTickets.push({ ...baseTicket, lines: foodLines, language: "th", department: "FOOD", station: "FOOD", footer: "counter" });
+
+    const frontZones = new Map<string, { label: string; sort: number; lines: ReturnType<typeof stripZone>[] }>();
+    for (const line of lines) {
+      if (line.printToKitchen) continue;
+      const entry = frontZones.get(line.zoneId) ?? { label: line.zoneLabel, sort: line.zoneSort, lines: [] };
+      entry.lines.push(stripZone(line));
+      frontZones.set(line.zoneId, entry);
+    }
+    for (const zone of [...frontZones.values()].sort((a, b) => a.sort - b.sort)) {
+      counterTickets.push({ ...baseTicket, lines: zone.lines, language: "th", department: zone.label, station: zone.label, footer: "counter" });
     }
     // Route through the active transport: direct raster print in the APK, or the
     // print_jobs queue (picked up by the bridge) otherwise — same as before on web.
