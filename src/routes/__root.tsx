@@ -12,6 +12,7 @@ import appCss from "../styles.css?url";
 import { I18nProvider } from "@/lib/i18n";
 import { AuthProvider } from "@/lib/auth";
 import { registerPwa } from "@/lib/pwa-register";
+import { installKeyboardFix } from "@/lib/print/native-printer";
 import { Toaster } from "@/components/ui/sonner";
 
 function NotFoundComponent() {
@@ -106,6 +107,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   useEffect(() => { registerPwa(); }, []);
+  useEffect(() => installKeyboardFix(), []);
   return (
     <QueryClientProvider client={queryClient}>
       <I18nProvider>
