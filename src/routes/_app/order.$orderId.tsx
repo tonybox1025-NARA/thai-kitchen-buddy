@@ -266,11 +266,12 @@ function OrderPage() {
     const sentAt = new Date().toISOString();
     await supabase.from("order_items").update({ status: "sent", sent_at: sentAt }).in("id", ids);
     // Queue print jobs — kitchen (Burmese) + counter (order copy)
-    const zoneById = new Map<string, { id: string; name_th: string; name_en: string; sort: number; print_to_kitchen: boolean }>();
+    type Zone = { id: string; name_th: string; name_en: string; sort: number; print_to_kitchen: boolean; counter_group: string };
+    const zoneById = new Map<string, Zone>();
     const categoryById = new Map(cats.map((cat) => [cat.id, cat]));
     const menuById = new Map(menus.map((menu) => [menu.id, menu]));
-    const { data: zones } = await supabase.from("kitchen_zones").select("id,name_th,name_en,sort,print_to_kitchen").eq("active", true).order("sort");
-    for (const zone of (zones ?? []) as { id: string; name_th: string; name_en: string; sort: number; print_to_kitchen: boolean }[]) zoneById.set(zone.id, zone);
+    const { data: zones } = await supabase.from("kitchen_zones").select("id,name_th,name_en,sort,print_to_kitchen,counter_group").eq("active", true).order("sort");
+    for (const zone of (zones ?? []) as Zone[]) zoneById.set(zone.id, zone);
 
     const lines = pending.map((p) => {
       const sc = p.set_config as SetConfig | null | undefined;
@@ -280,42 +281,55 @@ function OrderPage() {
       const zoneLabel = zone ? (lang === "th" ? zone.name_th : zone.name_en) : "Main Kitchen";
       const zoneId = zone?.id ?? "__main__";
       const printToKitchen = zone?.print_to_kitchen ?? true;
+      // "beverage" zones (drinks/ice cream, alcohol) go to the counter's drinks
+      // ticket; everything else to the counter's food ticket.
+      const counterGroup = zone?.counter_group === "beverage" ? "beverage" : "food";
       if (sc) {
         const sideStr = sc.sides.map((s) => s.th).join(", ");
         const drinkStr = sc.drink ? ` | ${sc.drink.th}` : "";
         const riceStr = sc.rice === "rice" ? "ข้าวสวย" : "โจ๊ก";
         const setNotes = `หลัก: ${sc.main.th} | ${sideStr}${drinkStr} | ${riceStr}`;
-        return { name_my: p.name_en, name_en: p.name_en, name_th: p.name_th, qty: p.qty, notes: setNotes, modifiers: null, zoneId, zoneLabel, printToKitchen };
+        return { name_my: p.name_en, name_en: p.name_en, name_th: p.name_th, qty: p.qty, notes: setNotes, modifiers: null, zoneId, zoneLabel, printToKitchen, counterGroup };
       }
-      return { name_my: p.name_my, name_en: p.name_en, name_th: p.name_th, qty: p.qty, notes: p.notes, modifiers: (p.modifiers as Modifier[] | null) ?? null, zoneId, zoneLabel, printToKitchen };
+      return { name_my: p.name_my, name_en: p.name_en, name_th: p.name_th, qty: p.qty, notes: p.notes, modifiers: (p.modifiers as Modifier[] | null) ?? null, zoneId, zoneLabel, printToKitchen, counterGroup };
     });
     const displayLabel = orderSource === "takeout" ? `Takeout ${orderNumber ?? ""}` : orderSource === "staff_meal" ? `Staff ${orderNumber ?? ""}` : tableCode;
-    const counterLines = lines.map(({ zoneId: _zoneId, zoneLabel: _zoneLabel, printToKitchen: _printToKitchen, ...line }) => line);
-    const ticketPayload: CounterPrintPayload = { kind: "order_ticket", table: displayLabel, order_type: orderType, lines: counterLines, sent_at: sentAt };
-    const grouped = new Map<string, { zoneLabel: string; lines: typeof counterLines }>();
+    const stripZone = ({ zoneId: _z, zoneLabel: _zl, printToKitchen: _pk, counterGroup: _cg, ...line }: (typeof lines)[number]) => line;
+    const baseTicket = { kind: "order_ticket" as const, table: displayLabel, order_type: orderType, sent_at: sentAt };
+
+    // Kitchen tickets: one per kitchen zone (Main Kitchen / Soup / Salad-Somtum …).
+    const grouped = new Map<string, { zoneLabel: string; lines: ReturnType<typeof stripZone>[] }>();
     for (const line of lines) {
       if (!line.printToKitchen) continue;
       const entry = grouped.get(line.zoneId) ?? { zoneLabel: line.zoneLabel, lines: [] };
-      const { zoneId: _zoneId, zoneLabel: _zoneLabel, printToKitchen: _printToKitchen, ...ticketLine } = line;
-      entry.lines.push(ticketLine);
+      entry.lines.push(stripZone(line));
       grouped.set(line.zoneId, entry);
     }
     const kitchenJobs = [...grouped.values()].map((group, index, all) => ({
       printer: "kitchen" as const,
       payload: {
-        ...ticketPayload,
+        ...baseTicket,
         lines: group.lines,
         language: "my",
         department: group.zoneLabel,
         station: group.zoneLabel,
+        footer: "kitchen" as const,
         ticketIndex: index + 1,
         ticketTotal: all.length,
       },
     }));
+
+    // Counter tickets: split into FOOD (A) and DRINKS·BAR (B) — both to the
+    // counter printer, both labelled COUNTER (waitress copies).
+    const foodLines = lines.filter((l) => l.counterGroup !== "beverage").map(stripZone);
+    const bevLines = lines.filter((l) => l.counterGroup === "beverage").map(stripZone);
+    const counterTickets: CounterPrintPayload[] = [];
+    if (foodLines.length) counterTickets.push({ ...baseTicket, lines: foodLines, language: "th", department: "FOOD", station: "FOOD", footer: "counter" });
+    if (bevLines.length) counterTickets.push({ ...baseTicket, lines: bevLines, language: "th", department: "DRINKS · BAR", station: "DRINKS · BAR", footer: "counter" });
     // Route through the active transport: direct raster print in the APK, or the
     // print_jobs queue (picked up by the bridge) otherwise — same as before on web.
     if (kitchenJobs.length > 0) await printKitchenJobs(kitchenJobs);
-    await printCounter({ ...ticketPayload, language: "th" });
+    for (const ticket of counterTickets) await printCounter(ticket);
     toast.success(t("send_to_kitchen") + " ✓");
   };
 
