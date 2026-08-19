@@ -615,7 +615,7 @@ function KitchenZonesTab() {
               <div className="flex-1 min-w-0">
                 <div className="font-semibold truncate">{zoneName(zone)}</div>
                 <div className="text-xs text-muted-foreground truncate">
-                  {zone.name_th} · {zone.sort} · {zone.print_to_kitchen ? t("set_prints_kitchen") : t("set_counter_only")} · {zone.counter_group === "beverage" ? "🍺 Drinks/Bar" : "🍽 Food"}
+                  {zone.name_th} · {zone.sort} · {zone.print_to_kitchen ? t("set_prints_kitchen") : t("set_counter_only")} · {zone.counter_group === "beverage" ? "🍺 Drinks/Bar" : zone.counter_group === "rice" ? "🍚 Rice" : "🍽 Food"}
                 </div>
               </div>
               <Button variant="outline" size="sm" onClick={() => setEdit(zone)}>{t("edit")}</Button>
@@ -677,6 +677,7 @@ function KitchenZonesTab() {
                 <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="food">🍽 Food</SelectItem>
+                  <SelectItem value="rice">🍚 Rice / Porridge</SelectItem>
                   <SelectItem value="beverage">🍺 Drinks / Bar</SelectItem>
                 </SelectContent>
               </Select>
