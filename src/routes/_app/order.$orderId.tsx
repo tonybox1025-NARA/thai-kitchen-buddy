@@ -281,9 +281,9 @@ function OrderPage() {
       const zoneLabel = zone ? (lang === "th" ? zone.name_th : zone.name_en) : "Main Kitchen";
       const zoneId = zone?.id ?? "__main__";
       const printToKitchen = zone?.print_to_kitchen ?? true;
-      // "beverage" zones (drinks/ice cream, alcohol) go to the counter's drinks
-      // ticket; everything else to the counter's food ticket.
-      const counterGroup = zone?.counter_group === "beverage" ? "beverage" : "food";
+      // The zone's counter_group decides which COUNTER ticket the item lands on
+      // (food / rice / beverage — each group prints its own ticket).
+      const counterGroup = zone?.counter_group || "food";
       if (sc) {
         const sideStr = sc.sides.map((s) => s.th).join(", ");
         const drinkStr = sc.drink ? ` | ${sc.drink.th}` : "";
@@ -319,13 +319,25 @@ function OrderPage() {
       },
     }));
 
-    // Counter tickets: split into FOOD (A) and DRINKS·BAR (B) — both to the
-    // counter printer, both labelled COUNTER (waitress copies).
-    const foodLines = lines.filter((l) => l.counterGroup !== "beverage").map(stripZone);
-    const bevLines = lines.filter((l) => l.counterGroup === "beverage").map(stripZone);
+    // Counter tickets: one per counter_group (food / rice / beverage) — all to the
+    // counter printer, all labelled COUNTER (waitress copies). A group only prints
+    // when the order has items in it.
+    const COUNTER_LABELS: Record<string, string> = { food: "FOOD", rice: "RICE", beverage: "DRINKS · BAR" };
+    const COUNTER_ORDER = ["food", "rice", "beverage"];
+    const byGroup = new Map<string, ReturnType<typeof stripZone>[]>();
+    for (const line of lines) {
+      const arr = byGroup.get(line.counterGroup) ?? [];
+      arr.push(stripZone(line));
+      byGroup.set(line.counterGroup, arr);
+    }
+    const groupsInOrder = [...COUNTER_ORDER, ...[...byGroup.keys()].filter((g) => !COUNTER_ORDER.includes(g))];
     const counterTickets: CounterPrintPayload[] = [];
-    if (foodLines.length) counterTickets.push({ ...baseTicket, lines: foodLines, language: "th", department: "FOOD", station: "FOOD", footer: "counter" });
-    if (bevLines.length) counterTickets.push({ ...baseTicket, lines: bevLines, language: "th", department: "DRINKS · BAR", station: "DRINKS · BAR", footer: "counter" });
+    for (const g of groupsInOrder) {
+      const grp = byGroup.get(g);
+      if (!grp || grp.length === 0) continue;
+      const label = COUNTER_LABELS[g] ?? g.toUpperCase();
+      counterTickets.push({ ...baseTicket, lines: grp, language: "th", department: label, station: label, footer: "counter" });
+    }
     // Route through the active transport: direct raster print in the APK, or the
     // print_jobs queue (picked up by the bridge) otherwise — same as before on web.
     if (kitchenJobs.length > 0) await printKitchenJobs(kitchenJobs);
