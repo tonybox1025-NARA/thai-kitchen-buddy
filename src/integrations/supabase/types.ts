@@ -1271,24 +1271,6 @@ export type Database = {
       }
     }
     Views: {
-      settings_public: {
-        Row: {
-          id: number | null
-          restaurant_name: string | null
-          starting_cash: number | null
-        }
-        Insert: {
-          id?: number | null
-          restaurant_name?: string | null
-          starting_cash?: number | null
-        }
-        Update: {
-          id?: number | null
-          restaurant_name?: string | null
-          starting_cash?: number | null
-        }
-        Relationships: []
-      }
       staff_public: {
         Row: {
           active: boolean | null
