@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { escapeHtml } from "@/lib/escape-html";
 import { useI18n } from "@/lib/i18n";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -98,8 +99,8 @@ function openPrintWindow(
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>${kind} Report</title>
 <style>body{font-family:ui-sans-serif,system-ui;padding:24px;max-width:480px;margin:auto}h1{font-size:20px;margin:0 0 4px;text-align:center}h2{font-size:14px;margin:16px 0 4px;border-bottom:1px solid #ccc;padding-bottom:2px}table{width:100%;border-collapse:collapse;font-size:13px}td{padding:2px 0}.meta{text-align:center;font-size:12px;color:#555;margin-bottom:8px}</style>
 </head><body>
-<h1>${restaurantName || "Restaurant"}</h1>
-<div class="meta">${kind} Report · Business day ${shift.business_day}<br/>Printed ${now.toLocaleString()}</div>
+<h1>${escapeHtml(restaurantName) || "Restaurant"}</h1>
+<div class="meta">${kind} Report · Business day ${escapeHtml(shift.business_day)}<br/>Printed ${now.toLocaleString()}</div>
 <h2>Sales</h2><table>
 ${row("Gross sales", thb(r.gross))}
 ${row("Discount", `- ${thb(r.discount)}`)}
@@ -132,7 +133,7 @@ ${row("Total discounts", `- ${thb(r.discount)}`)}
 ${r.discountByType.percent > 0 ? row("  % Off", `- ${thb(r.discountByType.percent)}`) : ""}
 ${r.discountByType.fixed > 0 ? row("  Fixed amount", `- ${thb(r.discountByType.fixed)}`) : ""}
 ${r.discountByType.free_item > 0 ? row("  Free items", `- ${thb(r.discountByType.free_item)}`) : ""}
-${r.discountByStaff.map((s) => row(`  ${s.staffName} (×${s.count})`, `- ${thb(s.amount)}`)).join("")}
+${r.discountByStaff.map((s) => row(`  ${escapeHtml(s.staffName)} (×${s.count})`, `- ${thb(s.amount)}`)).join("")}
 </table>` : "<table>"}
 </table>
 <h2>Cash count</h2><table>${denomRows}</table>
@@ -947,9 +948,9 @@ ${filtered.map((r, i) => {
   const margin = r.revenue > 0 ? (profit / r.revenue * 100).toFixed(1) : "—";
   return `<tr>
   <td class="rank">${i + 1}</td>
-  <td>${r.name_th}</td>
-  <td>${r.name_en}</td>
-  <td>${lang === "th" ? r.category_th : r.category_en}</td>
+  <td>${escapeHtml(r.name_th)}</td>
+  <td>${escapeHtml(r.name_en)}</td>
+  <td>${escapeHtml(lang === "th" ? r.category_th : r.category_en)}</td>
   <td class="num">${r.qty}</td>
   <td class="num">${thb(r.unit_price)}</td>
   <td class="num">${thb(r.revenue)}</td>
