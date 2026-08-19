@@ -13,10 +13,9 @@ import { UtensilsCrossed } from "lucide-react";
 export const Route = createFileRoute("/login")({ component: LoginPage });
 
 function LoginPage() {
-  const { loading, session, signIn, signUp } = useAuth();
+  const { loading, session, signIn } = useAuth();
   const { t } = useI18n();
   const nav = useNavigate();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -36,12 +35,11 @@ function LoginPage() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
-    const fn = mode === "signin" ? signIn : signUp;
-    const { error } = await fn(email, password);
+    const { error } = await signIn(email, password);
     setBusy(false);
     if (error) toast.error(error);
-    else if (mode === "signup") toast.success("Check your email to confirm.");
   };
+
 
   return (
     <div className="min-h-dvh grid place-items-center bg-gradient-to-br from-background to-muted p-4">

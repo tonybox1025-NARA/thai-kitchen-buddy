@@ -1603,6 +1603,7 @@ function StaffTab() {
   const [list, setList] = useState<Staff[]>([]);
   const [add, setAdd] = useState(false);
   const [name, setName] = useState(""); const [role, setRole] = useState<Staff["role"]>("staff"); const [pin, setPin] = useState("");
+  const [adminPin, setAdminPin] = useState("");
 
   const load = async () => {
     const { data } = await supabase.rpc("list_staff");
@@ -1612,15 +1613,21 @@ function StaffTab() {
 
   const create = async () => {
     if (!name || pin.length < 4) { toast.error(t("set_name_pin_required")); return; }
-    const { error } = await supabase.rpc("create_staff", { _name: name, _role: role, _pin: pin });
+    if (adminPin.length < 4) { toast.error("Admin PIN required"); return; }
+    const { error } = await supabase.rpc("create_staff", { _name: name, _role: role, _pin: pin, _admin_pin: adminPin });
     if (error) { toast.error(error.message); return; }
-    setAdd(false); setName(""); setPin(""); setRole("staff"); load();
+    setAdd(false); setName(""); setPin(""); setAdminPin(""); setRole("staff"); load();
   };
 
   const del = async (s: Staff) => {
     if (!confirm(`Delete ${s.name}?`)) return;
-    await supabase.rpc("delete_staff", { _id: s.id }); load();
+    const ap = window.prompt("Admin PIN") ?? "";
+    if (ap.length < 4) { toast.error("Admin PIN required"); return; }
+    const { error } = await supabase.rpc("delete_staff", { _id: s.id, _admin_pin: ap });
+    if (error) { toast.error(error.message); return; }
+    load();
   };
+
 
   return (
     <div className="mt-4 space-y-3">
