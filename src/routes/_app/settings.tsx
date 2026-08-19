@@ -1532,6 +1532,7 @@ function StaffTab() {
               </Select>
             </div>
             <div><Label>{t("pin_label")}</Label><Input type="password" inputMode="numeric" maxLength={6} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} /></div>
+            <div><Label>Admin PIN</Label><Input type="password" inputMode="numeric" maxLength={6} value={adminPin} onChange={(e) => setAdminPin(e.target.value.replace(/\D/g, ""))} /></div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAdd(false)}>{t("cancel")}</Button>
