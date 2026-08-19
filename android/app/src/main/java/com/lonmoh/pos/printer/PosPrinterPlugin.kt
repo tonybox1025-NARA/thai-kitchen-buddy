@@ -1,6 +1,8 @@
 package com.lonmoh.pos.printer
 
+import android.content.Context
 import android.util.Base64
+import android.view.inputmethod.InputMethodManager
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
@@ -194,6 +196,32 @@ class PosPrinterPlugin : Plugin() {
             )
         }
         call.resolve(JSObject().put("devices", devices))
+    }
+
+    /**
+     * Force the on-screen keyboard to show for the WebView. SUNMI / rugged POS
+     * devices register a phantom hardware keyboard, so Chromium WebView never asks
+     * for the soft keyboard when a field is focused (the field gets the focus ring
+     * but no keyboard). The web layer calls this on focusin of a real text field.
+     */
+    @PluginMethod
+    fun showKeyboard(call: PluginCall) {
+        activity?.runOnUiThread {
+            val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+            @Suppress("DEPRECATION")
+            imm.showSoftInput(bridge.webView, InputMethodManager.SHOW_FORCED)
+        }
+        call.resolve()
+    }
+
+    /** Hide the on-screen keyboard (called on focusout of a text field). */
+    @PluginMethod
+    fun hideKeyboard(call: PluginCall) {
+        activity?.runOnUiThread {
+            val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+            imm.hideSoftInputFromWindow(bridge.webView.windowToken, 0)
+        }
+        call.resolve()
     }
 
     /** Decode the base64 payload, rejecting the call and returning null if it is unusable. */

@@ -37,6 +37,11 @@ export interface PosPrinterPlugin {
 
   /** Attached USB devices, printer-class first. */
   usbDevices(): Promise<{ devices: UsbDeviceInfo[] }>;
+
+  /** Force the on-screen keyboard to show (SUNMI/rugged devices suppress it). */
+  showKeyboard(): Promise<void>;
+  /** Hide the on-screen keyboard. */
+  hideKeyboard(): Promise<void>;
 }
 
 export type UsbDeviceInfo = {
@@ -57,6 +62,63 @@ export function isNativeApp(): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * SUNMI / rugged POS devices register a phantom hardware keyboard, so Chromium
+ * WebView won't raise the on-screen keyboard when a text field is focused (the
+ * field shows a focus ring but no keyboard). Force it: on focusin of a real,
+ * editable text field ask the native side to show the keyboard; hide on focusout.
+ * No-op outside the APK. Returns a cleanup function.
+ */
+export function installKeyboardFix(): () => void {
+  if (!isNativeApp() || typeof document === "undefined") return () => {};
+
+  const isTextField = (target: EventTarget | null): boolean => {
+    const el = target as HTMLElement | null;
+    if (!el) return false;
+    if (el.isContentEditable) return true;
+    const tag = el.tagName;
+    if (tag === "TEXTAREA") return !(el as HTMLTextAreaElement).readOnly;
+    if (tag !== "INPUT") return false;
+    const input = el as HTMLInputElement;
+    if (input.readOnly || input.disabled || input.inputMode === "none") return false;
+    const type = (input.type || "text").toLowerCase();
+    // Numeric entry uses the in-app keypad (a <button>), not a system-keyboard input.
+    const nonText = ["button", "submit", "reset", "checkbox", "radio", "file", "range", "color", "image", "hidden"];
+    return !nonText.includes(type);
+  };
+
+  // On this device a plain touch-focus does NOT raise the keyboard (Chromium sees
+  // a phantom hardware keyboard and suppresses it), but a PROGRAMMATIC focus does
+  // — which is why pressing the login button (form validation focuses the field)
+  // pops the keyboard. So on a touch-focus, immediately re-focus the field in code
+  // to take that working path, then also force the keyboard natively. A guard
+  // stops the programmatic re-focus from looping.
+  let reFocusing = false;
+  const onFocusIn = (e: FocusEvent) => {
+    const el = e.target as HTMLElement | null;
+    if (!el || !isTextField(el)) return;
+    if (reFocusing) {
+      reFocusing = false;
+      void PosPrinter.showKeyboard().catch(() => {});
+      window.setTimeout(() => void PosPrinter.showKeyboard().catch(() => {}), 150);
+      return;
+    }
+    reFocusing = true;
+    el.blur();
+    el.focus();
+  };
+  const onFocusOut = (e: FocusEvent) => {
+    if (reFocusing) return; // mid re-focus — don't hide
+    if (isTextField(e.target)) void PosPrinter.hideKeyboard().catch(() => {});
+  };
+  document.addEventListener("focusin", onFocusIn);
+  document.addEventListener("focusout", onFocusOut);
+  return () => {
+    document.removeEventListener("focusin", onFocusIn);
+    document.removeEventListener("focusout", onFocusOut);
+  };
 }
 
 /**
