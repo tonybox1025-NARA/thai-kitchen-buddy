@@ -597,35 +597,56 @@ function KitchenZonesTab() {
   const zoneName = (z: KitchenZone) => lang === "th" ? z.name_th : z.name_en;
   const catName = (c: Category) => lang === "th" ? c.name_th : c.name_en;
 
+  const kitchenZones = zones.filter((z) => z.print_to_kitchen);
+  const frontZones = zones.filter((z) => !z.print_to_kitchen);
+  const zoneRow = (zone: KitchenZone) => (
+    <div key={zone.id} className="flex items-center gap-3 rounded-lg border p-3">
+      <div className="flex-1 min-w-0">
+        <div className="font-semibold truncate">{zoneName(zone)}</div>
+        <div className="text-xs text-muted-foreground truncate">{zone.name_th} · {t("lbl_sort")} {zone.sort}</div>
+      </div>
+      <Button variant="outline" size="sm" onClick={() => setEdit(zone)}>{t("edit")}</Button>
+      <Button variant="ghost" size="icon" onClick={() => deleteZone(zone)}>
+        <Trash2 className="h-4 w-4 text-destructive" />
+      </Button>
+    </div>
+  );
+
   return (
     <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,28rem)_minmax(0,1fr)]">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between gap-3">
-            <CardTitle className="text-base">{t("set_kitchen_zones")}</CardTitle>
-            <Button size="sm" onClick={() => setEdit({ active: true, print_to_kitchen: true, counter_group: "food", sort: zones.length * 10 + 10 })}>
-              <Plus className="h-4 w-4 mr-1" />{t("set_add_zone")}
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {zones.length === 0 && <p className="text-sm text-muted-foreground">{t("set_no_zones")}</p>}
-          {zones.map((zone) => (
-            <div key={zone.id} className="flex items-center gap-3 rounded-lg border p-3">
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold truncate">{zoneName(zone)}</div>
-                <div className="text-xs text-muted-foreground truncate">
-                  {zone.name_th} · {zone.sort} · {zone.print_to_kitchen ? `🍳 ${t("set_prints_kitchen")}` : `🧾 ${t("set_counter_only")}`}
-                </div>
-              </div>
-              <Button variant="outline" size="sm" onClick={() => setEdit(zone)}>{t("edit")}</Button>
-              <Button variant="ghost" size="icon" onClick={() => deleteZone(zone)}>
-                <Trash2 className="h-4 w-4 text-destructive" />
+      <div className="space-y-4">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="text-base">🍳 Kitchen zones</CardTitle>
+              <Button size="sm" onClick={() => setEdit({ active: true, print_to_kitchen: true, sort: zones.length * 10 + 10 })}>
+                <Plus className="h-4 w-4 mr-1" />{t("set_add_zone")}
               </Button>
             </div>
-          ))}
-        </CardContent>
-      </Card>
+            <p className="text-xs text-muted-foreground">Prints to the kitchen printer — each its own ticket — plus a copy on the counter FOOD ticket.</p>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {kitchenZones.length === 0 && <p className="text-sm text-muted-foreground">{t("set_no_zones")}</p>}
+            {kitchenZones.map(zoneRow)}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="text-base">🧾 Front zones</CardTitle>
+              <Button size="sm" onClick={() => setEdit({ active: true, print_to_kitchen: false, sort: zones.length * 10 + 10 })}>
+                <Plus className="h-4 w-4 mr-1" />{t("set_add_zone")}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">Counter only — each its own ticket (Rice, Drinks, Alcohol, …).</p>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {frontZones.length === 0 && <p className="text-sm text-muted-foreground">No front zones yet.</p>}
+            {frontZones.map(zoneRow)}
+          </CardContent>
+        </Card>
+      </div>
 
       <Card>
         <CardHeader><CardTitle className="text-base">{t("set_assign_zones")}</CardTitle></CardHeader>
