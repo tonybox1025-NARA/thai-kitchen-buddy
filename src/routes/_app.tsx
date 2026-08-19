@@ -57,9 +57,6 @@ function AppLayout() {
               else setPinErr(t("wrong_pin"));
             }}
           />
-          <p className="text-xs text-center text-muted-foreground mt-4">
-            Demo: 1234 (admin) · 9999 (manager) · 1111 (staff)
-          </p>
         </div>
       </div>
     );
