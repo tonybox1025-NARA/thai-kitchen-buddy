@@ -101,6 +101,7 @@ export type KitchenPayload = {
   source?: "qr" | "pos" | string;
   department?: string;
   station?: string;
+  footer?: "kitchen" | "counter";
   lines?: KitchenLine[];
 };
 
@@ -490,7 +491,7 @@ export async function buildKitchen(p: KitchenPayload): Promise<Uint8Array> {
     d.feed(4);
   }
   d.rule(true);
-  d.text("KITCHEN  မီးဖိုချောင်", S.bold, "center");
+  d.text(p.footer === "counter" ? "COUNTER" : "KITCHEN  မီးဖိုချောင်", S.bold, "center");
 
   const out: number[] = [...INIT];
   if (isQr) out.push(...BEEP);
