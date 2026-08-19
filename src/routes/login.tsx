@@ -59,14 +59,14 @@ function LoginPage() {
             </div>
             <div>
               <Label htmlFor="password">{t("password")}</Label>
-              <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} autoComplete={mode === "signin" ? "current-password" : "new-password"} />
+              <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} autoComplete="current-password" />
             </div>
             <Button type="submit" className="w-full" size="lg" disabled={busy}>
-              {mode === "signin" ? t("sign_in") : t("sign_up")}
+              {t("sign_in")}
             </Button>
-            <button type="button" className="w-full text-sm text-muted-foreground hover:text-foreground" onClick={() => setMode(mode === "signin" ? "signup" : "signin")}>
-              {mode === "signin" ? t("no_account") + " " + t("sign_up") : t("have_account") + " " + t("sign_in")}
-            </button>
+            <p className="text-xs text-center text-muted-foreground">
+              Accounts are created by an administrator only.
+            </p>
           </form>
         </CardContent>
       </Card>
