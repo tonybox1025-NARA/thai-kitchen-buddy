@@ -111,27 +111,33 @@ export async function queuePrintJob(printer: PrinterName, payload: CounterPrintP
 export async function printDirect(printer: PrinterName, payload: CounterPrintPayload) {
   const data = toBase64(await buildEscPos(payload as unknown as PrintPayload, printer));
 
-  const { available } = await PosPrinter.sunmiStatus().catch(() => ({ available: false }));
-  if (available) {
-    await PosPrinter.printSunmi({ data });
-    return { ok: true as const, via: "sunmi" as const };
-  }
-
   // The kitchen printer is on the LAN; only the counter can be cabled over USB.
   if (printer === "counter" && getCounterLink() === "usb") {
     await PosPrinter.printUsb({ data });
     return { ok: true as const, via: "usb" as const };
   }
 
+  // Prefer the configured network printer. Many SUNMI terminals ship the built-in
+  // printer *service* (woyou.aidlservice.jiuiv5) even with no physical printer —
+  // e.g. the D3 PRO — so sunmiStatus() reporting "available" must NOT override an
+  // IP the owner set, or every job vanishes into a printer that isn't there.
   const ips = await loadPrinterIps(true);
   const host = printer === "kitchen" ? ips.kitchen : ips.counter;
-  if (!host) {
-    throw new Error(
-      `No IP configured for the ${printer} printer — set it in Settings, or switch the counter printer to USB.`,
-    );
+  if (host) {
+    await PosPrinter.printTcp({ host, data });
+    return { ok: true as const, via: "tcp" as const };
   }
-  await PosPrinter.printTcp({ host, data });
-  return { ok: true as const, via: "tcp" as const };
+
+  // No LAN/USB target configured → use a real SUNMI built-in printer if present.
+  const { available } = await PosPrinter.sunmiStatus().catch(() => ({ available: false }));
+  if (available) {
+    await PosPrinter.printSunmi({ data });
+    return { ok: true as const, via: "sunmi" as const };
+  }
+
+  throw new Error(
+    `No IP configured for the ${printer} printer — set it in Settings, or switch the counter printer to USB.`,
+  );
 }
 
 /** Check a printer answers, without printing. Native only. */
