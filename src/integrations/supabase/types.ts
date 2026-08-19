@@ -316,6 +316,7 @@ export type Database = {
       kitchen_zones: {
         Row: {
           active: boolean
+          counter_group: string
           created_at: string
           id: string
           name_en: string
@@ -325,6 +326,7 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          counter_group?: string
           created_at?: string
           id?: string
           name_en: string
@@ -334,6 +336,7 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          counter_group?: string
           created_at?: string
           id?: string
           name_en?: string
