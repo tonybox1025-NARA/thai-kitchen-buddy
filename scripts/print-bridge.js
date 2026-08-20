@@ -6,7 +6,7 @@
  * When a job arrives, connects via TCP (default port 9100) and sends ESC/POS.
  *
  * Works with anon key (SUPABASE_PUBLISHABLE_KEY) — no service role needed.
- * Requires these RLS policies on print_jobs (run once in Supabase SQL editor):
+ * Requires SUPABASE_SERVICE_ROLE_KEY (print_jobs is not anon-accessible):
  *
  *   create policy "anon select print_jobs"
  *     on public.print_jobs for select to anon using (true);
@@ -44,10 +44,9 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
   process.exit(1);
 }
 
-const usingAnonKey = !process.env.SUPABASE_SERVICE_ROLE_KEY;
-if (usingAnonKey) {
-  console.log("ℹ️   Using anon key — make sure anon RLS policies are applied on print_jobs.");
-  console.log("    (See comment at top of this file for the required SQL.)");
+if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  console.error("❌  SUPABASE_SERVICE_ROLE_KEY is required. print_jobs is no longer readable with the anon key.");
+  process.exit(1);
 }
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
