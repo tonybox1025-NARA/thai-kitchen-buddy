@@ -5,13 +5,8 @@
  * Subscribes to Supabase Realtime on print_jobs table.
  * When a job arrives, connects via TCP (default port 9100) and sends ESC/POS.
  *
- * Works with anon key (SUPABASE_PUBLISHABLE_KEY) — no service role needed.
- * Requires SUPABASE_SERVICE_ROLE_KEY (print_jobs is not anon-accessible):
- *
- *   create policy "anon select print_jobs"
- *     on public.print_jobs for select to anon using (true);
- *   create policy "anon update print_jobs"
- *     on public.print_jobs for update to anon using (true) with check (true);
+ * Requires SUPABASE_SERVICE_ROLE_KEY — print_jobs is not readable or writable
+ * with the anon/publishable key (anon policies were removed for security).
  *
  * Usage:
  *   node scripts/print-bridge.js
@@ -40,7 +35,7 @@ const PRINTER_PORT = 9100;
 const COLS         = 48;   // characters per line on 80mm at standard font
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
-  console.error("❌  Missing SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY in .env");
+  console.error("❌  Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY in .env");
   process.exit(1);
 }
 
@@ -378,8 +373,7 @@ async function drainPending() {
   if (error) {
     console.error(`❌  Cannot read print_jobs: ${error.message}`);
     console.error("   Run these SQL policies in Supabase dashboard:");
-    console.error("   create policy \"anon select print_jobs\" on public.print_jobs for select to anon using (true);");
-    console.error("   create policy \"anon update print_jobs\" on public.print_jobs for update to anon using (true) with check (true);");
+    console.error("   Set SUPABASE_SERVICE_ROLE_KEY in .env — anon access to print_jobs is disabled.");
     console.error("   create policy \"anon select settings\"  on public.settings   for select to anon using (true);");
     return;
   }
