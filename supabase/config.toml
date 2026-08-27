@@ -1,1 +1,4 @@
 project_id = "sbjzbphdjfpjvjbzjuzk"
+
+[functions.sync-manager-catalog]
+verify_jwt = false
