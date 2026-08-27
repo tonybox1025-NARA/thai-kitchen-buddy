@@ -4,6 +4,15 @@ const corsHeaders = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-
 const normalize = (value: string) => String(value || "").normalize("NFKC").toLocaleLowerCase("th")
   .replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, "").replace(/[\s\-–—_/().]+/g, "").trim();
 
+const errorMessage = (error: unknown) => {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object") {
+    const value = error as { message?: unknown; details?: unknown; hint?: unknown; code?: unknown };
+    return [value.message, value.details, value.hint, value.code].filter(Boolean).join(" | ") || JSON.stringify(error);
+  }
+  return String(error);
+};
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
@@ -91,6 +100,6 @@ Deno.serve(async (req) => {
     }
     return Response.json({ mode: "published", summary, menuMappings }, { headers: corsHeaders });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: 400, headers: corsHeaders });
+    return Response.json({ error: errorMessage(error) }, { status: 400, headers: corsHeaders });
   }
 });
