@@ -50,34 +50,47 @@ Deno.serve(async (req) => {
     if (!execute) return Response.json({ mode: "preview", summary }, { headers: corsHeaders });
 
     const categoryIdByName = new Map<string, string>();
+    const categoryRows: any[] = [];
     for (const [index, name] of categoryNames.entries()) {
       const target = categoryByName.get(normalize(name));
       const source: any = sourceCategoryByName.get(normalize(name));
       const id = target?.id ?? crypto.randomUUID();
-      const payload = { id, name_th: name, name_en: source?.name_en || name, name_my: "", sort: source?.sort_order ?? index };
-      const { error } = target ? await db.from("categories").update(payload).eq("id", id) : await db.from("categories").insert(payload);
-      if (error) throw error;
+      categoryRows.push({ id, name_th: name, name_en: source?.name_en || name, name_my: target?.name_my || "", sort: source?.sort_order ?? index });
       categoryIdByName.set(normalize(name), id);
     }
+    if (categoryRows.length > 0) {
+      const { error } = await db.from("categories").upsert(categoryRows, { onConflict: "id" });
+      if (error) throw error;
+    }
+
     const menuMappings: Array<{ managerId: string; posId: string }> = [];
+    const menuRows: any[] = [];
     for (const [index, item] of menuPlan.entries()) {
       const menu = item.source;
       const id = item.target?.id ?? crypto.randomUUID();
-      const payload = { id, category_id: categoryIdByName.get(normalize(menu.category || "ทั่วไป")) ?? null, name_th: menu.name_th, name_en: menu.name_en || "", name_my: menu.name_my || menu.kitchen_name_my || "", price: Number(menu.selling_price), image_url: menu.image_url || null, available: menu.is_active !== false && menu.available_pos !== false, sort: menu.sort_order ?? index };
-      const { error } = item.target ? await db.from("menus").update(payload).eq("id", id) : await db.from("menus").insert(payload);
-      if (error) throw error;
+      menuRows.push({ id, category_id: categoryIdByName.get(normalize(menu.category || "ทั่วไป")) ?? null, name_th: menu.name_th, name_en: menu.name_en || "", name_my: menu.name_my || menu.kitchen_name_my || "", price: Number(menu.selling_price), image_url: menu.image_url || null, available: menu.is_active !== false && menu.available_pos !== false, sort: menu.sort_order ?? index });
       menuMappings.push({ managerId: menu.id, posId: id });
     }
+    if (menuRows.length > 0) {
+      const { error } = await db.from("menus").upsert(menuRows, { onConflict: "id" });
+      if (error) throw error;
+    }
+
     const groupByName = new Map((groupsResult.data ?? []).map((group) => [normalize(group.name), group]));
     const posGroupIdByManagerId = new Map<string, string>();
+    const groupRows: any[] = [];
     for (const group of catalog.addonGroups ?? []) {
       const target = groupByName.get(normalize(group.name_th));
       const id = target?.id ?? crypto.randomUUID();
-      const payload = { id, name: group.name_th, kitchen_name: group.kitchen_name_my || group.name_my || group.name_th };
-      const { error } = target ? await db.from("addon_groups").update(payload).eq("id", id) : await db.from("addon_groups").insert(payload);
-      if (error) throw error;
+      groupRows.push({ id, name: group.name_th, kitchen_name: group.kitchen_name_my || group.name_my || group.name_th });
       posGroupIdByManagerId.set(group.id, id);
     }
+    if (groupRows.length > 0) {
+      const { error } = await db.from("addon_groups").upsert(groupRows, { onConflict: "id" });
+      if (error) throw error;
+    }
+
+    const optionRows: any[] = [];
     for (const group of catalog.addonGroups ?? []) {
       const groupId = posGroupIdByManagerId.get(group.id)!;
       const existing = (optionsResult.data ?? []).filter((option) => option.addon_group_id === groupId);
@@ -85,18 +98,27 @@ Deno.serve(async (req) => {
       for (const [index, option] of (catalog.addonOptions ?? []).filter((row: any) => row.group_id === group.id).entries()) {
         const target = byName.get(normalize(option.name_th));
         const id = target?.id ?? crypto.randomUUID();
-        const payload = { id, addon_group_id: groupId, name: option.name_th, price: Number(option.price), sort_order: option.sort_order ?? index };
-        const { error } = target ? await db.from("addon_options").update(payload).eq("id", id) : await db.from("addon_options").insert(payload);
-        if (error) throw error;
+        optionRows.push({ id, addon_group_id: groupId, name: option.name_th, price: Number(option.price), sort_order: option.sort_order ?? index });
       }
     }
+    if (optionRows.length > 0) {
+      const { error } = await db.from("addon_options").upsert(optionRows, { onConflict: "id" });
+      if (error) throw error;
+    }
+
     const posMenuIdByManagerId = new Map(menuMappings.map((mapping) => [mapping.managerId, mapping.posId]));
-    for (const [managerMenuId, posMenuId] of posMenuIdByManagerId) {
-      const { error: deleteError } = await db.from("menu_addons").delete().eq("menu_id", posMenuId);
+    const synchronizedMenuIds = [...posMenuIdByManagerId.values()];
+    if (synchronizedMenuIds.length > 0) {
+      const { error: deleteError } = await db.from("menu_addons").delete().in("menu_id", synchronizedMenuIds);
       if (deleteError) throw deleteError;
-      const links = (catalog.menuAddons ?? []).filter((link: any) => link.menu_id === managerMenuId)
-        .map((link: any) => ({ menu_id: posMenuId, group_id: posGroupIdByManagerId.get(link.group_id) })).filter((link: any) => Boolean(link.group_id));
-      if (links.length > 0) { const { error } = await db.from("menu_addons").insert(links); if (error) throw error; }
+    }
+    const linkRows = (catalog.menuAddons ?? []).map((link: any) => ({
+      menu_id: posMenuIdByManagerId.get(link.menu_id),
+      group_id: posGroupIdByManagerId.get(link.group_id),
+    })).filter((link: any) => Boolean(link.menu_id && link.group_id));
+    if (linkRows.length > 0) {
+      const { error } = await db.from("menu_addons").insert(linkRows);
+      if (error) throw error;
     }
     return Response.json({ mode: "published", summary, menuMappings }, { headers: corsHeaders });
   } catch (error) {
