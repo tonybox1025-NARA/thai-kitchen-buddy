@@ -13,6 +13,16 @@ const errorMessage = (error: unknown) => {
   return String(error);
 };
 
+const uniqueByNormalizedName = <T>(rows: T[], getName: (row: T) => string) => {
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    const key = normalize(getName(row));
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
@@ -39,9 +49,28 @@ Deno.serve(async (req) => {
     const posCategories = categoriesResult.data ?? [];
     const categoryByName = new Map(posCategories.map((category) => [normalize(category.name_th), category]));
     const sourceCategoryByName = new Map((catalog.categories ?? []).map((category: any) => [normalize(category.name_th), category]));
-    const categoryNames = [...new Set(catalog.menus.map((menu: any) => menu.category || "ทั่วไป"))] as string[];
+    const categoryNames = uniqueByNormalizedName(
+      catalog.menus.map((menu: any) => menu.category || "ทั่วไป") as string[],
+      (name) => name,
+    );
+    const claimedMenuIds = new Set<string>();
+    const explicitTargets = new Map<string, any>();
+    for (const menu of catalog.menus) {
+      const target = menu.pos_menu_id ? menuById.get(menu.pos_menu_id) : null;
+      if (target && !claimedMenuIds.has(target.id)) {
+        explicitTargets.set(menu.id, target);
+        claimedMenuIds.add(target.id);
+      }
+    }
     const menuPlan = catalog.menus.map((menu: any) => {
-      const target = (menu.pos_menu_id && menuById.get(menu.pos_menu_id)) || menuByName.get(normalize(menu.name_th)) || null;
+      let target = explicitTargets.get(menu.id) || null;
+      if (!target) {
+        const nameTarget = menuByName.get(normalize(menu.name_th));
+        if (nameTarget && !claimedMenuIds.has(nameTarget.id)) {
+          target = nameTarget;
+          claimedMenuIds.add(nameTarget.id);
+        }
+      }
       const changed = !target || target.name_en !== (menu.name_en || "") || target.name_my !== (menu.name_my || "")
         || Number(target.price) !== Number(menu.selling_price) || target.image_url !== (menu.image_url || null)
         || target.available !== (menu.is_active !== false && menu.available_pos !== false);
@@ -65,7 +94,7 @@ Deno.serve(async (req) => {
     }
     if (categoryRows.length > 0) {
       const { error } = await db.from("categories").upsert(categoryRows, { onConflict: "id" });
-      if (error) throw error;
+      if (error) throw new Error(`categories upsert: ${errorMessage(error)}`);
     }
 
     const menuMappings: Array<{ managerId: string; posId: string }> = [];
@@ -78,7 +107,7 @@ Deno.serve(async (req) => {
     }
     if (menuRows.length > 0) {
       const { error } = await db.from("menus").upsert(menuRows, { onConflict: "id" });
-      if (error) throw error;
+      if (error) throw new Error(`menus upsert: ${errorMessage(error)}`);
     }
 
     const groupByName = new Map((groupsResult.data ?? []).map((group) => [normalize(group.name), group]));
@@ -92,7 +121,7 @@ Deno.serve(async (req) => {
     }
     if (groupRows.length > 0) {
       const { error } = await db.from("addon_groups").upsert(groupRows, { onConflict: "id" });
-      if (error) throw error;
+      if (error) throw new Error(`addon groups upsert: ${errorMessage(error)}`);
     }
 
     const optionRows: any[] = [];
@@ -108,7 +137,7 @@ Deno.serve(async (req) => {
     }
     if (optionRows.length > 0) {
       const { error } = await db.from("addon_options").upsert(optionRows, { onConflict: "id" });
-      if (error) throw error;
+      if (error) throw new Error(`addon options upsert: ${errorMessage(error)}`);
     }
 
     const posMenuIdByManagerId = new Map(menuMappings.map((mapping) => [mapping.managerId, mapping.posId]));
