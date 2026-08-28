@@ -120,19 +120,20 @@ Deno.serve(async (req) => {
 
     const groupByName = new Map((groupsResult.data ?? []).map((group) => [normalize(group.name), group]));
     const posGroupIdByManagerId = new Map<string, string>();
-    const groupRows: any[] = [];
+    const groupRowsById = new Map<string, any>();
     for (const group of catalog.addonGroups ?? []) {
       const target = groupByName.get(normalize(group.name_th));
       const id = target?.id ?? crypto.randomUUID();
-      groupRows.push({ id, name: group.name_th, kitchen_name: group.kitchen_name_my || group.name_my || group.name_th });
+      groupRowsById.set(id, { id, name: group.name_th, kitchen_name: group.kitchen_name_my || group.name_my || group.name_th });
       posGroupIdByManagerId.set(group.id, id);
     }
+    const groupRows = [...groupRowsById.values()];
     if (groupRows.length > 0) {
       const { error } = await db.from("addon_groups").upsert(groupRows, { onConflict: "id" });
       if (error) throw new Error(`addon groups upsert: ${errorMessage(error)}`);
     }
 
-    const optionRows: any[] = [];
+    const optionRowsById = new Map<string, any>();
     for (const group of catalog.addonGroups ?? []) {
       const groupId = posGroupIdByManagerId.get(group.id)!;
       const existing = (optionsResult.data ?? []).filter((option) => option.addon_group_id === groupId);
@@ -140,9 +141,10 @@ Deno.serve(async (req) => {
       for (const [index, option] of (catalog.addonOptions ?? []).filter((row: any) => row.group_id === group.id).entries()) {
         const target = byName.get(normalize(option.name_th));
         const id = target?.id ?? crypto.randomUUID();
-        optionRows.push({ id, addon_group_id: groupId, name: option.name_th, price: Number(option.price), sort_order: option.sort_order ?? index });
+        optionRowsById.set(id, { id, addon_group_id: groupId, name: option.name_th, price: Number(option.price), sort_order: option.sort_order ?? index });
       }
     }
+    const optionRows = [...optionRowsById.values()];
     if (optionRows.length > 0) {
       const { error } = await db.from("addon_options").upsert(optionRows, { onConflict: "id" });
       if (error) throw new Error(`addon options upsert: ${errorMessage(error)}`);
@@ -154,10 +156,13 @@ Deno.serve(async (req) => {
       const { error: deleteError } = await db.from("menu_addons").delete().in("menu_id", synchronizedMenuIds);
       if (deleteError) throw deleteError;
     }
-    const linkRows = (catalog.menuAddons ?? []).map((link: any) => ({
-      menu_id: posMenuIdByManagerId.get(link.menu_id),
-      group_id: posGroupIdByManagerId.get(link.group_id),
-    })).filter((link: any) => Boolean(link.menu_id && link.group_id));
+    const linkRowsByKey = new Map<string, { menu_id: string; group_id: string }>();
+    for (const link of catalog.menuAddons ?? []) {
+      const menuId = posMenuIdByManagerId.get(link.menu_id);
+      const groupId = posGroupIdByManagerId.get(link.group_id);
+      if (menuId && groupId) linkRowsByKey.set(`${menuId}:${groupId}`, { menu_id: menuId, group_id: groupId });
+    }
+    const linkRows = [...linkRowsByKey.values()];
     if (linkRows.length > 0) {
       const { error } = await db.from("menu_addons").insert(linkRows);
       if (error) throw error;
