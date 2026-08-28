@@ -30,12 +30,20 @@ Deno.serve(async (req) => {
     if (!expectedKey || req.headers.get("X-Catalog-Sync-Key") !== expectedKey) throw new Error("Unauthorized catalog sync");
     const { execute = false, catalog } = await req.json();
     if (!catalog || !Array.isArray(catalog.menus)) throw new Error("Invalid catalog payload");
-    // Prefer Supabase's current non-JWT secret key. The legacy service-role JWT
-    // can be rejected by PostgREST with PGRST303 when platform clocks differ.
     const secretKeys = JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS") || "{}");
-    const adminKey = secretKeys.default || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    if (!adminKey) throw new Error("Missing POS database admin key");
-    const db = createClient(Deno.env.get("SUPABASE_URL")!, adminKey, { auth: { persistSession: false } });
+    const adminKey = secretKeys.default;
+    if (!adminKey || !adminKey.startsWith("sb_secret_")) throw new Error("Missing POS sb_secret database key");
+    const apiKeyOnlyFetch = (input: RequestInfo | URL, init?: RequestInit) => {
+      const headers = new Headers(init?.headers);
+      // New secret keys belong in `apikey` only. Sending one as Bearer makes
+      // the gateway parse it as a JWT and can surface PGRST303.
+      headers.delete("Authorization");
+      return fetch(input, { ...init, headers });
+    };
+    const db = createClient(Deno.env.get("SUPABASE_URL")!, adminKey, {
+      auth: { persistSession: false },
+      global: { fetch: apiKeyOnlyFetch },
+    });
     const [menusResult, categoriesResult, groupsResult, optionsResult] = await Promise.all([
       db.from("menus").select("id,name_th,name_en,name_my,price,image_url,available,category_id,sort"),
       db.from("categories").select("id,name_th,name_en,name_my,sort"),
