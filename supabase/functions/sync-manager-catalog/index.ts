@@ -20,7 +20,12 @@ Deno.serve(async (req) => {
     if (!expectedKey || req.headers.get("X-Catalog-Sync-Key") !== expectedKey) throw new Error("Unauthorized catalog sync");
     const { execute = false, catalog } = await req.json();
     if (!catalog || !Array.isArray(catalog.menus)) throw new Error("Invalid catalog payload");
-    const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
+    // Prefer Supabase's current non-JWT secret key. The legacy service-role JWT
+    // can be rejected by PostgREST with PGRST303 when platform clocks differ.
+    const secretKeys = JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS") || "{}");
+    const adminKey = secretKeys.default || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!adminKey) throw new Error("Missing POS database admin key");
+    const db = createClient(Deno.env.get("SUPABASE_URL")!, adminKey, { auth: { persistSession: false } });
     const [menusResult, categoriesResult, groupsResult, optionsResult] = await Promise.all([
       db.from("menus").select("id,name_th,name_en,name_my,price,image_url,available,category_id,sort"),
       db.from("categories").select("id,name_th,name_en,name_my,sort"),
@@ -122,6 +127,8 @@ Deno.serve(async (req) => {
     }
     return Response.json({ mode: "published", summary, menuMappings }, { headers: corsHeaders });
   } catch (error) {
-    return Response.json({ error: errorMessage(error) }, { status: 400, headers: corsHeaders });
+    const message = errorMessage(error);
+    console.error("sync-manager-catalog failed:", message);
+    return Response.json({ error: message }, { status: 400, headers: corsHeaders });
   }
 });
