@@ -122,6 +122,48 @@
   .font-burmese { font-family: var(--font-burmese); }
 }
 
+/* ── Tables page: MERI-style light cards over a soft iridescent wash ── */
+.pos-surface {
+  background:
+    radial-gradient(90% 60% at 12% -8%, color-mix(in oklab, var(--primary) 13%, transparent), transparent 60%),
+    radial-gradient(75% 55% at 96% 4%, oklch(0.82 0.10 320 / 0.20), transparent 55%),
+    radial-gradient(90% 70% at 58% 110%, oklch(0.85 0.11 195 / 0.18), transparent 60%),
+    var(--background);
+}
+.dark .pos-surface {
+  background:
+    radial-gradient(90% 60% at 12% -8%, color-mix(in oklab, var(--primary) 22%, transparent), transparent 60%),
+    radial-gradient(75% 55% at 96% 4%, oklch(0.55 0.10 320 / 0.18), transparent 55%),
+    radial-gradient(90% 70% at 58% 110%, oklch(0.55 0.11 195 / 0.16), transparent 60%),
+    var(--background);
+}
+
+.tbl-card {
+  background: var(--card);
+  border: 1px solid color-mix(in oklab, var(--foreground) 9%, transparent);
+}
+.tbl-card:hover { border-color: color-mix(in oklab, var(--primary) 45%, transparent); }
+.tbl-occupied {
+  background: color-mix(in oklab, var(--table-occupied) 15%, var(--card));
+  border-color: color-mix(in oklab, var(--table-occupied) 42%, transparent);
+}
+.tbl-bill {
+  background: color-mix(in oklab, var(--table-bill) 14%, var(--card));
+  border-color: color-mix(in oklab, var(--table-bill) 48%, transparent);
+}
+.tbl-test {
+  background: var(--foreground);
+  border-color: color-mix(in oklab, var(--foreground) 55%, transparent);
+}
+.tbl-chip {
+  display: inline-flex; align-items: center; gap: 0.45rem;
+  padding: 0.35rem 0.9rem; border-radius: 999px;
+  background: color-mix(in oklab, var(--card) 82%, transparent);
+  border: 1px solid color-mix(in oklab, var(--foreground) 10%, transparent);
+  font-size: 0.85rem; color: var(--muted-foreground); white-space: nowrap;
+}
+.tbl-chip b { color: var(--foreground); font-weight: 700; font-variant-numeric: tabular-nums; }
+
 @keyframes alert-pulse-ring {
   0%   { box-shadow: 0 0 0 0 var(--destructive); }
   70%  { box-shadow: 0 0 0 14px transparent; }

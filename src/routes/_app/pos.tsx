@@ -188,16 +188,13 @@ function PosPage() {
     nav({ to: "/order/$orderId", params: { orderId: order.id } });
   };
 
-  const colorFor = (s: RTable["status"]) =>
-    s === "available" ? "bg-table-available text-white"
-    : s === "bill_requested" ? "bg-table-bill text-white"
-    : "bg-table-occupied text-white";
-
   const takeoutOrders = specialOrders.filter((o) => o.source === "takeout");
   const staffOrders = specialOrders.filter((o) => o.source === "staff_meal");
+  const availCount = tables.filter((x) => x.status === "available").length;
+  const busyCount = tables.length - availCount;
 
   return (
-    <div className="p-6">
+    <div className="pos-surface min-h-[calc(100dvh-3.5rem)] p-6">
       {banner && (
         <div
           key={banner.key}
@@ -295,40 +292,61 @@ function PosPage() {
         </div>
       </div>
 
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-5">
         <h1 className="text-2xl font-bold">{t("nav_pos")}</h1>
-        <div className="flex items-center gap-3 text-sm">
-          <Legend color="bg-table-available" label={t("available")} />
-          <Legend color="bg-table-occupied" label={t("occupied")} />
-          <Legend color="bg-table-bill" label={t("bill_requested")} />
+        <div className="flex items-center gap-2">
+          <span className="tbl-chip">{t("available")} <b>{availCount}</b></span>
+          <span className="tbl-chip">{t("occupied")} <b>{busyCount}</b></span>
         </div>
       </div>
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-3">
-        {tables.map((tbl) => (
-          <button
-            key={tbl.id}
-            onClick={() => onTableClick(tbl)}
-            className={`relative aspect-square rounded-xl shadow-sm hover:shadow-md transition-all ${tbl.has_qr_alert ? "alert-flash" : (tbl.is_test ?? tbl.code === "TEST") ? "bg-black text-white ring-2 ring-neutral-500" : colorFor(tbl.status)} flex flex-col items-center justify-center gap-1 p-2`}
-          >
-            {tbl.has_qr_alert && (
-              <>
-                <span className="absolute top-1.5 right-1.5">
-                  <Bell className="h-4 w-4 animate-pulse" />
-                </span>
-                <span className="absolute -top-1.5 -left-1.5 inline-flex items-center justify-center min-w-6 h-6 px-1.5 rounded-full bg-white text-destructive text-[11px] font-bold shadow">
-                  NEW
-                </span>
-              </>
-            )}
-            <div className="text-2xl font-bold leading-none">{tbl.code}</div>
-            <div className="text-xs opacity-90">{tbl.capacity}</div>
-            {tbl.status !== "available" && (
-              <div className="flex items-center gap-1 text-sm mt-1">
-                <Users className="h-3.5 w-3.5" /> {tbl.guests}
+        {tables.map((tbl) => {
+          const isTest = tbl.is_test ?? tbl.code === "TEST";
+          const bill = tbl.status === "bill_requested";
+          const busy = tbl.status !== "available";
+          const ink = isTest ? "text-white" : "text-foreground";
+          return (
+            <button
+              key={tbl.id}
+              onClick={() => onTableClick(tbl)}
+              className={`tbl-card relative aspect-square rounded-2xl p-3 shadow-sm hover:shadow-md transition-all flex flex-col ${tbl.has_qr_alert ? "alert-flash" : isTest ? "tbl-test" : bill ? "tbl-bill" : busy ? "tbl-occupied" : ""}`}
+            >
+              {tbl.has_qr_alert && (
+                <>
+                  <span className="absolute top-1.5 right-1.5">
+                    <Bell className="h-4 w-4 animate-pulse" />
+                  </span>
+                  <span className="absolute -top-1.5 -left-1.5 inline-flex items-center justify-center min-w-6 h-6 px-1.5 rounded-full bg-white text-destructive text-[11px] font-bold shadow">
+                    NEW
+                  </span>
+                </>
+              )}
+              <div className="flex items-start justify-between">
+                <span className={`text-2xl font-extrabold leading-none ${ink}`}>{tbl.code}</span>
+                {bill && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-destructive text-destructive-foreground leading-none">
+                    {t("bill_requested")}
+                  </span>
+                )}
               </div>
-            )}
-          </button>
-        ))}
+              <div className="flex-1 grid place-items-center">
+                {busy ? (
+                  <div className={`flex items-center gap-1.5 ${ink}`}>
+                    <Users className="h-5 w-5" />
+                    <span className="text-3xl font-bold leading-none">{tbl.guests}</span>
+                  </div>
+                ) : (
+                  <span className="grid place-items-center h-12 w-12 rounded-full bg-primary/15 text-primary">
+                    <Plus className="h-7 w-7" />
+                  </span>
+                )}
+              </div>
+              <div className={`flex items-center gap-1 text-xs ${isTest ? "text-white/75" : "text-muted-foreground"}`}>
+                <Users className="h-3.5 w-3.5" /> {tbl.capacity}
+              </div>
+            </button>
+          );
+        })}
       </div>
 
       <Dialog open={!!openTable} onOpenChange={(o) => !o && setOpenTable(null)}>
@@ -349,15 +367,6 @@ function PosPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
-
-function Legend({ color, label }: { color: string; label: string }) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <span className={`inline-block h-3 w-3 rounded ${color}`} />
-      <span className="text-muted-foreground">{label}</span>
     </div>
   );
 }
