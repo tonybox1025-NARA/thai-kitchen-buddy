@@ -16,6 +16,7 @@ import { SetMenuDialog } from "@/components/SetMenuDialog";
 import { SETS, type SetConfig } from "@/lib/set-menu";
 import { printCounter, printKitchenJobs, type CounterPrintPayload } from "@/lib/counter-printer";
 import { isOffline } from "@/lib/online-status";
+import { tableLabel } from "@/lib/table";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/order/$orderId")({ component: OrderPage });
@@ -126,7 +127,7 @@ function OrderPage() {
       setTableId(ord.table_id);
       const { data: tbl } = await supabase.from("restaurant_tables").select("code,has_qr_alert").eq("id", ord.table_id).single();
       if (tbl) {
-        setTableCode(tbl.code);
+        setTableCode(tableLabel(tbl.code));
         setTableHasQrAlert(Boolean((tbl as any).has_qr_alert));
       }
     }
@@ -924,7 +925,7 @@ function OrderPage() {
             <div className="grid grid-cols-4 gap-2 py-2">
               {availableTables.map((tbl) => (
                 <Button key={tbl.id} variant="outline" className="h-14 text-base font-bold" onClick={() => doMoveTable(tbl.id)}>
-                  {tbl.code}
+                  {tableLabel(tbl.code)}
                 </Button>
               ))}
             </div>

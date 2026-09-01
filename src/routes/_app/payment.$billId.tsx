@@ -17,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ManagerPinDialog } from "@/components/ManagerPinDialog";
 import { printCounter } from "@/lib/counter-printer";
 import { isOffline } from "@/lib/online-status";
+import { tableLabel } from "@/lib/table";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/payment/$billId")({ component: PaymentPage });
@@ -215,7 +216,7 @@ function PaymentPage() {
       const { data: ord } = await supabase.from("orders").select("table_id").eq("id", b.order_id).single();
       if (ord?.table_id) {
         const { data: tbl } = await supabase.from("restaurant_tables").select("code").eq("id", ord.table_id).single();
-        if (tbl) setTableCode(tbl.code);
+        if (tbl) setTableCode(tableLabel(tbl.code));
       }
 
       // Load applied discount (at most one per bill)
