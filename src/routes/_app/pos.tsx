@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { playAlertBeep } from "@/lib/audio-alert";
 import { printCounter } from "@/lib/counter-printer";
 import { isOffline } from "@/lib/online-status";
+import { tableLabel } from "@/lib/table";
 
 export const Route = createFileRoute("/_app/pos")({ component: PosPage });
 
@@ -56,7 +57,7 @@ function PosPage() {
     load();
     loadSpecialOrders();
     const showQrAlert = (tableCode: string) => {
-      toast.success(`${t("qr_alert")} — ${t("table")} ${tableCode}`);
+      toast.success(`${t("qr_alert")} — ${t("table")} ${tableLabel(tableCode)}`);
       playAlertBeep();
       setBanner({ tableCode, key: Date.now() });
     };
@@ -147,12 +148,12 @@ function PosPage() {
     const { data: cfg } = await supabase.from("settings").select("restaurant_name").eq("id", 1).maybeSingle();
     await printCounter({
       kind: "table_qr",
-      table: code,
+      table: tableLabel(code),
       url: `${window.location.origin}/menu/${encodeURIComponent(code)}`,
       restaurant: (cfg as { restaurant_name?: string } | null)?.restaurant_name ?? "Restaurant",
       guests: seats,
     });
-    toast.success(`QR printed · ${t("table")} ${code}`);
+    toast.success(`QR printed · ${t("table")} ${tableLabel(code)}`);
     setOpenTable(null);
   };
 
@@ -203,7 +204,7 @@ function PosPage() {
         >
           <Bell className="h-5 w-5 animate-pulse" />
           <div className="font-semibold">
-            {t("qr_alert")} — {t("table")} {banner.tableCode}
+            {t("qr_alert")} — {t("table")} {tableLabel(banner.tableCode)}
           </div>
           <button
             onClick={() => setBanner(null)}
@@ -322,7 +323,7 @@ function PosPage() {
                 </>
               )}
               <div className="flex items-start justify-between">
-                <span className={`text-2xl font-extrabold leading-none ${ink}`}>{tbl.code}</span>
+                <span className={`text-2xl font-extrabold leading-none ${ink}`}>{tableLabel(tbl.code)}</span>
                 {bill && (
                   <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-destructive text-destructive-foreground leading-none">
                     {t("bill_requested")}
@@ -351,7 +352,7 @@ function PosPage() {
 
       <Dialog open={!!openTable} onOpenChange={(o) => !o && setOpenTable(null)}>
         <DialogContent>
-          <DialogHeader><DialogTitle>{t("open_table")} — {openTable?.code}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{t("open_table")} — {tableLabel(openTable?.code)}</DialogTitle></DialogHeader>
           <div>
             <Label>{t("num_guests")}</Label>
             <div className="mt-2">
