@@ -74,10 +74,13 @@ export const Route = createFileRoute("/api/public/qr-menu/$tableCode")({
           }
         }
 
+        const usedCategoryIds = new Set((menus ?? []).map((menu) => menu.category_id).filter(Boolean));
+        const visibleCategories = (cats ?? []).filter((category) => usedCategoryIds.has(category.id));
+
         return Response.json(
           {
             table,
-            categories: cats ?? [],
+            categories: visibleCategories,
             menus: menus ?? [],
             restaurant_name: settings?.restaurant_name ?? "Restaurant",
             addonsByMenuId,

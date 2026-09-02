@@ -116,7 +116,10 @@ function OrderPage() {
       supabase.from("settings").select("vat_mode,vat_rate,restaurant_name,receipt_logo_url").eq("id", 1).single(),
     ]);
     if (m) setMenus(m as Menu[]);
-    if (c) setCats(c as Category[]);
+    if (c) {
+      const usedCategoryIds = new Set((m ?? []).map((menu) => menu.category_id).filter(Boolean));
+      setCats((c as Category[]).filter((category) => usedCategoryIds.has(category.id)));
+    }
     if (it) setItems(it as Item[]);
     if (s) { setSettingsVatMode((s.vat_mode as "inclusive" | "exclusive") || "inclusive"); setSettingsVatRate(Number(s.vat_rate) || 7); setRestaurantName(s.restaurant_name); setReceiptLogoUrl((s as any).receipt_logo_url ?? null); }
     if (ord) {

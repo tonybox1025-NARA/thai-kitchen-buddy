@@ -45,7 +45,7 @@ Deno.serve(async (req) => {
       global: { fetch: apiKeyOnlyFetch },
     });
     const [menusResult, categoriesResult, groupsResult, optionsResult] = await Promise.all([
-      db.from("menus").select("id,name_th,name_en,name_my,price,image_url,available,category_id,sort"),
+      db.from("menus").select("id,manager_menu_id,name_th,name_en,name_my,price,image_url,available,category_id,sort,is_set,is_set_child"),
       db.from("categories").select("id,name_th,name_en,name_my,sort"),
       db.from("addon_groups").select("id,name,kitchen_name"),
       db.from("addon_options").select("id,addon_group_id,name,price,sort_order"),
@@ -53,6 +53,7 @@ Deno.serve(async (req) => {
     for (const result of [menusResult, categoriesResult, groupsResult, optionsResult]) if (result.error) throw result.error;
     const posMenus = menusResult.data ?? [];
     const menuById = new Map(posMenus.map((menu) => [menu.id, menu]));
+    const menuByManagerId = new Map(posMenus.filter((menu) => menu.manager_menu_id).map((menu) => [menu.manager_menu_id, menu]));
     const menuByName = new Map(posMenus.map((menu) => [normalize(menu.name_th), menu]));
     const posCategories = categoriesResult.data ?? [];
     const categoryByName = new Map(posCategories.map((category) => [normalize(category.name_th), category]));
@@ -64,7 +65,7 @@ Deno.serve(async (req) => {
     const claimedMenuIds = new Set<string>();
     const explicitTargets = new Map<string, any>();
     for (const menu of catalog.menus) {
-      const target = menu.pos_menu_id ? menuById.get(menu.pos_menu_id) : null;
+      const target = menuByManagerId.get(menu.id) || (menu.pos_menu_id ? menuById.get(menu.pos_menu_id) : null);
       if (target && !claimedMenuIds.has(target.id)) {
         explicitTargets.set(menu.id, target);
         claimedMenuIds.add(target.id);
@@ -79,9 +80,11 @@ Deno.serve(async (req) => {
           claimedMenuIds.add(nameTarget.id);
         }
       }
-      const changed = !target || target.name_en !== (menu.name_en || "") || target.name_my !== (menu.name_my || "")
+      const sellable = menu.is_active !== false && menu.available_pos !== false && menu.is_set_child !== true;
+      const changed = !target || target.name_th !== menu.name_th || target.name_en !== (menu.name_en || "") || target.name_my !== (menu.name_my || menu.kitchen_name_my || "")
         || Number(target.price) !== Number(menu.selling_price) || target.image_url !== (menu.image_url || null)
-        || target.available !== (menu.is_active !== false && menu.available_pos !== false);
+        || target.available !== sellable || target.sort !== (menu.sort_order ?? 0)
+        || target.is_set !== (menu.is_set === true) || target.is_set_child !== (menu.is_set_child === true);
       return { source: menu, target, action: !target ? "create" : changed ? "update" : "same" };
     });
     const summary = {
@@ -110,7 +113,20 @@ Deno.serve(async (req) => {
     for (const [index, item] of menuPlan.entries()) {
       const menu = item.source;
       const id = item.target?.id ?? crypto.randomUUID();
-      menuRows.push({ id, category_id: categoryIdByName.get(normalize(menu.category || "ทั่วไป")) ?? null, name_th: menu.name_th, name_en: menu.name_en || "", name_my: menu.name_my || menu.kitchen_name_my || "", price: Number(menu.selling_price), image_url: menu.image_url || null, available: menu.is_active !== false && menu.available_pos !== false, sort: menu.sort_order ?? index });
+      menuRows.push({
+        id,
+        manager_menu_id: menu.id,
+        category_id: categoryIdByName.get(normalize(menu.category || "ทั่วไป")) ?? null,
+        name_th: menu.name_th,
+        name_en: menu.name_en || "",
+        name_my: menu.name_my || menu.kitchen_name_my || "",
+        price: Number(menu.selling_price),
+        image_url: menu.image_url || null,
+        available: menu.is_active !== false && menu.available_pos !== false && menu.is_set_child !== true,
+        is_set: menu.is_set === true,
+        is_set_child: menu.is_set_child === true,
+        sort: menu.sort_order ?? index,
+      });
       menuMappings.push({ managerId: menu.id, posId: id });
     }
     if (menuRows.length > 0) {
