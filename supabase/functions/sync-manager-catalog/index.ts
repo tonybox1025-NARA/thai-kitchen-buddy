@@ -88,10 +88,29 @@ Deno.serve(async (req) => {
         || target.is_set !== (menu.is_set === true) || target.is_set_child !== (menu.is_set_child === true);
       return { source: menu, target, action: !target && !sellable ? "skip" : !target ? "create" : changed ? "update" : "same" };
     });
+    const costChanges = menuPlan
+      .filter((item: any) => item.target && Math.abs(Number(item.target.cost ?? 0) - Number(item.source.food_cost ?? 0)) >= 0.005)
+      .map((item: any) => ({
+        name: item.source.name_th,
+        before: Number(item.target.cost ?? 0),
+        after: Number(item.source.food_cost ?? 0),
+        available: item.source.is_active !== false && item.source.available_pos !== false && item.source.is_set_child !== true,
+      }));
+    const sellableCostChanges = costChanges.filter((item: any) => item.available);
     const summary = {
       menus: { total: menuPlan.length, create: menuPlan.filter((item: any) => item.action === "create").length, update: menuPlan.filter((item: any) => item.action === "update").length, same: menuPlan.filter((item: any) => item.action === "same").length, skipped: menuPlan.filter((item: any) => item.action === "skip").length },
       categories: { total: categoryNames.length, create: categoryNames.filter((name) => !categoryByName.has(normalize(name))).length },
       addons: { groups: (catalog.addonGroups ?? []).length, options: (catalog.addonOptions ?? []).length, links: (catalog.menuAddons ?? []).length },
+      costs: {
+        changed: costChanges.length,
+        sellableChanged: sellableCostChanges.length,
+        increased: sellableCostChanges.filter((item: any) => item.after > item.before).length,
+        decreased: sellableCostChanges.filter((item: any) => item.after < item.before).length,
+        zero: sellableCostChanges.filter((item: any) => item.after === 0).length,
+        topDifferences: sellableCostChanges
+          .sort((a: any, b: any) => Math.abs(b.after - b.before) - Math.abs(a.after - a.before))
+          .slice(0, 10),
+      },
     };
     if (!execute) return Response.json({ mode: "preview", summary }, { headers: corsHeaders });
 
