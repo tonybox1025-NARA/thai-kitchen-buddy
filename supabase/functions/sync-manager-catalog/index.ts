@@ -107,12 +107,16 @@ Deno.serve(async (req) => {
         increased: sellableCostChanges.filter((item: any) => item.after > item.before).length,
         decreased: sellableCostChanges.filter((item: any) => item.after < item.before).length,
         zero: sellableCostChanges.filter((item: any) => item.after === 0).length,
+        zeroMenus: sellableCostChanges.filter((item: any) => item.after === 0).map((item: any) => item.name),
         topDifferences: sellableCostChanges
           .sort((a: any, b: any) => Math.abs(b.after - b.before) - Math.abs(a.after - a.before))
           .slice(0, 10),
       },
     };
     if (!execute) return Response.json({ mode: "preview", summary }, { headers: corsHeaders });
+    if (summary.costs.zero > 0) {
+      throw new Error(`Catalog publish blocked: ${summary.costs.zero} sellable menu(s) would change to zero food cost: ${summary.costs.zeroMenus.join(", ")}`);
+    }
 
     const categoryIdByName = new Map<string, string>();
     const categoryRows: any[] = [];
