@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Trash2, Plus, Printer, QrCode, Wifi, WifiOff, ChevronDown, LayoutGrid } from "lucide-react";
+import { Trash2, Plus, Printer, QrCode, Wifi, WifiOff, ChevronDown, LayoutGrid, Search, ImageIcon, Link2, ChevronRight, ChefHat } from "lucide-react";
 import { toast } from "sonner";
 import { makeDriver, printInDedicatedDocument, type DriverId } from "@/lib/print/PrintService";
 import {
@@ -30,7 +30,20 @@ export const Route = createFileRoute("/_app/settings")({ component: SettingsPage
 
 type RTable = { id: string; code: string; capacity: number };
 
-type Menu = { id: string; category_id: string | null; name_th: string; name_en: string; name_my: string; price: number; cost: number; available: boolean; image_url?: string | null };
+type Menu = {
+  id: string;
+  category_id: string | null;
+  name_th: string;
+  name_en: string;
+  name_my: string;
+  price: number;
+  cost: number;
+  available: boolean;
+  image_url?: string | null;
+  manager_menu_id?: string | null;
+  is_set?: boolean;
+  is_set_child?: boolean;
+};
 
 function MarginIndicator({ price, cost }: { price: number; cost: number }) {
   const { t } = useI18n();
@@ -1447,6 +1460,9 @@ function MenuTab() {
   const [allAddonGroups, setAllAddonGroups] = useState<AddonGroup[]>([]);
   // IDs of addon groups currently linked to the menu item being edited
   const [linkedAddonIds, setLinkedAddonIds] = useState<Set<string>>(new Set());
+  const [query, setQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [availabilityFilter, setAvailabilityFilter] = useState("available");
 
   const db = supabase as any;
 
@@ -1494,7 +1510,9 @@ function MenuTab() {
 
   // Keep edit.cost in sync whenever ingredient rows change
   useEffect(() => {
-    if (edit) setEdit((prev) => prev ? { ...prev, cost: parseFloat(derivedCost.toFixed(2)) } : prev);
+    if (edit && editIngRows.some((row) => !row._deleted)) {
+      setEdit((prev) => prev ? { ...prev, cost: parseFloat(derivedCost.toFixed(2)) } : prev);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [derivedCost]);
 
@@ -1504,6 +1522,7 @@ function MenuTab() {
       name_th: edit.name_th ?? "", name_en: edit.name_en ?? "", name_my: edit.name_my ?? "",
       price: Number(edit.price ?? 0), cost: Number(edit.cost ?? 0),
       category_id: edit.category_id ?? null, available: edit.available ?? true,
+      image_url: edit.image_url?.trim() || null,
     };
     let menuId = edit.id;
     if (menuId) {
@@ -1537,7 +1556,9 @@ function MenuTab() {
       }
     }
 
-    setEdit(null); setEditIngRows([]); setLinkedAddonIds(new Set()); load();
+    setEdit(null); setEditIngRows([]); setLinkedAddonIds(new Set());
+    await load();
+    toast.success(t("saved"));
   };
 
   const closeEdit = () => { setEdit(null); setEditIngRows([]); setLinkedAddonIds(new Set()); };
@@ -1552,44 +1573,136 @@ function MenuTab() {
     await supabase.from("menus").delete().eq("id", m.id); load();
   };
 
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const filteredMenus = menus.filter((menu) => {
+    const matchesQuery = !normalizedQuery || [menu.name_th, menu.name_en, menu.name_my]
+      .some((value) => value?.toLocaleLowerCase().includes(normalizedQuery));
+    const matchesCategory = categoryFilter === "all" || menu.category_id === categoryFilter;
+    const matchesAvailability = availabilityFilter === "all"
+      || (availabilityFilter === "available" ? menu.available : !menu.available);
+    return matchesQuery && matchesCategory && matchesAvailability;
+  });
+  const categoryById = new Map(cats.map((category) => [category.id, category]));
+
   return (
     <div className="mt-4 space-y-4">
-      <Button onClick={() => openEdit({})}><Plus className="h-4 w-4 mr-1" />{t("add")}</Button>
-      <div className="grid gap-2">
-        {menus.map((m) => (
-          <Card key={m.id}>
-            <CardContent className="py-3 flex items-center gap-4">
-              <div className="flex-1 min-w-0">
-                <div className="font-medium">{m.name_th} · {m.name_en}</div>
-                <div className="text-xs text-muted-foreground font-burmese">{m.name_my}</div>
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search Thai, English, or Burmese"
+            className="pl-9"
+          />
+        </div>
+        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+          <SelectTrigger className="w-full xl:w-64"><SelectValue placeholder="All categories" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All categories</SelectItem>
+            {cats.map((category) => <SelectItem key={category.id} value={category.id}>{category.name_th}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={availabilityFilter} onValueChange={setAvailabilityFilter}>
+          <SelectTrigger className="w-full xl:w-44"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="available">Available</SelectItem>
+            <SelectItem value="unavailable">Unavailable</SelectItem>
+            <SelectItem value="all">All statuses</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button onClick={() => openEdit({ available: true })}><Plus className="h-4 w-4 mr-1" />{t("add")}</Button>
+      </div>
+
+      <div className="overflow-x-auto rounded-md border bg-background">
+        <div className="grid min-w-[900px] grid-cols-[56px_minmax(240px,1fr)_180px_110px_110px_70px_40px] items-center gap-3 border-b bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
+          <span>Image</span><span>Menu</span><span>Category</span><span className="text-right">Price</span><span className="text-right">Food cost</span><span className="text-center">Sale</span><span />
+        </div>
+        {filteredMenus.map((m) => {
+          const category = m.category_id ? categoryById.get(m.category_id) : null;
+          return (
+            <button
+              type="button"
+              key={m.id}
+              onClick={() => openEdit(m)}
+              className="grid w-full min-w-[900px] grid-cols-[56px_minmax(240px,1fr)_180px_110px_110px_70px_40px] items-center gap-3 border-b px-3 py-2 text-left transition-colors last:border-b-0 hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+            >
+              <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded border bg-muted">
+                {m.image_url ? <img src={m.image_url} alt="" className="h-full w-full object-cover" /> : <ImageIcon className="h-5 w-5 text-muted-foreground" />}
               </div>
-              <div className="w-40 text-right">
-                <div className="font-bold">฿{Number(m.price).toFixed(2)}</div>
-                <div className="text-xs text-muted-foreground">Cost ฿{Number(m.cost ?? 0).toFixed(2)}</div>
-                <div className="mt-1"><MarginIndicator price={Number(m.price)} cost={Number(m.cost ?? 0)} /></div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="truncate font-medium">{m.name_th}</span>
+                  {m.manager_menu_id && <span className="inline-flex shrink-0 items-center gap-1 rounded bg-sky-50 px-1.5 py-0.5 text-[10px] font-medium text-sky-700"><Link2 className="h-3 w-3" />Manager</span>}
+                  {m.is_set && <span className="shrink-0 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">SET</span>}
+                </div>
+                <div className="truncate text-xs text-muted-foreground">{m.name_en || "English name missing"}</div>
+                <div className="truncate text-xs text-muted-foreground font-burmese">{m.name_my || "Burmese kitchen name missing"}</div>
               </div>
-              <Switch checked={m.available} onCheckedChange={() => toggleAvail(m)} />
-              <Button variant="outline" size="sm" onClick={() => openEdit(m)}>{t("edit")}</Button>
-              <Button variant="ghost" size="sm" onClick={() => del(m)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-            </CardContent>
-          </Card>
-        ))}
+              <div className="truncate text-sm text-muted-foreground">{category?.name_th ?? "Uncategorized"}</div>
+              <div className="text-right font-semibold">฿{Number(m.price).toFixed(2)}</div>
+              <div className="text-right">
+                <div className="font-medium">฿{Number(m.cost ?? 0).toFixed(2)}</div>
+                <div className="text-xs text-muted-foreground">{Number(m.price) > 0 ? `${((Number(m.cost ?? 0) / Number(m.price)) * 100).toFixed(1)}%` : "—"}</div>
+              </div>
+              <div className="flex justify-center" onClick={(event) => event.stopPropagation()}>
+                <Switch checked={m.available} onCheckedChange={() => toggleAvail(m)} />
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            </button>
+          );
+        })}
+        {filteredMenus.length === 0 && <div className="px-4 py-12 text-center text-sm text-muted-foreground">No menus match these filters.</div>}
       </div>
 
       <Dialog open={!!edit} onOpenChange={(o) => !o && closeEdit()}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{edit?.id ? t("edit") : t("add")}</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div><Label>{t("name_th")}</Label><Input value={edit?.name_th ?? ""} onChange={(e) => setEdit({ ...edit, name_th: e.target.value })} /></div>
-            <div><Label>{t("name_en")}</Label><Input value={edit?.name_en ?? ""} onChange={(e) => setEdit({ ...edit, name_en: e.target.value })} /></div>
-            <div><Label>{t("name_my")}</Label><Input className="font-burmese" value={edit?.name_my ?? ""} onChange={(e) => setEdit({ ...edit, name_my: e.target.value })} /></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label>{t("price")} (฿)</Label><KeypadInput value={edit?.price ?? 0} onChange={(n) => setEdit({ ...edit, price: n })} title={t("price")} decimal /></div>
-              <div><Label>{t("lbl_cost")} (฿)</Label><KeypadInput value={edit?.cost ?? 0} onChange={(n) => setEdit({ ...edit, cost: n })} title={t("lbl_cost")} decimal /></div>
+        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-5xl">
+          <DialogHeader>
+            <DialogTitle>{edit?.id ? "Menu details" : "Add menu"}</DialogTitle>
+            {edit?.manager_menu_id && (
+              <div className="flex items-center gap-2 text-sm text-sky-700">
+                <Link2 className="h-4 w-4" />Linked to Manager · catalog fields may be refreshed by the next Manager publish
+              </div>
+            )}
+          </DialogHeader>
+          <div className="grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
+            <div className="space-y-3">
+              <div className="aspect-square overflow-hidden rounded-md border bg-muted">
+                {edit?.image_url ? <img src={edit.image_url} alt="" className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center"><ImageIcon className="h-12 w-12 text-muted-foreground" /></div>}
+              </div>
+              <div><Label>Image URL</Label><Input value={edit?.image_url ?? ""} onChange={(e) => setEdit({ ...edit, image_url: e.target.value })} placeholder="https://…" /></div>
+              <div className="rounded-md border p-3">
+                <div className="mb-2 flex items-center gap-2 text-sm font-semibold"><ChefHat className="h-4 w-4" />Kitchen display</div>
+                <div className="text-sm font-burmese">{edit?.name_my || "Burmese kitchen name missing"}</div>
+              </div>
             </div>
-            <MarginIndicator price={Number(edit?.price ?? 0)} cost={Number(edit?.cost ?? 0)} />
+            <div className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-2">
+                <div><Label>{t("name_th")}</Label><Input value={edit?.name_th ?? ""} onChange={(e) => setEdit({ ...edit, name_th: e.target.value })} /></div>
+                <div><Label>{t("name_en")}</Label><Input value={edit?.name_en ?? ""} onChange={(e) => setEdit({ ...edit, name_en: e.target.value })} /></div>
+              </div>
+              <div><Label>{t("name_my")} · kitchen</Label><Input className="font-burmese" value={edit?.name_my ?? ""} onChange={(e) => setEdit({ ...edit, name_my: e.target.value })} /></div>
+              <div>
+                <Label>{t("category")}</Label>
+                <Select value={edit?.category_id ?? ""} onValueChange={(v) => setEdit({ ...edit, category_id: v })}>
+                  <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                  <SelectContent>{cats.map((c) => <SelectItem key={c.id} value={c.id}>{c.name_th} / {c.name_en}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label>{t("price")} (฿)</Label><KeypadInput value={edit?.price ?? 0} onChange={(n) => setEdit({ ...edit, price: n })} title={t("price")} decimal /></div>
+                <div><Label>{t("lbl_cost")} (฿)</Label><KeypadInput value={edit?.cost ?? 0} onChange={(n) => setEdit({ ...edit, cost: n })} title={t("lbl_cost")} decimal /></div>
+              </div>
+              <MarginIndicator price={Number(edit?.price ?? 0)} cost={Number(edit?.cost ?? 0)} />
+              <div className="flex items-center justify-between rounded-md border px-3 py-2">
+                <div><div className="text-sm font-medium">Available for sale</div><div className="text-xs text-muted-foreground">Shown on POS and customer ordering menus</div></div>
+                <Switch checked={edit?.available ?? true} onCheckedChange={(v) => setEdit({ ...edit, available: v })} />
+              </div>
+            </div>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
             {/* ── Ingredients section ── */}
-            <div className="border rounded-md p-3 bg-muted/30">
+            <div className="border rounded-md p-4 bg-muted/20">
               <IngredientsSection
                 menuId={edit?.id}
                 rows={editIngRows}
@@ -1598,7 +1711,7 @@ function MenuTab() {
             </div>
 
             {/* ── Add-ons section ── */}
-            <div className="border rounded-md p-3 bg-muted/30">
+            <div className="border rounded-md p-4 bg-muted/20">
               <Label className="text-sm font-semibold mb-2 block">{t("linked_addons")}</Label>
               <AddonsSection
                 allGroups={allAddonGroups}
@@ -1607,16 +1720,9 @@ function MenuTab() {
               />
             </div>
 
-            <div>
-              <Label>{t("category")}</Label>
-              <Select value={edit?.category_id ?? ""} onValueChange={(v) => setEdit({ ...edit, category_id: v })}>
-                <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-                <SelectContent>{cats.map((c) => <SelectItem key={c.id} value={c.id}>{c.name_th} / {c.name_en}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-center gap-2"><Switch checked={edit?.available ?? true} onCheckedChange={(v) => setEdit({ ...edit, available: v })} /><Label>{t("available_toggle")}</Label></div>
           </div>
           <DialogFooter>
+            {edit?.id && <Button variant="ghost" className="mr-auto text-destructive" onClick={() => { const current = edit as Menu; closeEdit(); void del(current); }}><Trash2 className="mr-2 h-4 w-4" />Delete menu</Button>}
             <Button variant="outline" onClick={closeEdit}>{t("cancel")}</Button>
             <Button onClick={save}>{t("save")}</Button>
           </DialogFooter>
