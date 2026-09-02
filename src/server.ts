@@ -50,9 +50,22 @@ function isCatastrophicSsrErrorBody(body: string, responseStatus: number): boole
   );
 }
 
+function isClientAbort(error: unknown): boolean {
+  const seen = new Set<unknown>();
+  let current: unknown = error;
+  while (current && typeof current === "object" && !seen.has(current)) {
+    seen.add(current);
+    const fields = current as { code?: unknown; message?: unknown; cause?: unknown };
+    if (fields.code === "ECONNRESET" || fields.code === "ABORT_ERR") return true;
+    if (typeof fields.message === "string" && /aborted|ECONNRESET/i.test(fields.message)) return true;
+    current = fields.cause;
+  }
+  return false;
+}
+
 // h3 swallows in-handler throws into a normal 500 Response with body
 // {"unhandled":true,"message":"HTTPError"} — try/catch alone never fires for those.
-async function normalizeCatastrophicSsrResponse(response: Response): Promise<Response> {
+async function normalizeCatastrophicSsrResponse(request: Request, response: Response): Promise<Response> {
   if (response.status < 500) return response;
   const contentType = response.headers.get("content-type") ?? "";
   if (!contentType.includes("application/json")) return response;
@@ -62,7 +75,13 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
     return response;
   }
 
-  console.error(consumeLastCapturedError() ?? new Error(`h3 swallowed SSR error: ${body}`));
+  const captured = consumeLastCapturedError();
+  // The browser closed the connection mid-render (navigation/reload). Not an app bug.
+  if (request.signal.aborted || isClientAbort(captured)) {
+    return new Response(null, { status: 499 });
+  }
+
+  console.error(captured ?? new Error(`h3 swallowed SSR error: ${body}`));
   return brandedErrorResponse();
 }
 
@@ -71,10 +90,14 @@ export default {
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
-      return await normalizeCatastrophicSsrResponse(response);
+      return await normalizeCatastrophicSsrResponse(request, response);
     } catch (error) {
+      if (request.signal.aborted || isClientAbort(error)) {
+        return new Response(null, { status: 499 });
+      }
       console.error(error);
       return brandedErrorResponse();
     }
   },
 };
+
