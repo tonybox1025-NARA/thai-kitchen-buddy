@@ -85,10 +85,10 @@ Deno.serve(async (req) => {
         || Number(target.price) !== Number(menu.selling_price) || target.image_url !== (menu.image_url || null)
         || target.available !== sellable || target.sort !== (menu.sort_order ?? 0)
         || target.is_set !== (menu.is_set === true) || target.is_set_child !== (menu.is_set_child === true);
-      return { source: menu, target, action: !target ? "create" : changed ? "update" : "same" };
+      return { source: menu, target, action: !target && !sellable ? "skip" : !target ? "create" : changed ? "update" : "same" };
     });
     const summary = {
-      menus: { total: menuPlan.length, create: menuPlan.filter((item: any) => item.action === "create").length, update: menuPlan.filter((item: any) => item.action === "update").length, same: menuPlan.filter((item: any) => item.action === "same").length },
+      menus: { total: menuPlan.length, create: menuPlan.filter((item: any) => item.action === "create").length, update: menuPlan.filter((item: any) => item.action === "update").length, same: menuPlan.filter((item: any) => item.action === "same").length, skipped: menuPlan.filter((item: any) => item.action === "skip").length },
       categories: { total: categoryNames.length, create: categoryNames.filter((name) => !categoryByName.has(normalize(name))).length },
       addons: { groups: (catalog.addonGroups ?? []).length, options: (catalog.addonOptions ?? []).length, links: (catalog.menuAddons ?? []).length },
     };
@@ -111,6 +111,7 @@ Deno.serve(async (req) => {
     const menuMappings: Array<{ managerId: string; posId: string }> = [];
     const menuRows: any[] = [];
     for (const [index, item] of menuPlan.entries()) {
+      if (item.action === "skip") continue;
       const menu = item.source;
       const id = item.target?.id ?? crypto.randomUUID();
       menuRows.push({
