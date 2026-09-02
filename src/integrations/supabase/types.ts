@@ -631,6 +631,9 @@ export type Database = {
           created_at: string
           id: string
           image_url: string | null
+          is_set: boolean
+          is_set_child: boolean
+          manager_menu_id: string | null
           name_en: string
           name_my: string
           name_th: string
@@ -644,6 +647,9 @@ export type Database = {
           created_at?: string
           id?: string
           image_url?: string | null
+          is_set?: boolean
+          is_set_child?: boolean
+          manager_menu_id?: string | null
           name_en: string
           name_my: string
           name_th: string
@@ -657,6 +663,9 @@ export type Database = {
           created_at?: string
           id?: string
           image_url?: string | null
+          is_set?: boolean
+          is_set_child?: boolean
+          manager_menu_id?: string | null
           name_en?: string
           name_my?: string
           name_th?: string

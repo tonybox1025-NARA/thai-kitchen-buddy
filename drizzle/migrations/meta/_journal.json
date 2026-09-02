@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1788343997887,
+      "tag": "0000_track_manager_catalog_identity",
+      "breakpoints": true
+    }
+  ]
+}
