@@ -45,7 +45,7 @@ Deno.serve(async (req) => {
       global: { fetch: apiKeyOnlyFetch },
     });
     const [menusResult, categoriesResult, groupsResult, optionsResult] = await Promise.all([
-      db.from("menus").select("id,manager_menu_id,name_th,name_en,name_my,price,image_url,available,category_id,sort,is_set,is_set_child"),
+      db.from("menus").select("id,manager_menu_id,name_th,name_en,name_my,price,cost,image_url,available,category_id,sort,is_set,is_set_child"),
       db.from("categories").select("id,name_th,name_en,name_my,sort"),
       db.from("addon_groups").select("id,name,kitchen_name"),
       db.from("addon_options").select("id,addon_group_id,name,price,sort_order"),
@@ -82,7 +82,8 @@ Deno.serve(async (req) => {
       }
       const sellable = menu.is_active !== false && menu.available_pos !== false && menu.is_set_child !== true;
       const changed = !target || target.name_th !== menu.name_th || target.name_en !== (menu.name_en || "") || target.name_my !== (menu.name_my || menu.kitchen_name_my || "")
-        || Number(target.price) !== Number(menu.selling_price) || target.image_url !== (menu.image_url || null)
+        || Number(target.price) !== Number(menu.selling_price) || Math.abs(Number(target.cost ?? 0) - Number(menu.food_cost ?? 0)) >= 0.005
+        || target.image_url !== (menu.image_url || null)
         || target.available !== sellable || target.sort !== (menu.sort_order ?? 0)
         || target.is_set !== (menu.is_set === true) || target.is_set_child !== (menu.is_set_child === true);
       return { source: menu, target, action: !target && !sellable ? "skip" : !target ? "create" : changed ? "update" : "same" };
@@ -122,6 +123,7 @@ Deno.serve(async (req) => {
         name_en: menu.name_en || "",
         name_my: menu.name_my || menu.kitchen_name_my || "",
         price: Number(menu.selling_price),
+        cost: Number(menu.food_cost ?? 0),
         image_url: menu.image_url || null,
         available: menu.is_active !== false && menu.available_pos !== false && menu.is_set_child !== true,
         is_set: menu.is_set === true,
