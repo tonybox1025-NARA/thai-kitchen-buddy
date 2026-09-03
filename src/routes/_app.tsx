@@ -33,7 +33,16 @@ function AppLayout() {
     }
   }, [loading, session, nav, setStaff]);
 
-  if (loading) return <LoginFallback onLogin={() => nav({ to: "/login", replace: true })} />;
+  // While the saved session is being restored, show a neutral spinner — NOT the
+  // login screen — so a logged-in device (the shop's daily case) goes straight
+  // to the app without a login screen flashing on startup.
+  if (loading) {
+    return (
+      <div className="min-h-screen grid place-items-center bg-background">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-muted border-t-primary" aria-label="Loading" />
+      </div>
+    );
+  }
 
   if (!session) {
     return <LoginFallback onLogin={() => nav({ to: "/login", replace: true })} />;
