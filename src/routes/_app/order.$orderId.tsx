@@ -580,11 +580,6 @@ function OrderPage() {
           )}
           <div className="ml-auto flex gap-2">
             {(orderSource === "pos" || orderSource === "qr") && (
-              <Button size="sm" variant="outline" onClick={reprintTableQr}>
-                <QrCode className="h-4 w-4 mr-1" />Print QR
-              </Button>
-            )}
-            {(orderSource === "pos" || orderSource === "qr") && (
               <Button size="sm" variant="outline" onClick={openMoveTable}>
                 <ArrowLeftRight className="h-4 w-4 mr-1" />{t("move_table")}
               </Button>
@@ -760,9 +755,20 @@ function OrderPage() {
           <Button className="w-full" size="lg" variant="secondary" onClick={sendToKitchen}>
             <ChefHat className="h-4 w-4 mr-2" />{t("send_to_kitchen")}
           </Button>
-          <Button className="w-full" size="lg" variant="outline" onClick={() => setBillOpen(true)} disabled={liveItems.length === 0}>
-            <Printer className="h-4 w-4 mr-2" />Print Bill
-          </Button>
+          {(orderSource === "pos" || orderSource === "qr") ? (
+            <div className="flex gap-3">
+              <Button className="flex-1" size="lg" variant="outline" onClick={reprintTableQr}>
+                <QrCode className="h-4 w-4 mr-2" />Print QR
+              </Button>
+              <Button className="flex-1" size="lg" variant="outline" onClick={() => setBillOpen(true)} disabled={liveItems.length === 0}>
+                <Printer className="h-4 w-4 mr-2" />Print Bill
+              </Button>
+            </div>
+          ) : (
+            <Button className="w-full" size="lg" variant="outline" onClick={() => setBillOpen(true)} disabled={liveItems.length === 0}>
+              <Printer className="h-4 w-4 mr-2" />Print Bill
+            </Button>
+          )}
           <Button className="w-full" size="lg" onClick={goToPayment}>
             <Receipt className="h-4 w-4 mr-2" />{t("go_to_payment")}
           </Button>
