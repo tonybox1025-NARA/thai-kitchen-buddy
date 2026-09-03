@@ -177,6 +177,20 @@ function OrderPage() {
     [allMenusSorted, activeCat],
   );
 
+  // Group the visible menus under their category (MERI-style sections with a header).
+  const menuSections = useMemo(() => {
+    const chosen = activeCat === "all" ? cats : cats.filter((c) => c.id === activeCat);
+    const byCat = new Map<string, Menu[]>();
+    for (const m of filteredMenus) {
+      const k = m.category_id ?? "__none__";
+      if (!byCat.has(k)) byCat.set(k, []);
+      byCat.get(k)!.push(m);
+    }
+    return chosen
+      .map((c) => ({ cat: c, items: byCat.get(c.id) ?? [] }))
+      .filter((s) => s.items.length > 0);
+  }, [filteredMenus, cats, activeCat]);
+
   const openMenu = async (m: Menu) => {
     // Detect set-menu items by name (e.g. "Lon Moh - SET A", "Lon Moh - SET B", "Lon Moh - SET C")
     const combined = `${m.name_en} ${m.name_th}`.toLowerCase();
@@ -580,21 +594,31 @@ function OrderPage() {
           ))}
         </div>
 
-        {/* Menu grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 p-4">
-          {filteredMenus.map((m) => (
-            <button
-              key={m.id}
-              onClick={() => openMenu(m)}
-              className="text-left rounded-xl border bg-card hover:border-primary hover:shadow-md transition overflow-hidden focus-visible:ring-2 focus-visible:ring-primary"
-            >
-              <MenuCardImage src={m.image_url} alt={pickName(m, lang)} />
-              <div className="p-3">
-                <div className="font-medium leading-tight line-clamp-2">{pickName(m, lang)}</div>
-                <div className="text-xs text-muted-foreground mt-0.5 truncate">{lang === "th" ? m.name_en : m.name_th}</div>
-                <div className="mt-2 font-bold text-primary">{thb(m.price)}</div>
+        {/* Menu — grouped into category sections (MERI-style header + count) */}
+        <div className="p-4 space-y-6">
+          {menuSections.map((sec) => (
+            <section key={sec.cat.id}>
+              <div className="flex items-baseline gap-2 mb-3 border-b pb-1.5">
+                <h2 className="text-lg font-bold leading-none">{pickName(sec.cat, lang)}</h2>
+                <span className="text-sm text-muted-foreground">({sec.items.length})</span>
               </div>
-            </button>
+              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+                {sec.items.map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => openMenu(m)}
+                    className="text-left rounded-xl border bg-card hover:border-primary hover:shadow-md transition overflow-hidden focus-visible:ring-2 focus-visible:ring-primary"
+                  >
+                    <MenuCardImage src={m.image_url} alt={pickName(m, lang)} />
+                    <div className="p-3">
+                      <div className="font-medium leading-tight line-clamp-2">{pickName(m, lang)}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5 truncate">{lang === "th" ? m.name_en : m.name_th}</div>
+                      <div className="mt-2 font-bold text-primary">{thb(m.price)}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </section>
           ))}
         </div>
       </div>
