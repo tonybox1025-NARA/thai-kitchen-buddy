@@ -35,7 +35,7 @@ const Schema = z.object({
         qty: z.number().int().min(1).max(50),
         notes: z.string().max(500).optional().nullable(),
         set_config: z.record(z.any()).optional().nullable(),
-        addons: z.array(z.object({ option_id: z.string().uuid() })).optional().default([]),
+        addons: z.array(z.object({ option_id: z.string().uuid(), qty: z.number().int().min(1).max(50).optional().default(1) })).optional().default([]),
       })
     )
     .min(1)
@@ -143,7 +143,7 @@ export const Route = createFileRoute("/api/public/qr-order")({
             ? `หลัก: ${sc.main?.th ?? "—"} | ${(sc.sides ?? []).map((s) => s.th).join(", ")}${sc.drink ? ` | ${sc.drink.th}` : ""} | ${sc.rice === "porridge" ? "โจ๊ก" : "ข้าวสวย"}`
             : it.notes ?? null;
 
-          // Build modifiers list from selected addon options
+          // Build modifiers list from selected addon options (with quantity)
           const modifiers = (it.addons ?? []).map((a) => {
             const opt = optionMap.get(a.option_id);
             return {
@@ -151,11 +151,12 @@ export const Route = createFileRoute("/api/public/qr-order")({
               group_name: opt?.addon_groups?.kitchen_name ?? opt?.addon_groups?.name ?? "",
               option_name: opt?.name ?? "",
               price: opt?.price ?? 0,
+              qty: a.qty ?? 1,
             };
           });
 
-          // Authoritative total: base price + sum of selected addon prices
-          const addonTotal = modifiers.reduce((s, mod) => s + mod.price, 0);
+          // Authoritative total: base price + sum of (addon price × qty)
+          const addonTotal = modifiers.reduce((s, mod) => s + mod.price * mod.qty, 0);
           const unit_price = Number(m.price) + addonTotal;
           const category = (m as any).category_id ? categoryMap.get((m as any).category_id) : null;
           const zone = category?.kitchen_zone_id ? zoneMap.get(category.kitchen_zone_id) : null;

@@ -23,7 +23,7 @@ type Menu = { id: string; category_id: string | null; name_th: string; name_en: 
 type Category = { id: string; name_th: string; name_en: string; sort: number };
 type AddonOption = { id: string; name: string; price: number };
 type AddonGroup = { id: string; name: string; kitchen_name: string | null; addon_options: AddonOption[] };
-type SelectedAddon = { group_id: string; group_name: string; option_id: string; option_name: string; price: number };
+type SelectedAddon = { group_id: string; group_name: string; option_id: string; option_name: string; price: number; qty: number };
 type CartItem = { menu_id: string; name_th: string; name_en: string; price: number; qty: number; notes?: string; set_config?: SetConfig; addons?: SelectedAddon[] };
 type Lang = "th" | "en";
 
@@ -316,7 +316,7 @@ function CustomerMenu() {
   const [adding, setAdding] = useState<Menu | null>(null);
   const [addQty, setAddQty] = useState(1);
   const [addNotes, setAddNotes] = useState("");
-  // selectedAddons: key = group_id, value = the chosen option for that group
+  // selectedAddons: key = option_id, value = the chosen option + its quantity
   const [selectedAddons, setSelectedAddons] = useState<Map<string, SelectedAddon>>(new Map());
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -385,8 +385,8 @@ function CustomerMenu() {
 
   const addToCart = () => {
     if (!adding) return;
-    const addonsArr = Array.from(selectedAddons.values());
-    const addonPrice = addonsArr.reduce((s, a) => s + a.price, 0);
+    const addonsArr = Array.from(selectedAddons.values()).filter((a) => a.qty > 0);
+    const addonPrice = addonsArr.reduce((s, a) => s + a.price * a.qty, 0);
     setCart((prev) => [...prev, {
       menu_id: adding.id,
       name_th: adding.name_th,
@@ -446,7 +446,7 @@ function CustomerMenu() {
             qty: c.qty,
             notes: c.notes ?? null,
             set_config: c.set_config ?? null,
-            addons: (c.addons ?? []).map((a) => ({ option_id: a.option_id })),
+            addons: (c.addons ?? []).map((a) => ({ option_id: a.option_id, qty: a.qty })),
           })),
         }),
       });
@@ -615,7 +615,7 @@ function CustomerMenu() {
           </DialogHeader>
           {adding && (() => {
             const addonGroups: AddonGroup[] = data?.addonsByMenuId?.[adding.id] ?? [];
-            const addonTotal = Array.from(selectedAddons.values()).reduce((s, a) => s + a.price, 0);
+            const addonTotal = Array.from(selectedAddons.values()).reduce((s, a) => s + a.price * a.qty, 0);
             const totalPrice = (adding.price + addonTotal) * addQty;
             return (
               <div className="space-y-4">
@@ -636,48 +636,48 @@ function CustomerMenu() {
                 {addonGroups.length > 0 && (
                   <div className="space-y-3">
                     <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">{tr.add_ons}</p>
-                    {addonGroups.map((group) => {
-                      const chosen = selectedAddons.get(group.id);
-                      return (
-                        <div key={group.id}>
-                          <p className="text-sm font-medium mb-1.5">{group.name}</p>
-                          <div className="flex flex-wrap gap-2">
-                            {group.addon_options.map((opt) => {
-                              const isSelected = chosen?.option_id === opt.id;
-                              return (
-                                <button
-                                  key={opt.id}
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedAddons((prev) => {
-                                      const next = new Map(prev);
-                                      if (isSelected) {
-                                        next.delete(group.id);
-                                      } else {
-                                        next.set(group.id, {
-                                          group_id: group.id,
-                                          group_name: group.kitchen_name ?? group.name,
-                                          option_id: opt.id,
-                                          option_name: opt.name,
-                                          price: opt.price,
-                                        });
-                                      }
-                                      return next;
-                                    });
-                                  }}
-                                  className={`rounded-full border px-3 py-1.5 text-sm transition-colors
-                                    ${isSelected
-                                      ? "border-primary bg-primary text-primary-foreground font-medium"
-                                      : "border-border hover:border-primary/60 hover:bg-muted/50"}`}
-                                >
-                                  {opt.name}{opt.price > 0 && ` +฿${opt.price}`}
-                                </button>
-                              );
-                            })}
-                          </div>
+                    {addonGroups.map((group) => (
+                      <div key={group.id}>
+                        <p className="text-sm font-medium mb-1.5">{group.name}</p>
+                        <div className="space-y-1.5">
+                          {group.addon_options.map((opt) => {
+                            const qty = selectedAddons.get(opt.id)?.qty ?? 0;
+                            const setQty = (n: number) => setSelectedAddons((prev) => {
+                              const next = new Map(prev);
+                              if (n <= 0) next.delete(opt.id);
+                              else next.set(opt.id, {
+                                group_id: group.id,
+                                group_name: group.kitchen_name ?? group.name,
+                                option_id: opt.id,
+                                option_name: opt.name,
+                                price: opt.price,
+                                qty: n,
+                              });
+                              return next;
+                            });
+                            return (
+                              <div
+                                key={opt.id}
+                                className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 transition-colors ${qty > 0 ? "border-primary/60 bg-primary/5" : "border-border"}`}
+                              >
+                                <span className="text-sm">
+                                  {opt.name}{opt.price > 0 && <span className="text-muted-foreground"> +฿{opt.price}</span>}
+                                </span>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <Button variant="outline" size="icon" className="h-8 w-8 rounded-full" disabled={qty <= 0} onClick={() => setQty(qty - 1)}>
+                                    <Minus className="h-3.5 w-3.5" />
+                                  </Button>
+                                  <span className="w-5 text-center text-sm font-bold tabular-nums">{qty}</span>
+                                  <Button variant="outline" size="icon" className="h-8 w-8 rounded-full" onClick={() => setQty(qty + 1)}>
+                                    <Plus className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
-                      );
-                    })}
+                      </div>
+                    ))}
                   </div>
                 )}
 
@@ -697,7 +697,7 @@ function CustomerMenu() {
           <DialogFooter className="gap-2">
             <Button variant="outline" className="flex-1" onClick={() => setAdding(null)}>{tr.cancel}</Button>
             <Button className="flex-1" onClick={addToCart}>
-              {tr.add} · ฿{adding ? ((adding.price + Array.from(selectedAddons.values()).reduce((s, a) => s + a.price, 0)) * addQty).toFixed(0) : "0"}
+              {tr.add} · ฿{adding ? ((adding.price + Array.from(selectedAddons.values()).reduce((s, a) => s + a.price * a.qty, 0)) * addQty).toFixed(0) : "0"}
             </Button>
           </DialogFooter>
         </DialogContent>
