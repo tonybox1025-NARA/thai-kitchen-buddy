@@ -17,6 +17,7 @@ import { Route as PrintTestKindRouteImport } from './routes/print-test.$kind'
 import { Route as MenuTableCodeRouteImport } from './routes/menu.$tableCode'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppReportsRouteImport } from './routes/_app/reports'
+import { Route as AppRegisterRouteImport } from './routes/_app/register'
 import { Route as AppPosRouteImport } from './routes/_app/pos'
 import { Route as AppMembersRouteImport } from './routes/_app/members'
 import { Route as AppLoyaltyRouteImport } from './routes/_app/loyalty'
@@ -75,6 +76,11 @@ const AppSettingsRoute = AppSettingsRouteImport.update({
 const AppReportsRoute = AppReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppRegisterRoute = AppRegisterRouteImport.update({
+  id: '/register',
+  path: '/register',
   getParentRoute: () => AppRoute,
 } as any)
 const AppPosRoute = AppPosRouteImport.update({
@@ -195,6 +201,7 @@ export interface FileRoutesByFullPath {
   '/loyalty': typeof AppLoyaltyRoute
   '/members': typeof AppMembersRoute
   '/pos': typeof AppPosRoute
+  '/register': typeof AppRegisterRoute
   '/reports': typeof AppReportsRoute
   '/settings': typeof AppSettingsRoute
   '/menu/$tableCode': typeof MenuTableCodeRoute
@@ -224,6 +231,7 @@ export interface FileRoutesByTo {
   '/loyalty': typeof AppLoyaltyRoute
   '/members': typeof AppMembersRoute
   '/pos': typeof AppPosRoute
+  '/register': typeof AppRegisterRoute
   '/reports': typeof AppReportsRoute
   '/settings': typeof AppSettingsRoute
   '/menu/$tableCode': typeof MenuTableCodeRoute
@@ -255,6 +263,7 @@ export interface FileRoutesById {
   '/_app/loyalty': typeof AppLoyaltyRoute
   '/_app/members': typeof AppMembersRoute
   '/_app/pos': typeof AppPosRoute
+  '/_app/register': typeof AppRegisterRoute
   '/_app/reports': typeof AppReportsRoute
   '/_app/settings': typeof AppSettingsRoute
   '/menu/$tableCode': typeof MenuTableCodeRoute
@@ -286,6 +295,7 @@ export interface FileRouteTypes {
     | '/loyalty'
     | '/members'
     | '/pos'
+    | '/register'
     | '/reports'
     | '/settings'
     | '/menu/$tableCode'
@@ -315,6 +325,7 @@ export interface FileRouteTypes {
     | '/loyalty'
     | '/members'
     | '/pos'
+    | '/register'
     | '/reports'
     | '/settings'
     | '/menu/$tableCode'
@@ -345,6 +356,7 @@ export interface FileRouteTypes {
     | '/_app/loyalty'
     | '/_app/members'
     | '/_app/pos'
+    | '/_app/register'
     | '/_app/reports'
     | '/_app/settings'
     | '/menu/$tableCode'
@@ -434,6 +446,13 @@ declare module '@tanstack/react-router' {
       path: '/reports'
       fullPath: '/reports'
       preLoaderRoute: typeof AppReportsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/register': {
+      id: '/_app/register'
+      path: '/register'
+      fullPath: '/register'
+      preLoaderRoute: typeof AppRegisterRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/pos': {
@@ -590,6 +609,7 @@ interface AppRouteChildren {
   AppLoyaltyRoute: typeof AppLoyaltyRoute
   AppMembersRoute: typeof AppMembersRoute
   AppPosRoute: typeof AppPosRoute
+  AppRegisterRoute: typeof AppRegisterRoute
   AppReportsRoute: typeof AppReportsRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppOrderOrderIdRoute: typeof AppOrderOrderIdRoute
@@ -607,6 +627,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppLoyaltyRoute: AppLoyaltyRoute,
   AppMembersRoute: AppMembersRoute,
   AppPosRoute: AppPosRoute,
+  AppRegisterRoute: AppRegisterRoute,
   AppReportsRoute: AppReportsRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppOrderOrderIdRoute: AppOrderOrderIdRoute,

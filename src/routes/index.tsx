@@ -23,7 +23,7 @@ function IndexPage() {
     // + count starting cash) instead of the tables page; otherwise go to tables.
     void (async () => {
       const { data: shift } = await supabase.from("shifts").select("id").eq("status", "open").maybeSingle();
-      void navigate({ to: shift ? "/pos" : "/reports", replace: true });
+      void navigate({ to: shift ? "/pos" : "/register", replace: true });
     })();
   }, [loading, session, navigate]);
 

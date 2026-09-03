@@ -121,7 +121,7 @@ function PosPage() {
       // No shift open — staff must open the register (count starting cash) first.
       toast.error(t("rep_open_register_first"));
       setOpenTable(null);
-      nav({ to: "/reports" });
+      nav({ to: "/register" });
       return null;
     }
     const { data: order, error } = await supabase.from("orders").insert({
@@ -165,7 +165,7 @@ function PosPage() {
     const { data: shift } = await supabase.from("shifts").select("id").eq("status", "open").maybeSingle();
     if (!shift) {
       toast.error(t("rep_open_register_first"));
-      nav({ to: "/reports" });
+      nav({ to: "/register" });
       return;
     }
     // Count all existing orders of this source to determine next number

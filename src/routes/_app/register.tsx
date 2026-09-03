@@ -22,7 +22,7 @@ import type { DateRange } from "react-day-picker";
 import { PencilLine, ArrowRight, CalendarIcon, XCircle, Printer } from "lucide-react";
 import { bucketizeQr, parseBuckets, type QrBucketTotal, type QrTimeBucket } from "@/lib/qr-buckets";
 
-export const Route = createFileRoute("/_app/reports")({ component: Reports });
+export const Route = createFileRoute("/_app/register")({ component: Register });
 
 const BILLS = [1000, 500, 100, 50, 20];
 const COINS = [10, 5, 2, 1, 0.5, 0.25];
@@ -153,7 +153,7 @@ ${row("Over / Short", thb(overShort), true)}
   if (w) { w.document.write(html); w.document.close(); }
 }
 
-function Reports() {
+function Register() {
   const { staff } = useAuth();
   const { t } = useI18n();
   const [shift, setShift] = useState<Shift | null>(null);
@@ -181,6 +181,8 @@ function Reports() {
   useEffect(() => {
     supabase.from("shifts").select("*").eq("status", "open").maybeSingle().then(({ data }) => {
       setShift((data as Shift) ?? null);
+      // No register open yet → prompt to open it (count starting cash) right away.
+      if (!data) { setOpenCashCount({}); setOpenDlg(true); }
     });
     supabase.from("settings").select("restaurant_name,qr_time_buckets").eq("id", 1).maybeSingle().then(({ data }) => {
       setRestaurantName((data as any)?.restaurant_name ?? "");
@@ -426,31 +428,36 @@ function Reports() {
 
   return (
     <div className="p-6 space-y-4">
-      <h1 className="text-2xl font-bold">{t("nav_reports")}</h1>
+      <h1 className="text-2xl font-bold">{t("nav_register")}</h1>
 
-      <Tabs defaultValue="history">
-        <TabsList>
-          <TabsTrigger value="history">{t("rep_bill_history")}</TabsTrigger>
-          <TabsTrigger value="item_sales">{t("item_sales")}</TabsTrigger>
-          {(staff?.role === "admin" || staff?.role === "manager") && (
-            <TabsTrigger value="cancelled">{t("rep_cancelled")}</TabsTrigger>
-          )}
-        </TabsList>
-
-        <TabsContent value="history" className="mt-4">
-          <BillHistoryTab />
-        </TabsContent>
-
-        <TabsContent value="item_sales" className="mt-4">
-          <ItemSalesTab />
-        </TabsContent>
-
-        {(staff?.role === "admin" || staff?.role === "manager") && (
-          <TabsContent value="cancelled" className="mt-4">
-            <CancelledOrdersTab />
-          </TabsContent>
-        )}
-      </Tabs>
+      {!shift ? (
+        <Card>
+          <CardContent className="py-12 text-center space-y-4">
+            <p className="text-muted-foreground">{t("no_open_shift")}</p>
+            <Button size="lg" onClick={() => { setOpenCashCount({}); setOpenDlg(true); }}>
+              {t("rep_open_register")}
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>{t("shift")} · {t("business_day")}: {shift.business_day}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                {t("opening_float")}: <b>{thb(shift.opening_float)}</b>
+                {shift.opened_at && <> · {new Date(shift.opened_at).toLocaleTimeString()}</>}
+              </p>
+              <Button size="lg" variant="destructive" onClick={() => setCloseDlg(true)}>
+                {t("rep_close_register")}
+              </Button>
+            </CardContent>
+          </Card>
+          <CancelledOrdersSection shiftId={shift.id} />
+        </div>
+      )}
 
       {/* Open register dialog — count starting cash */}
       <Dialog open={openDlg} onOpenChange={setOpenDlg}>
