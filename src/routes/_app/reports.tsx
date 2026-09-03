@@ -165,6 +165,10 @@ function Reports() {
   const [managerOpen, setManagerOpen] = useState(false);
   const [pendingZ, setPendingZ] = useState(false);
   const [xLoading, setXLoading] = useState(false);
+  // Register open flow
+  const [openDlg, setOpenDlg] = useState(false);
+  const [openCashCount, setOpenCashCount] = useState<Record<number, number>>({});
+  const [closeDlg, setCloseDlg] = useState(false);
 
   // Scenario 2: Z-report payment type adjustment
   const [adjDlg, setAdjDlg] = useState(false);
@@ -260,6 +264,39 @@ function Reports() {
       discountByStaff,
       qrByBucket,
     };
+  };
+
+  const openTotal = DENOMS.reduce((sum, d) => sum + d * (openCashCount[d] || 0), 0);
+
+  const printOpenSlip = (s: Shift, counts: Record<number, number>) => {
+    const total = DENOMS.reduce((sum, d) => sum + d * (counts[d] || 0), 0);
+    const denomRows = DENOMS.filter((d) => (counts[d] ?? 0) > 0)
+      .map((d) => `<tr><td>${d}฿ × ${counts[d]}</td><td style="text-align:right">${thb(d * counts[d])}</td></tr>`)
+      .join("") || `<tr><td colspan="2" style="color:#888">—</td></tr>`;
+    const when = new Date(s.opened_at ?? new Date().toISOString()).toLocaleString();
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Open Shift</title>
+<style>body{font-family:ui-sans-serif,system-ui;padding:24px;max-width:360px;margin:auto}h1{font-size:20px;margin:0 0 4px;text-align:center}h2{font-size:14px;margin:12px 0 4px;border-bottom:1px solid #ccc;padding-bottom:2px}.meta{text-align:center;font-size:12px;color:#555;margin-bottom:10px}table{width:100%;border-collapse:collapse;font-size:13px}td{padding:2px 0}.tot td{border-top:1px solid #000;padding-top:6px;font-size:16px;font-weight:700}</style>
+</head><body>
+<h1>${escapeHtml(restaurantName) || "Restaurant"}</h1>
+<div class="meta">${t("rep_open_slip")} · ${escapeHtml(s.business_day)}<br/>${when}</div>
+<h2>${t("cash_count")}</h2>
+<table>${denomRows}<tr class="tot"><td>${t("starting_cash")}</td><td style="text-align:right">${thb(total)}</td></tr></table>
+<script>window.onload=()=>setTimeout(()=>window.print(),100)</script>
+</body></html>`;
+    const w = window.open("", "_blank");
+    if (w) { w.document.write(html); w.document.close(); }
+  };
+
+  const openShift = async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const { data: newShift, error } = await supabase.from("shifts")
+      .insert({ business_day: today, opened_by: staff?.id, opening_float: openTotal })
+      .select("*").single();
+    if (error || !newShift) { toast.error(error?.message ?? t("rep_load_failed")); return; }
+    setShift(newShift as Shift);
+    printOpenSlip(newShift as Shift, openCashCount);
+    setOpenDlg(false); setOpenCashCount({});
+    toast.success(t("rep_shift_opened"));
   };
 
   const runX = async () => {
@@ -404,7 +441,9 @@ function Reports() {
             <Card>
               <CardContent className="py-12 text-center space-y-4">
                 <p className="text-muted-foreground">{t("no_open_shift")}</p>
-                <p className="text-sm text-muted-foreground">A new shift starts automatically with the next sale, using the configured starting cash.</p>
+                <Button size="lg" onClick={() => { setOpenCashCount({}); setOpenDlg(true); }}>
+                  {t("rep_open_register")}
+                </Button>
               </CardContent>
             </Card>
           ) : (
@@ -413,11 +452,14 @@ function Reports() {
                 <CardHeader>
                   <CardTitle>{t("shift")} · {t("business_day")}: {shift.business_day}</CardTitle>
                 </CardHeader>
-                <CardContent className="flex gap-3">
-                  <Button onClick={runX} variant="outline" disabled={xLoading}>
-                    {xLoading ? "Loading…" : t("x_report")}
+                <CardContent className="space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    {t("opening_float")}: <b>{thb(shift.opening_float)}</b>
+                    {shift.opened_at && <> · {new Date(shift.opened_at).toLocaleTimeString()}</>}
+                  </p>
+                  <Button size="lg" variant="destructive" onClick={() => setCloseDlg(true)}>
+                    {t("rep_close_register")}
                   </Button>
-                  <Button onClick={startZ} variant="destructive">{t("z_report")}</Button>
                 </CardContent>
               </Card>
               <CancelledOrdersSection shiftId={shift.id} />
@@ -439,6 +481,48 @@ function Reports() {
           </TabsContent>
         )}
       </Tabs>
+
+      {/* Open register dialog — count starting cash */}
+      <Dialog open={openDlg} onOpenChange={setOpenDlg}>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{t("rep_open_register")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">{t("rep_count_starting_cash")}</p>
+            <DenomGrid cashCount={openCashCount} onChange={setOpenCashCount} />
+            <div className="flex items-center justify-between border-t pt-3">
+              <span className="font-semibold">{t("starting_cash")}</span>
+              <span className="text-xl font-bold tabular-nums">{thb(openTotal)}</span>
+            </div>
+          </div>
+          <DialogFooter className="pt-2">
+            <Button variant="outline" onClick={() => setOpenDlg(false)}>{t("cancel")}</Button>
+            <Button onClick={openShift}>{t("rep_open_and_print")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Close register — choose X (mid-shift check) or Z (final close) */}
+      <Dialog open={closeDlg} onOpenChange={setCloseDlg}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("rep_close_register")}</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3 py-1">
+            <Button variant="outline" className="h-auto py-4 flex flex-col items-start gap-0.5" disabled={xLoading}
+              onClick={() => { setCloseDlg(false); runX(); }}>
+              <span className="font-bold">{t("x_report")}</span>
+              <span className="text-xs text-muted-foreground font-normal">{t("rep_x_desc")}</span>
+            </Button>
+            <Button variant="destructive" className="h-auto py-4 flex flex-col items-start gap-0.5"
+              onClick={() => { setCloseDlg(false); startZ(); }}>
+              <span className="font-bold">{t("z_report")}</span>
+              <span className="text-xs opacity-80 font-normal">{t("rep_z_desc")}</span>
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* X Report dialog */}
       <Dialog open={xDlg} onOpenChange={setXDlg}>

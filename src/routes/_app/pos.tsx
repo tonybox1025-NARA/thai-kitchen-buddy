@@ -112,17 +112,17 @@ function PosPage() {
     }
   };
 
-  // Ensure a shift, open an order for the table, mark it occupied. Returns order id.
+  // Open an order for the table (requires an open register/shift).
   const openTableOrder = async (): Promise<string | null> => {
     if (!openTable || !staff) return null;
     if (isOffline()) { toast.error(t("err_offline")); return null; }
-    let { data: shift } = await supabase.from("shifts").select("id").eq("status", "open").maybeSingle();
+    const { data: shift } = await supabase.from("shifts").select("id").eq("status", "open").maybeSingle();
     if (!shift) {
-      const today = new Date().toISOString().slice(0, 10);
-      const { data: cfg } = await supabase.from("settings").select("starting_cash").eq("id", 1).maybeSingle();
-      const opening = Number((cfg as { starting_cash?: number } | null)?.starting_cash ?? 0);
-      const { data: newShift } = await supabase.from("shifts").insert({ business_day: today, opened_by: staff.id, opening_float: opening }).select("id").single();
-      shift = newShift;
+      // No shift open — staff must open the register (count starting cash) first.
+      toast.error(t("rep_open_register_first"));
+      setOpenTable(null);
+      nav({ to: "/reports" });
+      return null;
     }
     const { data: order, error } = await supabase.from("orders").insert({
       table_id: openTable.id, guests, opened_by: staff.id, shift_id: shift?.id, source: "pos",
@@ -161,14 +161,12 @@ function PosPage() {
   const createSpecialOrder = async (source: "takeout" | "staff_meal") => {
     if (!staff) return;
     if (isOffline()) { toast.error(t("err_offline")); return; }
-    // Ensure shift is open
-    let { data: shift } = await supabase.from("shifts").select("id").eq("status", "open").maybeSingle();
+    // Requires an open register/shift.
+    const { data: shift } = await supabase.from("shifts").select("id").eq("status", "open").maybeSingle();
     if (!shift) {
-      const today = new Date().toISOString().slice(0, 10);
-      const { data: cfg } = await supabase.from("settings").select("starting_cash").eq("id", 1).maybeSingle();
-      const opening = Number((cfg as { starting_cash?: number } | null)?.starting_cash ?? 0);
-      const { data: newShift } = await supabase.from("shifts").insert({ business_day: today, opened_by: staff.id, opening_float: opening }).select("id").single();
-      shift = newShift;
+      toast.error(t("rep_open_register_first"));
+      nav({ to: "/reports" });
+      return;
     }
     // Count all existing orders of this source to determine next number
     const { count } = await supabase

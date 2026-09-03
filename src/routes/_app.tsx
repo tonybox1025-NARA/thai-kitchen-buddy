@@ -77,7 +77,7 @@ function AppLayout() {
     { to: "/pos", label: t("nav_pos"), icon: LayoutGrid },
     { to: "/members", label: t("nav_members"), icon: Heart },
     { to: "/loyalty", label: t("nav_loyalty"), icon: BadgePercent },
-    { to: "/reports", label: t("nav_reports"), icon: FileText },
+    { to: "/reports", label: t("nav_register"), icon: FileText },
     { to: "/settings", label: t("nav_settings"), icon: Settings },
   ];
 
