@@ -60,17 +60,31 @@ export const Route = createFileRoute("/api/public/qr-menu/$tableCode")({
           return new Response("Failed to load menu", { status: 500 });
         }
 
-        // Build addon groups per menu item
+        // Build addon groups per menu item. menu_addons -> addon_groups is not a
+        // declared PostgREST FK, so a nested select returns null — fetch in two
+        // steps (same as the staff order screen).
         const menuIds = (menus ?? []).map((m: { id: string }) => m.id);
         const addonsByMenuId: Record<string, unknown[]> = {};
         if (menuIds.length > 0) {
-          const { data: menuAddons } = await db
+          const { data: links } = await db
             .from("menu_addons")
-            .select("menu_id, addon_groups(id, name, kitchen_name, addon_options(id, name, price))")
+            .select("menu_id, group_id")
             .in("menu_id", menuIds);
-          for (const row of (menuAddons ?? []) as { menu_id: string; addon_groups: unknown }[]) {
-            if (!addonsByMenuId[row.menu_id]) addonsByMenuId[row.menu_id] = [];
-            if (row.addon_groups) addonsByMenuId[row.menu_id].push(row.addon_groups);
+          const linkRows = (links ?? []) as { menu_id: string; group_id: string }[];
+          const groupIds = [...new Set(linkRows.map((r) => r.group_id))];
+          const groupById = new Map<string, unknown>();
+          if (groupIds.length > 0) {
+            const { data: groups } = await db
+              .from("addon_groups")
+              .select("id, name, kitchen_name, addon_options(id, name, price)")
+              .in("id", groupIds);
+            for (const g of (groups ?? []) as { id: string }[]) groupById.set(g.id, g);
+          }
+          for (const link of linkRows) {
+            const g = groupById.get(link.group_id);
+            if (!g) continue;
+            if (!addonsByMenuId[link.menu_id]) addonsByMenuId[link.menu_id] = [];
+            addonsByMenuId[link.menu_id].push(g);
           }
         }
 
