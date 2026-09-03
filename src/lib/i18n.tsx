@@ -325,6 +325,8 @@ const dict: Dict = {
   rep_z_desc: { th: "ปิดกะ (สรุปสุดท้าย)", en: "Close the shift — final report" },
   rep_open_register_first: { th: "กรุณาเปิดกะ (นับเงิน) ก่อน", en: "Open the register (count cash) first" },
   nav_register: { th: "แคชเชียร์", en: "Register" },
+  denom_bills: { th: "ธนบัตร", en: "Banknotes" },
+  denom_coins: { th: "เหรียญ", en: "Coins" },
   x_report: { th: "รายงาน X (กลางกะ)", en: "X Report (mid-shift)" },
   z_report: { th: "รายงาน Z (ปิดวัน)", en: "Z Report (end of day)" },
   no_open_shift: { th: "ยังไม่มีกะที่เปิดอยู่", en: "No open shift" },

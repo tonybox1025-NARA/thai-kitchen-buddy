@@ -24,7 +24,9 @@ import { bucketizeQr, parseBuckets, type QrBucketTotal, type QrTimeBucket } from
 
 export const Route = createFileRoute("/_app/reports")({ component: Reports });
 
-const DENOMS = [1000, 500, 100, 50, 20, 10, 5, 1];
+const BILLS = [1000, 500, 100, 50, 20];
+const COINS = [10, 5, 2, 1, 0.5, 0.25];
+const DENOMS = [...BILLS, ...COINS];
 
 type Shift = { id: string; business_day: string; opened_at: string; closed_at: string | null; opening_float: number; status: "open" | "closed" };
 type ReportData = {
@@ -179,6 +181,8 @@ function Reports() {
   useEffect(() => {
     supabase.from("shifts").select("*").eq("status", "open").maybeSingle().then(({ data }) => {
       setShift((data as Shift) ?? null);
+      // No register open yet → prompt to open it (count starting cash) right away.
+      if (!data) { setOpenCashCount({}); setOpenDlg(true); }
     });
     supabase.from("settings").select("restaurant_name,qr_time_buckets").eq("id", 1).maybeSingle().then(({ data }) => {
       setRestaurantName((data as any)?.restaurant_name ?? "");
@@ -1523,32 +1527,42 @@ function CancelledOrderCard({ order: o, expanded, onToggle, showDate }: {
 }
 
 function DenomGrid({ cashCount, onChange }: { cashCount: Record<number, number>; onChange: (c: Record<number, number>) => void }) {
+  const { t } = useI18n();
+  const label = (d: number) => (d < 1 ? `${d.toFixed(2)}฿` : `${d}฿`);
+  const cell = (d: number) => {
+    const count = cashCount[d] ?? 0;
+    return (
+      <div key={d} className="rounded-xl border bg-card p-3">
+        <div className="text-sm font-semibold text-muted-foreground mb-2">{label(d)}</div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onChange({ ...cashCount, [d]: Math.max(0, count - 1) })}
+            className="h-12 w-12 flex-shrink-0 rounded-lg border bg-muted text-2xl font-bold flex items-center justify-center hover:bg-accent active:scale-95 transition-all select-none"
+          >−</button>
+          <div className="flex-1 text-center text-2xl font-bold tabular-nums">{count}</div>
+          <button
+            type="button"
+            onClick={() => onChange({ ...cashCount, [d]: count + 1 })}
+            className="h-12 w-12 flex-shrink-0 rounded-lg border bg-muted text-2xl font-bold flex items-center justify-center hover:bg-accent active:scale-95 transition-all select-none"
+          >+</button>
+        </div>
+        <div className="text-xs text-muted-foreground text-center mt-1.5">
+          {count > 0 ? thb(count * d) : "—"}
+        </div>
+      </div>
+    );
+  };
   return (
-    <div className="grid grid-cols-2 gap-3">
-      {DENOMS.map((d) => {
-        const count = cashCount[d] ?? 0;
-        return (
-          <div key={d} className="rounded-xl border bg-card p-3">
-            <div className="text-sm font-semibold text-muted-foreground mb-2">{d}฿</div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => onChange({ ...cashCount, [d]: Math.max(0, count - 1) })}
-                className="h-12 w-12 flex-shrink-0 rounded-lg border bg-muted text-2xl font-bold flex items-center justify-center hover:bg-accent active:scale-95 transition-all select-none"
-              >−</button>
-              <div className="flex-1 text-center text-2xl font-bold tabular-nums">{count}</div>
-              <button
-                type="button"
-                onClick={() => onChange({ ...cashCount, [d]: count + 1 })}
-                className="h-12 w-12 flex-shrink-0 rounded-lg border bg-muted text-2xl font-bold flex items-center justify-center hover:bg-accent active:scale-95 transition-all select-none"
-              >+</button>
-            </div>
-            <div className="text-xs text-muted-foreground text-center mt-1.5">
-              {count > 0 ? thb(count * d) : "—"}
-            </div>
-          </div>
-        );
-      })}
+    <div className="space-y-4">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">💵 {t("denom_bills")}</p>
+        <div className="grid grid-cols-2 gap-3">{BILLS.map(cell)}</div>
+      </div>
+      <div className="border-t pt-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">🪙 {t("denom_coins")}</p>
+        <div className="grid grid-cols-2 gap-3">{COINS.map(cell)}</div>
+      </div>
     </div>
   );
 }

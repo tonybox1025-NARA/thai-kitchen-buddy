@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { UtensilsCrossed } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { supabase } from "@/integrations/supabase/client";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,9 +18,13 @@ function IndexPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!loading && session) {
-      void navigate({ to: "/pos", replace: true });
-    }
+    if (loading || !session) return;
+    // Morning open: if no register/shift is open yet, land on the Register (open
+    // + count starting cash) instead of the tables page; otherwise go to tables.
+    void (async () => {
+      const { data: shift } = await supabase.from("shifts").select("id").eq("status", "open").maybeSingle();
+      void navigate({ to: shift ? "/pos" : "/reports", replace: true });
+    })();
   }, [loading, session, navigate]);
 
   return (
