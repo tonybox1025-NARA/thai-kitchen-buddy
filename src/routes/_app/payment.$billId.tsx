@@ -18,6 +18,7 @@ import { ManagerPinDialog } from "@/components/ManagerPinDialog";
 import { printCounter } from "@/lib/counter-printer";
 import { isOffline } from "@/lib/online-status";
 import { tableLabel } from "@/lib/table";
+import { publicBaseUrl } from "@/lib/public-url";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/payment/$billId")({ component: PaymentPage });
@@ -628,7 +629,7 @@ function PaymentPage() {
     if (existing) {
       return {
         token: existing.token,
-        url: `${window.location.origin}/loyalty/claim/${existing.token}`,
+        url: `${publicBaseUrl()}/loyalty/claim/${existing.token}`,
         points: Number(existing.claim_points ?? 0),
       };
     }
@@ -650,7 +651,7 @@ function PaymentPage() {
       toast.error(error.message);
       return null;
     }
-    return { token, url: `${window.location.origin}/loyalty/claim/${token}`, points };
+    return { token, url: `${publicBaseUrl()}/loyalty/claim/${token}`, points };
   };
 
   const finalize = async () => {

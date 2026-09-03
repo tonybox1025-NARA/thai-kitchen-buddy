@@ -10,13 +10,14 @@ import { KeypadInput } from "@/components/KeypadInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Minus, Trash2, ChefHat, Receipt, ArrowLeft, AlertTriangle, ArrowLeftRight, X, Printer, Eye, Layers, Bell } from "lucide-react";
+import { Plus, Minus, Trash2, ChefHat, Receipt, ArrowLeft, AlertTriangle, ArrowLeftRight, X, Printer, Eye, Layers, Bell, QrCode } from "lucide-react";
 import { ManagerPinDialog } from "@/components/ManagerPinDialog";
 import { SetMenuDialog } from "@/components/SetMenuDialog";
 import { SETS, type SetConfig } from "@/lib/set-menu";
 import { printCounter, printKitchenJobs, type CounterPrintPayload } from "@/lib/counter-printer";
 import { isOffline } from "@/lib/online-status";
 import { tableLabel } from "@/lib/table";
+import { publicBaseUrl } from "@/lib/public-url";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/order/$orderId")({ component: OrderPage });
@@ -88,6 +89,7 @@ function OrderPage() {
   const [managerOpen, setManagerOpen] = useState(false);
   const [managerAction, setManagerAction] = useState<"void" | "close_table" | "move_table" | null>(null);
   const [tableCode, setTableCode] = useState<string>("");
+  const [tableRawCode, setTableRawCode] = useState<string>("");
   const [tableId, setTableId] = useState<string>("");
   const [tableHasQrAlert, setTableHasQrAlert] = useState(false);
   const [orderSource, setOrderSource] = useState<string>("pos");
@@ -131,6 +133,7 @@ function OrderPage() {
       const { data: tbl } = await supabase.from("restaurant_tables").select("code,has_qr_alert").eq("id", ord.table_id).single();
       if (tbl) {
         setTableCode(tableLabel(tbl.code));
+        setTableRawCode(tbl.code);
         setTableHasQrAlert(Boolean((tbl as any).has_qr_alert));
       }
     }
@@ -418,6 +421,24 @@ function OrderPage() {
     setAvailableTables(data ?? []);
   };
 
+  // Reprint the table's self-order QR slip anytime (not only when opening the table).
+  const reprintTableQr = async () => {
+    if (isOffline()) { toast.error(t("err_offline")); return; }
+    if (!tableRawCode) return;
+    const [{ data: cfg }, { data: tbl }] = await Promise.all([
+      supabase.from("settings").select("restaurant_name").eq("id", 1).maybeSingle(),
+      supabase.from("restaurant_tables").select("guests").eq("id", tableId).maybeSingle(),
+    ]);
+    await printCounter({
+      kind: "table_qr",
+      table: tableCode,
+      url: `${publicBaseUrl()}/menu/${encodeURIComponent(tableRawCode)}`,
+      restaurant: (cfg as { restaurant_name?: string } | null)?.restaurant_name ?? "Restaurant",
+      guests: Number((tbl as { guests?: number } | null)?.guests ?? 0),
+    });
+    toast.success(`QR printed · ${t("table")} ${tableCode}`);
+  };
+
   const openCloseTable = () => {
     if (staff?.role === "staff") { setManagerAction("close_table"); setManagerOpen(true); return; }
     setCloseTableOpen(true);
@@ -558,6 +579,11 @@ function OrderPage() {
             </h1>
           )}
           <div className="ml-auto flex gap-2">
+            {(orderSource === "pos" || orderSource === "qr") && (
+              <Button size="sm" variant="outline" onClick={reprintTableQr}>
+                <QrCode className="h-4 w-4 mr-1" />Print QR
+              </Button>
+            )}
             {(orderSource === "pos" || orderSource === "qr") && (
               <Button size="sm" variant="outline" onClick={openMoveTable}>
                 <ArrowLeftRight className="h-4 w-4 mr-1" />{t("move_table")}

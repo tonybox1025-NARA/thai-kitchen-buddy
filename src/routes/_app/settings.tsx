@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { escapeHtml } from "@/lib/escape-html";
 import { useI18n } from "@/lib/i18n";
+import { publicBaseUrl } from "@/lib/public-url";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -1904,7 +1905,7 @@ function QrCodesTab() {
   const { t } = useI18n();
   const [tables, setTables] = useState<RTable[]>([]);
   const [qrs, setQrs] = useState<Record<string, string>>({});
-  const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+  const baseUrl = publicBaseUrl();
 
   useEffect(() => {
     let cancelled = false;

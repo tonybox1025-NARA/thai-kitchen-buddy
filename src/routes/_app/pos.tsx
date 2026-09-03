@@ -13,6 +13,7 @@ import { playAlertBeep } from "@/lib/audio-alert";
 import { printCounter } from "@/lib/counter-printer";
 import { isOffline } from "@/lib/online-status";
 import { tableLabel } from "@/lib/table";
+import { publicBaseUrl } from "@/lib/public-url";
 
 export const Route = createFileRoute("/_app/pos")({ component: PosPage });
 
@@ -149,7 +150,7 @@ function PosPage() {
     await printCounter({
       kind: "table_qr",
       table: tableLabel(code),
-      url: `${window.location.origin}/menu/${encodeURIComponent(code)}`,
+      url: `${publicBaseUrl()}/menu/${encodeURIComponent(code)}`,
       restaurant: (cfg as { restaurant_name?: string } | null)?.restaurant_name ?? "Restaurant",
       guests: seats,
     });
