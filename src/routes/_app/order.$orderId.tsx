@@ -10,7 +10,7 @@ import { KeypadInput } from "@/components/KeypadInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Minus, Trash2, ChefHat, Receipt, ArrowLeft, AlertTriangle, ArrowLeftRight, X, Printer, Eye, Layers, Bell, QrCode } from "lucide-react";
+import { Plus, Minus, Trash2, ChefHat, Receipt, ArrowLeft, AlertTriangle, ArrowLeftRight, X, Printer, Eye, Layers, Bell, QrCode, Check } from "lucide-react";
 import { ManagerPinDialog } from "@/components/ManagerPinDialog";
 import { SetMenuDialog } from "@/components/SetMenuDialog";
 import { SETS, type SetConfig } from "@/lib/set-menu";
@@ -44,8 +44,8 @@ type Item = {
   set_config?: any;
 };
 type AddonOption = { id: string; name: string; price: number };
-type AddonGroup = { id: string; name: string; kitchen_name: string | null; addon_options: AddonOption[] };
-type SelectedAddon = { group_id: string; group_name: string; option_id: string; option_name: string; price: number; qty: number };
+type AddonGroup = { id: string; name: string; kitchen_name: string | null; max_select: number; addon_options: AddonOption[] };
+type SelectedAddon = { group_id: string; group_name: string; option_id: string; option_name: string; price: number };
 type Modifier = { option_id: string; group_name: string; option_name: string; price: number; qty: number };
 
 function MenuCardImage({ src, alt }: { src: string | null; alt: string }) {
@@ -215,7 +215,7 @@ function OrderPage() {
     // Step 2: fetch each group with its options
     const { data: groups, error: groupErr } = await db
       .from("addon_groups")
-      .select("id, name, kitchen_name, addon_options(id, name, price)")
+      .select("id, name, kitchen_name, max_select, addon_options(id, name, price)")
       .in("id", groupIds);
     if (groupErr) { console.error("[addons] addon_groups fetch error:", groupErr.message); return; }
     // Normalise: addon_options may be null if FK not wired in PostgREST
@@ -227,14 +227,38 @@ function OrderPage() {
     setAddonGroups(fetched);
   };
 
+  // Toggle an add-on option like a checkbox, enforcing the group's max_select.
+  // max_select === 1 behaves like a radio (picking one clears the other in the group).
+  const toggleAddon = (group: AddonGroup, opt: AddonOption) => {
+    setSelectedAddons((prev) => {
+      const next = new Map(prev);
+      if (next.has(opt.id)) { next.delete(opt.id); return next; }
+      const inGroup = Array.from(next.values()).filter((a) => a.group_id === group.id);
+      const max = group.max_select ?? 1;
+      if (max <= 1) {
+        for (const a of inGroup) next.delete(a.option_id);
+      } else if (inGroup.length >= max) {
+        return next; // group is full — ignore extra taps
+      }
+      next.set(opt.id, {
+        group_id: group.id,
+        group_name: group.kitchen_name ?? group.name,
+        option_id: opt.id,
+        option_name: opt.name,
+        price: opt.price,
+      });
+      return next;
+    });
+  };
+
   const addToOrder = async () => {
     if (!selected) return;
     if (isOffline()) { toast.error(t("err_offline")); return; }
-    const addonsArr = Array.from(selectedAddons.values()).filter((a) => a.qty > 0);
-    const addonPrice = addonsArr.reduce((s, a) => s + a.price * a.qty, 0);
+    const addonsArr = Array.from(selectedAddons.values());
+    const addonPrice = addonsArr.reduce((s, a) => s + a.price, 0);
     const unit_price = selected.price + addonPrice;
     const modifiers: Modifier[] | null = addonsArr.length > 0
-      ? addonsArr.map((a) => ({ option_id: a.option_id, group_name: a.group_name, option_name: a.option_name, price: a.price, qty: a.qty }))
+      ? addonsArr.map((a) => ({ option_id: a.option_id, group_name: a.group_name, option_name: a.option_name, price: a.price, qty: 1 }))
       : null;
     const { error } = await (supabase as any).from("order_items").insert({
       order_id: orderId, menu_id: selected.id,
@@ -780,7 +804,7 @@ function OrderPage() {
         <DialogContent className="max-h-[85vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{selected ? pickName(selected, lang) : ""}</DialogTitle></DialogHeader>
           {selected && (() => {
-            const addonTotal = Array.from(selectedAddons.values()).reduce((s, a) => s + a.price * a.qty, 0);
+            const addonTotal = Array.from(selectedAddons.values()).reduce((s, a) => s + a.price, 0);
             const totalPrice = (selected.price + addonTotal) * qty;
             return (
               <div className="space-y-4">
@@ -797,54 +821,45 @@ function OrderPage() {
                 {addonGroups.length > 0 && (
                   <div className="space-y-3">
                     <Label>{lang === "th" ? "ท็อปปิ้ง / เพิ่มเติม" : "Add-ons"}</Label>
-                    {addonGroups.map((group) => (
-                      <div key={group.id}>
-                        <p className="text-sm font-medium mb-1.5">{group.name}</p>
-                        <div className="space-y-1.5">
-                          {(group.addon_options ?? []).map((opt) => {
-                            const current = selectedAddons.get(opt.id);
-                            const optQty = current?.qty ?? 0;
-                            return (
-                              <div
-                                key={opt.id}
-                                className={`flex items-center justify-between rounded-lg border px-3 py-2 transition-colors
-                                  ${optQty > 0 ? "border-primary bg-primary/5" : "border-border"}`}
-                              >
-                                <span className="text-sm">
-                                  {opt.name}
-                                  {opt.price > 0 && (
-                                    <span className="text-muted-foreground ml-1">+{thb(opt.price)}</span>
-                                  )}
-                                </span>
-                                <div className="flex items-center gap-2 shrink-0">
-                                  <Button
-                                    size="icon" variant="outline" className="h-7 w-7"
-                                    type="button"
-                                    onClick={() => setSelectedAddons((prev) => {
-                                      const next = new Map(prev);
-                                      if (optQty <= 1) { next.delete(opt.id); }
-                                      else { next.set(opt.id, { ...current!, qty: optQty - 1 }); }
-                                      return next;
-                                    })}
-                                  ><Minus className="h-3 w-3" /></Button>
-                                  <span className="w-5 text-center text-sm tabular-nums font-medium">{optQty}</span>
-                                  <Button
-                                    size="icon" variant="outline" className="h-7 w-7"
-                                    type="button"
-                                    onClick={() => setSelectedAddons((prev) => {
-                                      const next = new Map(prev);
-                                      if (current) { next.set(opt.id, { ...current, qty: optQty + 1 }); }
-                                      else { next.set(opt.id, { group_id: group.id, group_name: group.kitchen_name ?? group.name, option_id: opt.id, option_name: opt.name, price: opt.price, qty: 1 }); }
-                                      return next;
-                                    })}
-                                  ><Plus className="h-3 w-3" /></Button>
-                                </div>
-                              </div>
-                            );
-                          })}
+                    {addonGroups.map((group) => {
+                      const max = group.max_select ?? 1;
+                      const inGroup = Array.from(selectedAddons.values()).filter((a) => a.group_id === group.id).length;
+                      return (
+                        <div key={group.id}>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <p className="text-sm font-medium">{group.name}</p>
+                            {max > 1 && (
+                              <span className="text-xs text-muted-foreground">
+                                {lang === "th" ? `เลือกได้ถึง ${max}` : `up to ${max}`}{inGroup > 0 ? ` · ${inGroup}/${max}` : ""}
+                              </span>
+                            )}
+                          </div>
+                          <div className="space-y-1.5">
+                            {(group.addon_options ?? []).map((opt) => {
+                              const selectedOpt = selectedAddons.has(opt.id);
+                              const disabled = !selectedOpt && max > 1 && inGroup >= max;
+                              return (
+                                <button
+                                  key={opt.id}
+                                  type="button"
+                                  onClick={() => toggleAddon(group, opt)}
+                                  disabled={disabled}
+                                  className={`w-full flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors
+                                    ${selectedOpt ? "border-primary bg-primary/5 font-medium" : disabled ? "opacity-40 cursor-not-allowed" : "hover:bg-muted/50"}`}
+                                >
+                                  <span className={`h-5 w-5 rounded-md border-2 shrink-0 flex items-center justify-center
+                                    ${selectedOpt ? "border-primary bg-primary" : "border-muted-foreground/50"}`}>
+                                    {selectedOpt && <Check className="h-3 w-3 text-white" />}
+                                  </span>
+                                  <span className="flex-1">{opt.name}</span>
+                                  {opt.price > 0 && <span className="text-muted-foreground shrink-0">+{thb(opt.price)}</span>}
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
 

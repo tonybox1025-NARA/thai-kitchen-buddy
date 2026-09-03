@@ -22,8 +22,8 @@ export const Route = createFileRoute("/menu/$tableCode")({
 type Menu = { id: string; category_id: string | null; name_th: string; name_en: string; price: number; image_url: string | null; sort: number };
 type Category = { id: string; name_th: string; name_en: string; sort: number };
 type AddonOption = { id: string; name: string; price: number };
-type AddonGroup = { id: string; name: string; kitchen_name: string | null; addon_options: AddonOption[] };
-type SelectedAddon = { group_id: string; group_name: string; option_id: string; option_name: string; price: number; qty: number };
+type AddonGroup = { id: string; name: string; kitchen_name: string | null; max_select: number; addon_options: AddonOption[] };
+type SelectedAddon = { group_id: string; group_name: string; option_id: string; option_name: string; price: number };
 type CartItem = { menu_id: string; name_th: string; name_en: string; price: number; qty: number; notes?: string; set_config?: SetConfig; addons?: SelectedAddon[] };
 type Lang = "th" | "en";
 
@@ -383,10 +383,34 @@ function CustomerMenu() {
     setAdding(m); setAddQty(1); setAddNotes(""); setSelectedAddons(new Map());
   };
 
+  // Toggle an add-on option like a checkbox, enforcing the group's max_select.
+  // max_select === 1 behaves like a radio (picking one clears the other in the group).
+  const toggleAddon = (group: AddonGroup, opt: AddonOption) => {
+    setSelectedAddons((prev) => {
+      const next = new Map(prev);
+      if (next.has(opt.id)) { next.delete(opt.id); return next; }
+      const inGroup = Array.from(next.values()).filter((a) => a.group_id === group.id);
+      const max = group.max_select ?? 1;
+      if (max <= 1) {
+        for (const a of inGroup) next.delete(a.option_id);
+      } else if (inGroup.length >= max) {
+        return next; // group is full — ignore extra taps
+      }
+      next.set(opt.id, {
+        group_id: group.id,
+        group_name: group.kitchen_name ?? group.name,
+        option_id: opt.id,
+        option_name: opt.name,
+        price: opt.price,
+      });
+      return next;
+    });
+  };
+
   const addToCart = () => {
     if (!adding) return;
-    const addonsArr = Array.from(selectedAddons.values()).filter((a) => a.qty > 0);
-    const addonPrice = addonsArr.reduce((s, a) => s + a.price * a.qty, 0);
+    const addonsArr = Array.from(selectedAddons.values());
+    const addonPrice = addonsArr.reduce((s, a) => s + a.price, 0);
     setCart((prev) => [...prev, {
       menu_id: adding.id,
       name_th: adding.name_th,
@@ -446,7 +470,7 @@ function CustomerMenu() {
             qty: c.qty,
             notes: c.notes ?? null,
             set_config: c.set_config ?? null,
-            addons: (c.addons ?? []).map((a) => ({ option_id: a.option_id, qty: a.qty })),
+            addons: (c.addons ?? []).map((a) => ({ option_id: a.option_id })),
           })),
         }),
       });
@@ -615,7 +639,7 @@ function CustomerMenu() {
           </DialogHeader>
           {adding && (() => {
             const addonGroups: AddonGroup[] = data?.addonsByMenuId?.[adding.id] ?? [];
-            const addonTotal = Array.from(selectedAddons.values()).reduce((s, a) => s + a.price * a.qty, 0);
+            const addonTotal = Array.from(selectedAddons.values()).reduce((s, a) => s + a.price, 0);
             const totalPrice = (adding.price + addonTotal) * addQty;
             return (
               <div className="space-y-4">
@@ -636,48 +660,45 @@ function CustomerMenu() {
                 {addonGroups.length > 0 && (
                   <div className="space-y-3">
                     <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">{tr.add_ons}</p>
-                    {addonGroups.map((group) => (
-                      <div key={group.id}>
-                        <p className="text-sm font-medium mb-1.5">{group.name}</p>
-                        <div className="space-y-1.5">
-                          {group.addon_options.map((opt) => {
-                            const qty = selectedAddons.get(opt.id)?.qty ?? 0;
-                            const setQty = (n: number) => setSelectedAddons((prev) => {
-                              const next = new Map(prev);
-                              if (n <= 0) next.delete(opt.id);
-                              else next.set(opt.id, {
-                                group_id: group.id,
-                                group_name: group.kitchen_name ?? group.name,
-                                option_id: opt.id,
-                                option_name: opt.name,
-                                price: opt.price,
-                                qty: n,
-                              });
-                              return next;
-                            });
-                            return (
-                              <div
-                                key={opt.id}
-                                className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 transition-colors ${qty > 0 ? "border-primary/60 bg-primary/5" : "border-border"}`}
-                              >
-                                <span className="text-sm">
-                                  {opt.name}{opt.price > 0 && <span className="text-muted-foreground"> +฿{opt.price}</span>}
-                                </span>
-                                <div className="flex items-center gap-2 shrink-0">
-                                  <Button variant="outline" size="icon" className="h-8 w-8 rounded-full" disabled={qty <= 0} onClick={() => setQty(qty - 1)}>
-                                    <Minus className="h-3.5 w-3.5" />
-                                  </Button>
-                                  <span className="w-5 text-center text-sm font-bold tabular-nums">{qty}</span>
-                                  <Button variant="outline" size="icon" className="h-8 w-8 rounded-full" onClick={() => setQty(qty + 1)}>
-                                    <Plus className="h-3.5 w-3.5" />
-                                  </Button>
-                                </div>
-                              </div>
-                            );
-                          })}
+                    {addonGroups.map((group) => {
+                      const max = group.max_select ?? 1;
+                      const inGroup = Array.from(selectedAddons.values()).filter((a) => a.group_id === group.id).length;
+                      return (
+                        <div key={group.id}>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <p className="text-sm font-medium">{group.name}</p>
+                            {max > 1 && (
+                              <span className="text-xs text-muted-foreground">
+                                {lang === "th" ? `เลือกได้ถึง ${max}` : `up to ${max}`}{inGroup > 0 ? ` · ${inGroup}/${max}` : ""}
+                              </span>
+                            )}
+                          </div>
+                          <div className="space-y-1.5">
+                            {group.addon_options.map((opt) => {
+                              const selected = selectedAddons.has(opt.id);
+                              const disabled = !selected && max > 1 && inGroup >= max;
+                              return (
+                                <button
+                                  key={opt.id}
+                                  type="button"
+                                  onClick={() => toggleAddon(group, opt)}
+                                  disabled={disabled}
+                                  className={`w-full flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left text-sm transition-colors
+                                    ${selected ? "border-primary bg-primary/5 font-medium" : disabled ? "opacity-40 cursor-not-allowed" : "hover:bg-muted/50"}`}
+                                >
+                                  <span className={`h-5 w-5 rounded-md border-2 shrink-0 flex items-center justify-center
+                                    ${selected ? "border-primary bg-primary" : "border-muted-foreground/50"}`}>
+                                    {selected && <Check className="h-3 w-3 text-white" />}
+                                  </span>
+                                  <span className="flex-1">{opt.name}</span>
+                                  {opt.price > 0 && <span className="text-muted-foreground shrink-0">+฿{opt.price}</span>}
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
 
@@ -697,7 +718,7 @@ function CustomerMenu() {
           <DialogFooter className="gap-2">
             <Button variant="outline" className="flex-1" onClick={() => setAdding(null)}>{tr.cancel}</Button>
             <Button className="flex-1" onClick={addToCart}>
-              {tr.add} · ฿{adding ? ((adding.price + Array.from(selectedAddons.values()).reduce((s, a) => s + a.price * a.qty, 0)) * addQty).toFixed(0) : "0"}
+              {tr.add} · ฿{adding ? ((adding.price + Array.from(selectedAddons.values()).reduce((s, a) => s + a.price, 0)) * addQty).toFixed(0) : "0"}
             </Button>
           </DialogFooter>
         </DialogContent>

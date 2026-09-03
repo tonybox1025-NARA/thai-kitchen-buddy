@@ -76,7 +76,7 @@ export const Route = createFileRoute("/api/public/qr-menu/$tableCode")({
           if (groupIds.length > 0) {
             const { data: groups } = await db
               .from("addon_groups")
-              .select("id, name, kitchen_name, addon_options(id, name, price)")
+              .select("id, name, kitchen_name, max_select, addon_options(id, name, price)")
               .in("id", groupIds);
             for (const g of (groups ?? []) as { id: string }[]) groupById.set(g.id, g);
           }
