@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Trash2, Plus, Printer, QrCode, Wifi, WifiOff, ChevronDown, LayoutGrid, Search, ImageIcon, Link2, ChevronRight, ChefHat } from "lucide-react";
+import { Trash2, Plus, Printer, QrCode, Wifi, WifiOff, ChevronDown, LayoutGrid, Search, ImageIcon, Link2, ChevronRight, ChefHat, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
 import { makeDriver, printInDedicatedDocument, type DriverId } from "@/lib/print/PrintService";
 import {
@@ -129,6 +129,7 @@ function SettingsPage() {
           <TabsTrigger value="printers">{t("printers")}</TabsTrigger>
           <TabsTrigger value="qr">{t("qr_codes")}</TabsTrigger>
           <TabsTrigger value="staff">{t("staff")}</TabsTrigger>
+          <TabsTrigger value="sync">{t("set_sync")}</TabsTrigger>
         </TabsList>
         <TabsContent value="general"><GeneralTab /></TabsContent>
         <TabsContent value="menu"><MenuTab /></TabsContent>
@@ -139,6 +140,7 @@ function SettingsPage() {
         <TabsContent value="printers"><PrintersTab /></TabsContent>
         <TabsContent value="qr"><QrCodesTab /></TabsContent>
         <TabsContent value="staff"><StaffTab /></TabsContent>
+        <TabsContent value="sync"><SyncTab /></TabsContent>
       </Tabs>
     </div>
   );
@@ -2002,6 +2004,119 @@ function QrCodesTab() {
           </Card>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ── Sync / Integrations tab ───────────────────────────────────────────────────
+const SYNC_KEY = "lm-sync-2f9a7c3e8b14";
+
+function SyncTab() {
+  const { t } = useI18n();
+  const [counts, setCounts] = useState<null | { menus: number; categories: number; groups: number; options: number; links: number; last: string | null }>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+  const [testing, setTesting] = useState<string | null>(null);
+  const [result, setResult] = useState<Record<string, string>>({});
+
+  const base = publicBaseUrl();
+  const today = new Date().toISOString().slice(0, 10);
+  const endpoints = [
+    { key: "daily", title: t("sync_daily"), url: `${base}/api/public/daily-summary/${today}?key=${SYNC_KEY}` },
+    { key: "items", title: t("sync_items"), url: `${base}/api/public/item-sales/${today}?key=${SYNC_KEY}` },
+  ];
+
+  useEffect(() => {
+    void (async () => {
+      const [m, c, g, o, l] = await Promise.all([
+        supabase.from("menus").select("updated_at", { count: "exact" }).order("updated_at", { ascending: false }).limit(1),
+        supabase.from("categories").select("id", { count: "exact", head: true }),
+        supabase.from("addon_groups").select("id", { count: "exact", head: true }),
+        supabase.from("addon_options").select("id", { count: "exact", head: true }),
+        supabase.from("menu_addons").select("id", { count: "exact", head: true }),
+      ]);
+      setCounts({
+        menus: m.count ?? 0, categories: c.count ?? 0, groups: g.count ?? 0,
+        options: o.count ?? 0, links: l.count ?? 0,
+        last: (m.data as { updated_at?: string }[] | null)?.[0]?.updated_at ?? null,
+      });
+    })();
+  }, []);
+
+  const copy = async (k: string, text: string) => {
+    try { await navigator.clipboard.writeText(text); setCopied(k); setTimeout(() => setCopied(null), 1500); } catch { /* ignore */ }
+  };
+  const test = async (k: string, url: string) => {
+    setTesting(k);
+    try {
+      const d = await (await fetch(url)).json();
+      setResult((p) => ({
+        ...p,
+        [k]: d.error ? `⚠️ ${d.error}`
+          : !d.has_data ? t("sync_no_data_today")
+          : k === "items" ? `✅ ${d.item_count} · ฿${Math.round(d.total_revenue)}`
+          : `✅ ฿${Math.round(d.net_sales)}`,
+      }));
+    } catch (e) {
+      setResult((p) => ({ ...p, [k]: "⚠️ " + String(e) }));
+    } finally { setTesting(null); }
+  };
+
+  const Stat = ({ label, v }: { label: string; v: number }) => (
+    <div className="rounded-lg border bg-muted/30 px-3 py-2 text-center">
+      <div className="text-lg font-bold tabular-nums">{v}</div>
+      <div className="text-[11px] text-muted-foreground">{label}</div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-6 mt-4 max-w-2xl">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            Manager → POS · {t("sync_catalog")}
+            <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">{t("sync_catalog_help")}</p>
+          {counts ? (
+            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+              <Stat label="Menus" v={counts.menus} />
+              <Stat label="Categories" v={counts.categories} />
+              <Stat label={t("add_ons")} v={counts.groups} />
+              <Stat label="Options" v={counts.options} />
+              <Stat label="Links" v={counts.links} />
+            </div>
+          ) : <p className="text-sm text-muted-foreground">…</p>}
+          {counts?.last && (
+            <p className="text-xs text-muted-foreground">{t("sync_last_update")}: {new Date(counts.last).toLocaleString()}</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">POS → Manager · {t("sync_sales")}</CardTitle></CardHeader>
+        <CardContent className="space-y-5">
+          <p className="text-sm text-muted-foreground">{t("sync_sales_help")}</p>
+          {endpoints.map((e) => (
+            <div key={e.key} className="space-y-2">
+              <div className="text-sm font-medium">{e.title}</div>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 min-w-0 text-[11px] bg-muted rounded px-2 py-1.5 break-all">{e.url}</code>
+                <Button size="sm" variant="outline" className="shrink-0" onClick={() => copy(e.key, e.url)}>
+                  {copied === e.key ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => test(e.key, e.url)} disabled={testing === e.key}>
+                  {testing === e.key ? "…" : t("sync_test")}
+                </Button>
+                {result[e.key] && <span className="text-sm text-muted-foreground">{result[e.key]}</span>}
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
     </div>
   );
 }
