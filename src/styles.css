@@ -163,6 +163,14 @@
   font-size: 0.85rem; color: var(--muted-foreground); white-space: nowrap;
 }
 .tbl-chip b { color: var(--foreground); font-weight: 700; font-variant-numeric: tabular-nums; }
+.tbl-chip { cursor: pointer; }
+.tbl-chip:hover { border-color: color-mix(in oklab, var(--primary) 40%, transparent); }
+.tbl-chip-active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+}
+.tbl-chip-active b { color: var(--primary-foreground); }
 
 @keyframes alert-pulse-ring {
   0%   { box-shadow: 0 0 0 0 var(--destructive); }

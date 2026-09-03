@@ -38,6 +38,8 @@ function PosPage() {
   const [guests, setGuests] = useState(2);
   const [banner, setBanner] = useState<{ tableCode: string; key: number } | null>(null);
   const [specialOrders, setSpecialOrders] = useState<SpecialOrder[]>([]);
+  // Table view filter: show all tables, only free ones, or only in-use ones (MERI-style).
+  const [tableFilter, setTableFilter] = useState<"all" | "available" | "occupied">("all");
 
   const load = async () => {
     const { data } = await supabase.from("restaurant_tables").select("*").order("code");
@@ -192,6 +194,11 @@ function PosPage() {
   const staffOrders = specialOrders.filter((o) => o.source === "staff_meal");
   const availCount = tables.filter((x) => x.status === "available").length;
   const busyCount = tables.length - availCount;
+  const visibleTables = tables.filter((x) =>
+    tableFilter === "available" ? x.status === "available"
+    : tableFilter === "occupied" ? x.status !== "available"
+    : true,
+  );
 
   return (
     <div className="pos-surface min-h-[calc(100dvh-3.5rem)] p-6">
@@ -295,12 +302,36 @@ function PosPage() {
       <div className="flex items-center justify-between mb-5">
         <h1 className="text-2xl font-bold">{t("nav_pos")}</h1>
         <div className="flex items-center gap-2">
-          <span className="tbl-chip">{t("available")} <b>{availCount}</b></span>
-          <span className="tbl-chip">{t("occupied")} <b>{busyCount}</b></span>
+          <button
+            type="button"
+            onClick={() => setTableFilter("all")}
+            className={`tbl-chip transition-colors ${tableFilter === "all" ? "tbl-chip-active" : ""}`}
+          >
+            {t("all")} <b>{tables.length}</b>
+          </button>
+          <button
+            type="button"
+            onClick={() => setTableFilter("available")}
+            className={`tbl-chip transition-colors ${tableFilter === "available" ? "tbl-chip-active" : ""}`}
+          >
+            {t("available")} <b>{availCount}</b>
+          </button>
+          <button
+            type="button"
+            onClick={() => setTableFilter("occupied")}
+            className={`tbl-chip transition-colors ${tableFilter === "occupied" ? "tbl-chip-active" : ""}`}
+          >
+            {t("occupied")} <b>{busyCount}</b>
+          </button>
         </div>
       </div>
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-3">
-        {tables.map((tbl) => {
+        {visibleTables.length === 0 && (
+          <p className="col-span-full text-center text-muted-foreground py-10">
+            {tableFilter === "occupied" ? t("no_occupied_tables") : t("no_available_tables")}
+          </p>
+        )}
+        {visibleTables.map((tbl) => {
           const isTest = tbl.is_test ?? tbl.code === "TEST";
           const bill = tbl.status === "bill_requested";
           const busy = tbl.status !== "available";
