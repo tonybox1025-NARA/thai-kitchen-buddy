@@ -478,7 +478,8 @@ export async function buildKitchen(p: KitchenPayload): Promise<Uint8Array> {
     const my = it.name_my;
     const qty = Number(it.qty) || 0;
     d.text(`${qty}x  ${th}`, S.item);
-    if (my && my !== th) d.text(my, S.myBold);
+    // Burmese is for the kitchen crew only — the counter/front copy stays Thai.
+    if (my && my !== th && p.footer !== "counter") d.text(my, S.myBold);
     if (it.notes) d.text(`   ** ${it.notes} **`, S.norm);
     for (const mod of it.modifiers ?? []) {
       const q = mod.qty ?? 1;
