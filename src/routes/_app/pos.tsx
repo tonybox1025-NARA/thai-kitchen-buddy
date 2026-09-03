@@ -299,9 +299,9 @@ function PosPage() {
         </div>
       </div>
 
-      <div className="flex items-center justify-between mb-5">
+      <div className="mb-5">
         <h1 className="text-2xl font-bold">{t("nav_pos")}</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-center gap-2 mt-3">
           <button
             type="button"
             onClick={() => setTableFilter("all")}
