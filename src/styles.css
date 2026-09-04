@@ -172,6 +172,24 @@
 }
 .tbl-chip-active b { color: var(--primary-foreground); }
 
+/* ── Floor-plan table map (positions from restaurant_tables.pos_x / pos_y) ── */
+.tbl-floor {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) 0.4fr repeat(2, minmax(0, 1fr));
+  grid-auto-rows: minmax(0, auto);
+  gap: 0.6rem;
+  max-width: 760px;
+  margin-inline: auto;
+}
+.floor-note {
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 0.75rem; padding: 0.4rem; text-align: center;
+  background: color-mix(in oklab, var(--muted) 55%, transparent);
+  border: 1px dashed color-mix(in oklab, var(--foreground) 18%, transparent);
+  color: var(--muted-foreground);
+  font-size: 0.8rem; font-weight: 600; white-space: nowrap;
+}
+
 @keyframes alert-pulse-ring {
   0%   { box-shadow: 0 0 0 0 var(--destructive); }
   70%  { box-shadow: 0 0 0 14px transparent; }

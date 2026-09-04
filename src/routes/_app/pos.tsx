@@ -199,6 +199,56 @@ function PosPage() {
     : tableFilter === "occupied" ? x.status !== "available"
     : true,
   );
+  // Tables with a floor-plan slot (pos_y 0-4) render on the map; test/overflow
+  // tables (pos_y >= 5) sit in a small "other" row below it.
+  const isExtraTable = (tbl: RTable) => (tbl.is_test ?? tbl.code === "TEST") || (tbl.pos_y ?? 0) >= 5;
+  const floorTables = visibleTables.filter((x) => !isExtraTable(x));
+  const extraTables = visibleTables.filter(isExtraTable);
+
+  const renderTable = (tbl: RTable, placed: boolean) => {
+    const isTest = tbl.is_test ?? tbl.code === "TEST";
+    const bill = tbl.status === "bill_requested";
+    const busy = tbl.status !== "available";
+    const ink = isTest ? "text-white" : "text-foreground";
+    return (
+      <button
+        key={tbl.id}
+        onClick={() => onTableClick(tbl)}
+        style={placed ? { gridColumnStart: (tbl.pos_x ?? 0) + 1, gridRowStart: (tbl.pos_y ?? 0) + 1 } : undefined}
+        className={`tbl-card relative aspect-square rounded-2xl p-3 shadow-sm hover:shadow-md transition-all flex flex-col ${!placed ? "w-32 shrink-0" : ""} ${tbl.has_qr_alert ? "alert-flash" : isTest ? "tbl-test" : bill ? "tbl-bill" : busy ? "tbl-occupied" : ""}`}
+      >
+        {tbl.has_qr_alert && (
+          <>
+            <span className="absolute top-1.5 right-1.5"><Bell className="h-4 w-4 animate-pulse" /></span>
+            <span className="absolute -top-1.5 -left-1.5 inline-flex items-center justify-center min-w-6 h-6 px-1.5 rounded-full bg-white text-destructive text-[11px] font-bold shadow">NEW</span>
+          </>
+        )}
+        <div className="flex items-start justify-between">
+          <span className={`text-2xl font-extrabold leading-none ${ink}`}>{tableLabel(tbl.code)}</span>
+          {bill && (
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-destructive text-destructive-foreground leading-none">
+              {t("bill_requested")}
+            </span>
+          )}
+        </div>
+        <div className="flex-1 grid place-items-center">
+          {busy ? (
+            <div className={`flex items-center gap-1.5 ${ink}`}>
+              <Users className="h-5 w-5" />
+              <span className="text-3xl font-bold leading-none">{tbl.guests}</span>
+            </div>
+          ) : (
+            <span className="grid place-items-center h-12 w-12 rounded-full bg-primary/15 text-primary">
+              <Plus className="h-7 w-7" />
+            </span>
+          )}
+        </div>
+        <div className={`flex items-center gap-1 text-xs ${isTest ? "text-white/75" : "text-muted-foreground"}`}>
+          <Users className="h-3.5 w-3.5" /> {tbl.capacity}
+        </div>
+      </button>
+    );
+  };
 
   return (
     <div className="pos-surface min-h-[calc(100dvh-3.5rem)] p-6">
@@ -325,59 +375,26 @@ function PosPage() {
           </button>
         </div>
       </div>
-      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-3">
+      <div className="tbl-floor-wrap">
+        <div className="tbl-floor">
+          <div className="floor-note" style={{ gridColumn: "1 / 5", gridRow: 1 }}>{t("floor_entrance")}</div>
+          {floorTables.map((tbl) => renderTable(tbl, true))}
+          <div className="floor-note" style={{ gridColumn: "1 / 3", gridRow: 6 }}>{t("floor_cashier")}</div>
+          <div className="floor-note" style={{ gridColumn: "4 / 6", gridRow: 6 }}>{t("floor_fridge")}</div>
+        </div>
         {visibleTables.length === 0 && (
-          <p className="col-span-full text-center text-muted-foreground py-10">
+          <p className="text-center text-muted-foreground py-10">
             {tableFilter === "occupied" ? t("no_occupied_tables") : t("no_available_tables")}
           </p>
         )}
-        {visibleTables.map((tbl) => {
-          const isTest = tbl.is_test ?? tbl.code === "TEST";
-          const bill = tbl.status === "bill_requested";
-          const busy = tbl.status !== "available";
-          const ink = isTest ? "text-white" : "text-foreground";
-          return (
-            <button
-              key={tbl.id}
-              onClick={() => onTableClick(tbl)}
-              className={`tbl-card relative aspect-square rounded-2xl p-3 shadow-sm hover:shadow-md transition-all flex flex-col ${tbl.has_qr_alert ? "alert-flash" : isTest ? "tbl-test" : bill ? "tbl-bill" : busy ? "tbl-occupied" : ""}`}
-            >
-              {tbl.has_qr_alert && (
-                <>
-                  <span className="absolute top-1.5 right-1.5">
-                    <Bell className="h-4 w-4 animate-pulse" />
-                  </span>
-                  <span className="absolute -top-1.5 -left-1.5 inline-flex items-center justify-center min-w-6 h-6 px-1.5 rounded-full bg-white text-destructive text-[11px] font-bold shadow">
-                    NEW
-                  </span>
-                </>
-              )}
-              <div className="flex items-start justify-between">
-                <span className={`text-2xl font-extrabold leading-none ${ink}`}>{tableLabel(tbl.code)}</span>
-                {bill && (
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-destructive text-destructive-foreground leading-none">
-                    {t("bill_requested")}
-                  </span>
-                )}
-              </div>
-              <div className="flex-1 grid place-items-center">
-                {busy ? (
-                  <div className={`flex items-center gap-1.5 ${ink}`}>
-                    <Users className="h-5 w-5" />
-                    <span className="text-3xl font-bold leading-none">{tbl.guests}</span>
-                  </div>
-                ) : (
-                  <span className="grid place-items-center h-12 w-12 rounded-full bg-primary/15 text-primary">
-                    <Plus className="h-7 w-7" />
-                  </span>
-                )}
-              </div>
-              <div className={`flex items-center gap-1 text-xs ${isTest ? "text-white/75" : "text-muted-foreground"}`}>
-                <Users className="h-3.5 w-3.5" /> {tbl.capacity}
-              </div>
-            </button>
-          );
-        })}
+        {extraTables.length > 0 && (
+          <div className="mt-6 mx-auto max-w-[760px]">
+            <div className="text-xs font-medium text-muted-foreground mb-2">{t("floor_other")}</div>
+            <div className="flex flex-wrap gap-3">
+              {extraTables.map((tbl) => renderTable(tbl, false))}
+            </div>
+          </div>
+        )}
       </div>
 
       <Dialog open={!!openTable} onOpenChange={(o) => !o && setOpenTable(null)}>
