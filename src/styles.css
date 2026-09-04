@@ -183,11 +183,12 @@
 }
 .floor-note {
   display: flex; align-items: center; justify-content: center;
-  border-radius: 0.75rem; padding: 0.4rem; text-align: center;
-  background: color-mix(in oklab, var(--muted) 55%, transparent);
-  border: 1px dashed color-mix(in oklab, var(--foreground) 18%, transparent);
+  border-radius: 0.6rem; padding: 0.15rem 0.4rem; text-align: center;
+  background: color-mix(in oklab, var(--muted) 50%, transparent);
+  border: 1px dashed color-mix(in oklab, var(--foreground) 15%, transparent);
   color: var(--muted-foreground);
-  font-size: 0.8rem; font-weight: 600; white-space: nowrap;
+  font-size: 0.68rem; font-weight: 600; white-space: nowrap;
+  align-self: center;
 }
 
 @keyframes alert-pulse-ring {

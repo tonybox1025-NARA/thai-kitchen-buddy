@@ -351,35 +351,13 @@ function PosPage() {
 
       <div className="mb-5">
         <h1 className="text-2xl font-bold">{t("nav_pos")}</h1>
-        <div className="flex items-center justify-center gap-2 mt-3">
-          <button
-            type="button"
-            onClick={() => setTableFilter("all")}
-            className={`tbl-chip transition-colors ${tableFilter === "all" ? "tbl-chip-active" : ""}`}
-          >
-            {t("all")} <b>{tables.length}</b>
-          </button>
-          <button
-            type="button"
-            onClick={() => setTableFilter("available")}
-            className={`tbl-chip transition-colors ${tableFilter === "available" ? "tbl-chip-active" : ""}`}
-          >
-            {t("available")} <b>{availCount}</b>
-          </button>
-          <button
-            type="button"
-            onClick={() => setTableFilter("occupied")}
-            className={`tbl-chip transition-colors ${tableFilter === "occupied" ? "tbl-chip-active" : ""}`}
-          >
-            {t("occupied")} <b>{busyCount}</b>
-          </button>
-        </div>
       </div>
       <div className="tbl-floor-wrap">
         <div className="tbl-floor">
-          <div className="floor-note" style={{ gridColumn: "1 / 3", gridRow: 1 }}>{t("floor_entrance")}</div>
+          <div className="floor-note" style={{ gridColumn: "1 / 2", gridRow: 1 }}>{t("floor_entrance")}</div>
           {floorTables.map((tbl) => renderTable(tbl, true))}
-          <div className="floor-note" style={{ gridColumn: "1 / 3", gridRow: 6 }}>{t("floor_cashier")}</div>
+          <div className="floor-note" style={{ gridColumn: "1 / 2", gridRow: 6 }}>{t("floor_entrance")}</div>
+          <div className="floor-note" style={{ gridColumn: "2 / 4", gridRow: 6 }}>{t("floor_cashier")}</div>
           <div className="floor-note" style={{ gridColumn: "4 / 6", gridRow: 6 }}>{t("floor_fridge")}</div>
         </div>
         {visibleTables.length === 0 && (
