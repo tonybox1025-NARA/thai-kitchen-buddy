@@ -210,50 +210,24 @@ function PosPage() {
     const bill = tbl.status === "bill_requested";
     const busy = tbl.status !== "available";
     const ink = isTest ? "text-white" : "text-foreground";
-    const stateClass = tbl.has_qr_alert ? "alert-flash" : isTest ? "tbl-test" : bill ? "tbl-bill" : busy ? "tbl-occupied" : "";
-    const qrBadge = tbl.has_qr_alert ? (
-      <>
-        <span className="absolute top-1.5 right-1.5"><Bell className="h-4 w-4 animate-pulse" /></span>
-        <span className="absolute -top-1.5 -left-1.5 inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-white text-destructive text-[10px] font-bold shadow">NEW</span>
-      </>
-    ) : null;
-
-    // Placed = on the floor map: compact horizontal card (like the paper plan).
-    if (placed) {
-      return (
-        <button
-          key={tbl.id}
-          onClick={() => onTableClick(tbl)}
-          style={{ gridColumnStart: (tbl.pos_x ?? 0) + 1, gridRowStart: (tbl.pos_y ?? 0) + 1 }}
-          className={`tbl-card relative rounded-xl h-full px-3 py-2 shadow-sm hover:shadow-md transition-all flex flex-col justify-between ${stateClass}`}
-        >
-          {qrBadge}
-          <div className="flex items-center justify-between gap-1">
-            <span className={`text-xl font-extrabold leading-none ${ink}`}>{tableLabel(tbl.code)}</span>
-            {busy ? (
-              <span className={`flex items-center gap-0.5 ${ink}`}><Users className="h-4 w-4" /><span className="text-lg font-bold leading-none">{tbl.guests}</span></span>
-            ) : (
-              <Plus className={`h-5 w-5 ${isTest ? "text-white/80" : "text-primary"}`} />
-            )}
-          </div>
-          <div className={`flex items-center gap-1 text-[11px] ${isTest ? "text-white/75" : "text-muted-foreground"}`}>
-            <Users className="h-3 w-3" /> {tbl.capacity}
-            {bill && <span className="ml-auto text-[9px] font-bold px-1 rounded bg-destructive text-destructive-foreground leading-none">{t("bill_requested")}</span>}
-          </div>
-        </button>
-      );
-    }
-
-    // Not placed = the "Other" row (TEST / takeout / staff): fuller square card.
     return (
       <button
         key={tbl.id}
         onClick={() => onTableClick(tbl)}
-        className={`tbl-card relative aspect-square rounded-2xl p-3 shadow-sm hover:shadow-md transition-all flex flex-col w-32 shrink-0 ${stateClass}`}
+        style={placed ? { gridColumnStart: (tbl.pos_x ?? 0) + 1, gridRowStart: (tbl.pos_y ?? 0) + 1 } : undefined}
+        className={`tbl-card relative aspect-square rounded-2xl p-3 shadow-sm hover:shadow-md transition-all flex flex-col ${!placed ? "w-32 shrink-0" : ""} ${tbl.has_qr_alert ? "alert-flash" : isTest ? "tbl-test" : bill ? "tbl-bill" : busy ? "tbl-occupied" : ""}`}
       >
-        {qrBadge}
+        {tbl.has_qr_alert && (
+          <>
+            <span className="absolute top-1.5 right-1.5"><Bell className="h-4 w-4 animate-pulse" /></span>
+            <span className="absolute -top-1.5 -left-1.5 inline-flex items-center justify-center min-w-6 h-6 px-1.5 rounded-full bg-white text-destructive text-[11px] font-bold shadow">NEW</span>
+          </>
+        )}
         <div className="flex items-start justify-between">
           <span className={`text-2xl font-extrabold leading-none ${ink}`}>{tableLabel(tbl.code)}</span>
+          {bill && (
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-destructive text-destructive-foreground leading-none">{t("bill_requested")}</span>
+          )}
         </div>
         <div className="flex-1 grid place-items-center">
           {busy ? (
@@ -303,9 +277,9 @@ function PosPage() {
         <div className="tbl-floor">
           <div className="floor-note" style={{ gridColumn: "1 / 2", gridRow: 1 }}>{t("floor_entrance")}</div>
           {floorTables.map((tbl) => renderTable(tbl, true))}
-          <div className="floor-note" style={{ gridColumn: "1 / 2", gridRow: 8 }}>{t("floor_entrance")}</div>
-          <div className="floor-note" style={{ gridColumn: "1 / 3", gridRow: 9 }}>{t("floor_cashier")}</div>
-          <div className="floor-note" style={{ gridColumn: "4 / 6", gridRow: 9 }}>{t("floor_fridge")}</div>
+          <div className="floor-note" style={{ gridColumn: "1 / 2", gridRow: 6 }}>{t("floor_entrance")}</div>
+          <div className="floor-note" style={{ gridColumn: "2 / 4", gridRow: 6 }}>{t("floor_cashier")}</div>
+          <div className="floor-note" style={{ gridColumn: "4 / 6", gridRow: 6 }}>{t("floor_fridge")}</div>
         </div>
         {visibleTables.length === 0 && (
           <p className="text-center text-muted-foreground py-10">
