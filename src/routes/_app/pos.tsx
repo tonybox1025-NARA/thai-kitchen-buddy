@@ -199,9 +199,9 @@ function PosPage() {
     : tableFilter === "occupied" ? x.status !== "available"
     : true,
   );
-  // Tables with a floor-plan slot (pos_y 0-4) render on the map; test/overflow
-  // tables (pos_y >= 5) sit in a small "other" row below it.
-  const isExtraTable = (tbl: RTable) => (tbl.is_test ?? tbl.code === "TEST") || (tbl.pos_y ?? 0) >= 5;
+  // Real tables render on the floor map; only TEST drops to the "Other" row
+  // (alongside the takeout / staff-meal tiles).
+  const isExtraTable = (tbl: RTable) => tbl.is_test ?? tbl.code === "TEST";
   const floorTables = visibleTables.filter((x) => !isExtraTable(x));
   const extraTables = visibleTables.filter(isExtraTable);
 
