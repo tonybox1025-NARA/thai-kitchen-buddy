@@ -275,11 +275,10 @@ function PosPage() {
       </div>
       <div className="tbl-floor-wrap">
         <div className="tbl-floor">
-          <div className="floor-note" style={{ gridColumn: "1 / 2", gridRow: 1 }}>{t("floor_entrance")}</div>
+          <div className="floor-note floor-note-lg" style={{ gridColumn: "1 / 3", gridRow: 1 }}>{t("floor_entrance")}</div>
           {floorTables.map((tbl) => renderTable(tbl, true))}
-          <div className="floor-note" style={{ gridColumn: "1 / 2", gridRow: 6 }}>{t("floor_entrance")}</div>
-          <div className="floor-note" style={{ gridColumn: "2 / 4", gridRow: 6 }}>{t("floor_cashier")}</div>
-          <div className="floor-note" style={{ gridColumn: "4 / 6", gridRow: 6 }}>{t("floor_fridge")}</div>
+          <div className="floor-note floor-note-lg" style={{ gridColumn: "1 / 3", gridRow: 6 }}>{t("floor_cashier")}</div>
+          <div className="floor-note floor-note-lg" style={{ gridColumn: "4 / 6", gridRow: 6 }}>{t("floor_fridge")}</div>
         </div>
         {visibleTables.length === 0 && (
           <p className="text-center text-muted-foreground py-10">

@@ -190,6 +190,12 @@
   font-size: 0.68rem; font-weight: 600; white-space: nowrap;
   align-self: center;
 }
+.floor-note-lg {
+  font-size: 0.95rem; font-weight: 700; padding: 0.85rem 0.6rem;
+  border-style: solid;
+  background: color-mix(in oklab, var(--muted) 70%, transparent);
+  color: var(--foreground);
+}
 
 @keyframes alert-pulse-ring {
   0%   { box-shadow: 0 0 0 0 var(--destructive); }
