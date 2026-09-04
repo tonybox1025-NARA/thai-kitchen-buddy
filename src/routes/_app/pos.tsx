@@ -272,83 +272,6 @@ function PosPage() {
         </div>
       )}
 
-      {/* Special Orders Section */}
-      <div className="mb-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {/* Takeout */}
-        <div className="rounded-xl border-2 border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800 p-3">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <ShoppingBag className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-              <span className="font-semibold text-blue-700 dark:text-blue-300 text-sm">{t("takeout")}</span>
-              {takeoutOrders.length > 0 && (
-                <span className="text-xs bg-blue-200 dark:bg-blue-800 text-blue-700 dark:text-blue-300 rounded-full px-1.5 py-0.5 font-medium">
-                  {takeoutOrders.length}
-                </span>
-              )}
-            </div>
-            <Button
-              size="sm"
-              className="bg-blue-600 hover:bg-blue-700 text-white h-8 px-3 text-xs"
-              onClick={() => createSpecialOrder("takeout")}
-            >
-              <Plus className="h-3.5 w-3.5 mr-1" />{t("new_order_btn")}
-            </Button>
-          </div>
-          {takeoutOrders.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5">
-              {takeoutOrders.map((o) => (
-                <button
-                  key={o.id}
-                  onClick={() => nav({ to: "/order/$orderId", params: { orderId: o.id } })}
-                  className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow-sm transition-colors"
-                >
-                  {o.order_number ?? "TO-?"}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <p className="text-xs text-blue-500 dark:text-blue-400 opacity-70">{t("no_takeout_orders")}</p>
-          )}
-        </div>
-
-        {/* Staff Meal */}
-        <div className="rounded-xl border-2 border-purple-200 bg-purple-50 dark:bg-purple-950/30 dark:border-purple-800 p-3">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <UtensilsCrossed className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-              <span className="font-semibold text-purple-700 dark:text-purple-300 text-sm">{t("staff_meal")}</span>
-              {staffOrders.length > 0 && (
-                <span className="text-xs bg-purple-200 dark:bg-purple-800 text-purple-700 dark:text-purple-300 rounded-full px-1.5 py-0.5 font-medium">
-                  {staffOrders.length}
-                </span>
-              )}
-            </div>
-            <Button
-              size="sm"
-              className="bg-purple-600 hover:bg-purple-700 text-white h-8 px-3 text-xs"
-              onClick={() => createSpecialOrder("staff_meal")}
-            >
-              <Plus className="h-3.5 w-3.5 mr-1" />{t("new_order_btn")}
-            </Button>
-          </div>
-          {staffOrders.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5">
-              {staffOrders.map((o) => (
-                <button
-                  key={o.id}
-                  onClick={() => nav({ to: "/order/$orderId", params: { orderId: o.id } })}
-                  className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold shadow-sm transition-colors"
-                >
-                  {o.order_number ?? "ST-?"}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <p className="text-xs text-purple-500 dark:text-purple-400 opacity-70">{t("no_staff_meal_orders")}</p>
-          )}
-        </div>
-      </div>
-
       <div className="mb-5">
         <h1 className="text-2xl font-bold">{t("nav_pos")}</h1>
       </div>
@@ -365,14 +288,48 @@ function PosPage() {
             {tableFilter === "occupied" ? t("no_occupied_tables") : t("no_available_tables")}
           </p>
         )}
-        {extraTables.length > 0 && (
-          <div className="mt-6 mx-auto max-w-[760px]">
-            <div className="text-xs font-medium text-muted-foreground mb-2">{t("floor_other")}</div>
-            <div className="flex flex-wrap gap-3">
-              {extraTables.map((tbl) => renderTable(tbl, false))}
-            </div>
+        <div className="mt-6 mx-auto max-w-[760px]">
+          <div className="text-xs font-medium text-muted-foreground mb-2">{t("floor_other")}</div>
+          <div className="flex flex-wrap gap-3">
+            {extraTables.map((tbl) => renderTable(tbl, false))}
+            <button
+              onClick={() => createSpecialOrder("takeout")}
+              className="tbl-card relative aspect-square rounded-2xl p-3 shadow-sm hover:shadow-md transition-all flex flex-col w-32 shrink-0"
+            >
+              {takeoutOrders.length > 0 && (
+                <span className="absolute -top-1.5 -left-1.5 inline-flex items-center justify-center min-w-6 h-6 px-1.5 rounded-full bg-blue-600 text-white text-[11px] font-bold shadow">{takeoutOrders.length}</span>
+              )}
+              <div className="flex items-start"><ShoppingBag className="h-5 w-5 text-blue-600" /></div>
+              <div className="flex-1 grid place-items-center">
+                <span className="grid place-items-center h-12 w-12 rounded-full bg-primary/15 text-primary"><Plus className="h-7 w-7" /></span>
+              </div>
+              <div className="text-xs font-semibold text-muted-foreground">{t("takeout")}</div>
+            </button>
+            <button
+              onClick={() => createSpecialOrder("staff_meal")}
+              className="tbl-card relative aspect-square rounded-2xl p-3 shadow-sm hover:shadow-md transition-all flex flex-col w-32 shrink-0"
+            >
+              {staffOrders.length > 0 && (
+                <span className="absolute -top-1.5 -left-1.5 inline-flex items-center justify-center min-w-6 h-6 px-1.5 rounded-full bg-purple-600 text-white text-[11px] font-bold shadow">{staffOrders.length}</span>
+              )}
+              <div className="flex items-start"><UtensilsCrossed className="h-5 w-5 text-purple-600" /></div>
+              <div className="flex-1 grid place-items-center">
+                <span className="grid place-items-center h-12 w-12 rounded-full bg-primary/15 text-primary"><Plus className="h-7 w-7" /></span>
+              </div>
+              <div className="text-xs font-semibold text-muted-foreground">{t("staff_meal")}</div>
+            </button>
           </div>
-        )}
+          {(takeoutOrders.length > 0 || staffOrders.length > 0) && (
+            <div className="flex flex-wrap gap-1.5 mt-3">
+              {takeoutOrders.map((o) => (
+                <button key={o.id} onClick={() => nav({ to: "/order/$orderId", params: { orderId: o.id } })} className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow-sm">{o.order_number ?? "TO-?"}</button>
+              ))}
+              {staffOrders.map((o) => (
+                <button key={o.id} onClick={() => nav({ to: "/order/$orderId", params: { orderId: o.id } })} className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold shadow-sm">{o.order_number ?? "ST-?"}</button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <Dialog open={!!openTable} onOpenChange={(o) => !o && setOpenTable(null)}>

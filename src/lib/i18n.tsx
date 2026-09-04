@@ -269,7 +269,7 @@ const dict: Dict = {
   floor_entrance: { th: "ทางเข้า", en: "Entrance" },
   floor_cashier: { th: "แคชเชียร์", en: "Cashier" },
   floor_fridge: { th: "ตู้เย็น / ไอติม", en: "Fridge / Ice cream" },
-  floor_other: { th: "โต๊ะอื่น ๆ", en: "Other tables" },
+  floor_other: { th: "อื่น ๆ", en: "Other" },
   bill_requested: { th: "ขอเช็คบิล", en: "Bill requested" },
   guests: { th: "ลูกค้า", en: "Guests" },
   open_table: { th: "เปิดโต๊ะ", en: "Open table" },
