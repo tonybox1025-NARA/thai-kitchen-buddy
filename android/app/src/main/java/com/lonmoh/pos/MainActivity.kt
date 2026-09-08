@@ -3,6 +3,7 @@ package com.lonmoh.pos
 import android.content.res.Configuration
 import android.content.res.Resources
 import android.os.Bundle
+import android.view.View
 import android.view.WindowManager
 import com.getcapacitor.BridgeActivity
 import com.lonmoh.pos.printer.PosPrinterPlugin
@@ -17,6 +18,23 @@ class MainActivity : BridgeActivity() {
 
         // A till screen that sleeps mid-order is worse than a slightly hot tablet.
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        enterImmersiveMode()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) enterImmersiveMode()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun enterImmersiveMode() {
+        window.decorView.systemUiVisibility =
+            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
+                View.SYSTEM_UI_FLAG_FULLSCREEN or
+                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE
     }
 
     // SUNMI / rugged POS devices register a phantom hardware keyboard (their
