@@ -1578,6 +1578,24 @@ function MenuTab() {
   };
 
   const categoryById = new Map(cats.map((category) => [category.id, category]));
+  const categoryOrder: Record<string, number> = {
+    "d786c70f-e3eb-4b88-a82f-ad6c12028f54": 10,
+    "24fb69e4-1b9d-41ea-b609-26f49fb921e9": 20,
+    "10439056-6450-4276-8393-c91909d6bc42": 30,
+    "747ba159-f4e6-4f25-9c07-10664ca340d6": 40,
+    "306e9fe3-c781-425d-b402-dadcc67f0c8f": 50,
+    "ef231309-e3f6-4574-a07f-43c5767403fe": 60,
+    "59e6e451-994a-4293-a313-e59e8e107d01": 70,
+    "f2b475d5-78f5-4bc0-940f-0b2bcb9df43a": 80,
+    "fdb7fca2-b2c2-44a9-82ac-74448575c9b6": 90,
+    "b177544e-db6a-4ed2-86b4-78674e4e40e2": 100,
+    "7a73b072-789e-49b4-a061-e42a92ae5b3a": 110,
+    "ec4b9304-7672-4d83-8e4a-d8fd6240345e": 120,
+    "59fdba25-1e80-4c80-b1fb-24cd5b9b20e5": 130,
+    "e1c6f3c1-0c1c-4bb0-ad5d-034ca0d0cf98": 140,
+    "d95561e7-c21b-4413-a81c-6053f1982cfe": 150,
+  };
+  const categoryRank = (category: Category | null | undefined) => category ? (categoryOrder[category.id] ?? 900 + (category.sort ?? 0)) : 999;
   const categoryLabel = (category: Category | null | undefined) => {
     if (!category) return lang === "th" ? "ไม่มีหมวดหมู่" : "Uncategorized";
     if (lang === "th") return category.name_th;
@@ -1602,6 +1620,7 @@ function MenuTab() {
   };
 
   const normalizedQuery = query.trim().toLocaleLowerCase();
+  const orderedCategories = [...cats].sort((a, b) => categoryRank(a) - categoryRank(b) || a.name_th.localeCompare(b.name_th, "th"));
   const filteredMenus = menus.filter((menu) => {
     const matchesQuery = !normalizedQuery || [menu.name_th, menu.name_en, menu.name_my]
       .some((value) => value?.toLocaleLowerCase().includes(normalizedQuery));
@@ -1612,7 +1631,7 @@ function MenuTab() {
   }).sort((a, b) => {
     const categoryA = a.category_id ? categoryById.get(a.category_id) : null;
     const categoryB = b.category_id ? categoryById.get(b.category_id) : null;
-    return (categoryA?.sort ?? 999) - (categoryB?.sort ?? 999)
+    return categoryRank(categoryA) - categoryRank(categoryB)
       || (a.sort ?? 0) - (b.sort ?? 0)
       || a.name_th.localeCompare(b.name_th, "th")
       || a.id.localeCompare(b.id);
@@ -1634,7 +1653,7 @@ function MenuTab() {
           <SelectTrigger className="w-full xl:w-64"><SelectValue placeholder="All categories" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All categories</SelectItem>
-            {cats.map((category) => <SelectItem key={category.id} value={category.id}>{categoryLabel(category)}</SelectItem>)}
+            {orderedCategories.map((category) => <SelectItem key={category.id} value={category.id}>{categoryLabel(category)}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={availabilityFilter} onValueChange={setAvailabilityFilter}>
