@@ -27,6 +27,27 @@ type SelectedAddon = { group_id: string; group_name: string; option_id: string; 
 type CartItem = { menu_id: string; name_th: string; name_en: string; price: number; qty: number; notes?: string; set_config?: SetConfig; addons?: SelectedAddon[] };
 type Lang = "th" | "en";
 
+const QR_CATEGORY_PRESENTATION: Record<string, { order: number; th: string; en: string }> = {
+  "59fdba25-1e80-4c80-b1fb-24cd5b9b20e5": { order: 10, th: "แนะนำ", en: "Recommended" },
+  "d786c70f-e3eb-4b88-a82f-ad6c12028f54": { order: 20, th: "เซตเมนู", en: "Set Menu" },
+  "24fb69e4-1b9d-41ea-b609-26f49fb921e9": { order: 30, th: "เมนูผัด", en: "Stir Fried" },
+  "747ba159-f4e6-4f25-9c07-10664ca340d6": { order: 40, th: "เมนูต้ม / ซุป", en: "Soup / Boiled Dishes" },
+  "306e9fe3-c781-425d-b402-dadcc67f0c8f": { order: 50, th: "เมนูทอด / คั่ว", en: "Fried / Roasted" },
+  "ef231309-e3f6-4574-a07f-43c5767403fe": { order: 60, th: "เมนูยำ / ตำ", en: "Spicy Salad" },
+  "10439056-6450-4276-8393-c91909d6bc42": { order: 70, th: "ข้าวผัด / ราดข้าว", en: "Fried Rice / Rice Dishes" },
+  "fdb7fca2-b2c2-44a9-82ac-74448575c9b6": { order: 80, th: "ข้าวสวย / ข้าวต้ม", en: "Cooked Rice / Porridge" },
+  "7a73b072-789e-49b4-a061-e42a92ae5b3a": { order: 90, th: "เครื่องดื่ม / ไอศกรีม", en: "Drinks / Ice Cream" },
+  "ec4b9304-7672-4d83-8e4a-d8fd6240345e": { order: 100, th: "แอลกอฮอล์", en: "Alcohol" },
+};
+
+function categoryLabel(category: Category, lang: Lang) {
+  const presentation = QR_CATEGORY_PRESENTATION[category.id];
+  if (presentation) return presentation[lang];
+  return lang === "th"
+    ? category.name_th || category.name_en
+    : category.name_en || category.name_th;
+}
+
 const T = {
   th: {
     menu: "เมนู", table: "โต๊ะ", cart: "ตะกร้า", add: "เพิ่ม", submit: "ส่งออเดอร์",
@@ -338,7 +359,16 @@ function CustomerMenu() {
     return () => ac.abort();
   }, [tableCode]);
 
-  // ── Same category-walk sort as the POS order screen ──────────────────────
+  const orderedCategories = useMemo(() => {
+    if (!data) return [];
+    return [...data.categories].sort((a, b) => {
+      const aOrder = QR_CATEGORY_PRESENTATION[a.id]?.order ?? 1000 + (a.sort ?? 0);
+      const bOrder = QR_CATEGORY_PRESENTATION[b.id]?.order ?? 1000 + (b.sort ?? 0);
+      return aOrder - bOrder || a.name_en.localeCompare(b.name_en);
+    });
+  }, [data]);
+
+  // Keep the All view in the same category order as the category tabs.
   const allMenusSorted = useMemo(() => {
     if (!data) return [];
     const byCategory = new Map<string, Menu[]>();
@@ -351,16 +381,16 @@ function CustomerMenu() {
     for (const bucket of byCategory.values()) {
       bucket.sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
     }
-    // Walk categories in their sorted order (data.categories already sorted by sort)
+    // Walk categories in the customer-facing MERI order.
     const result: Menu[] = [];
-    for (const cat of data.categories) {
+    for (const cat of orderedCategories) {
       const items = byCategory.get(cat.id);
       if (items) result.push(...items);
     }
     const none = byCategory.get("__none__");
     if (none) result.push(...none);
     return result;
-  }, [data]);
+  }, [data, orderedCategories]);
 
   const filtered = useMemo(() => {
     if (!data) return [];
@@ -528,9 +558,9 @@ function CustomerMenu() {
             <Button data-cat="all" variant={activeCat === "all" ? "default" : "outline"} onClick={() => switchCat("all")} className="h-10 rounded-full px-4 text-sm font-semibold">
               {tr.all}
             </Button>
-            {data.categories.map((c) => (
+            {orderedCategories.map((c) => (
               <Button data-cat={c.id} key={c.id} variant={activeCat === c.id ? "default" : "outline"} onClick={() => switchCat(c.id)} className="h-10 whitespace-nowrap rounded-full px-4 text-sm font-semibold">
-                {name(c)}
+                {categoryLabel(c, lang)}
               </Button>
             ))}
           </div>
