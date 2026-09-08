@@ -625,10 +625,10 @@ function OrderPage() {
         )}
 
         {/* Category filter bar — sticks to top when scrolling */}
-        <div className="sticky top-0 z-10 bg-background border-b px-4 py-2 flex gap-2 overflow-x-auto">
-          <Button variant={activeCat === "all" ? "default" : "outline"} size="sm" onClick={() => setActiveCat("all")}>{t("ord_all")}</Button>
+        <div className="sticky top-0 z-10 min-h-14 shrink-0 bg-background border-b px-4 py-2 flex items-center gap-2 overflow-x-auto">
+          <Button className="shrink-0 whitespace-nowrap" variant={activeCat === "all" ? "default" : "outline"} size="sm" onClick={() => setActiveCat("all")}>{t("ord_all")}</Button>
           {cats.map((c) => (
-            <Button key={c.id} variant={activeCat === c.id ? "default" : "outline"} size="sm" onClick={() => setActiveCat(c.id)}>
+            <Button className="shrink-0 whitespace-nowrap" key={c.id} variant={activeCat === c.id ? "default" : "outline"} size="sm" onClick={() => setActiveCat(c.id)}>
               {pickName(c, lang)}
             </Button>
           ))}
