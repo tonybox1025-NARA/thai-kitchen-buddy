@@ -418,20 +418,31 @@ function OrderPage() {
       },
     }));
 
-    // The counter needs one complete checklist in the same order as the till:
-    // kitchen food plus every front item (rice, drinks, alcohol, snacks, etc.).
-    const counterTicket: CounterPrintPayload = {
+    // Counter output mirrors MERI: one kitchen-food checklist for the waitress,
+    // plus one consolidated ticket for everything prepared at the front.
+    const counterTickets: CounterPrintPayload[] = [];
+    const foodLines = lines.filter((line) => line.printToKitchen).map(stripZone);
+    if (foodLines.length) counterTickets.push({
       ...baseTicket,
-      lines: lines.map(stripZone),
-      language: "th",
-      department: "ALL ITEMS",
-      station: "ALL ITEMS",
+      lines: foodLines,
+      language: "my",
+      department: "KITCHEN CHECK",
+      station: "KITCHEN CHECK",
       footer: "counter",
-    };
+    });
+    const frontLines = lines.filter((line) => !line.printToKitchen).map(stripZone);
+    if (frontLines.length) counterTickets.push({
+      ...baseTicket,
+      lines: frontLines,
+      language: "th",
+      department: "FRONT",
+      station: "FRONT",
+      footer: "counter",
+    });
     // Route through the active transport: direct raster print in the APK, or the
     // print_jobs queue (picked up by the bridge) otherwise — same as before on web.
     if (kitchenJobs.length > 0) await printKitchenJobs(kitchenJobs);
-    await printCounter(counterTicket);
+    for (const ticket of counterTickets) await printCounter(ticket);
     toast.success(t("send_to_kitchen") + " ✓");
   };
 

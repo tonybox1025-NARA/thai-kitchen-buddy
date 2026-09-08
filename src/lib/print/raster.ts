@@ -514,8 +514,10 @@ export async function buildKitchen(p: KitchenPayload): Promise<Uint8Array> {
     const my = it.name_my;
     const qty = Number(it.qty) || 0;
     d.text(`${qty}x  ${th}`, S.item);
-    // Burmese is for the kitchen crew only — the counter/front copy stays Thai.
-    if (my && my !== th && p.footer !== "counter") d.text(my, S.myBold);
+    // The counter's kitchen checklist mirrors the kitchen ticket so waitresses
+    // can match each completed dish; the FRONT ticket remains Thai-only.
+    const showBurmese = p.footer !== "counter" || p.department === "KITCHEN CHECK";
+    if (my && my !== th && showBurmese) d.text(my, S.myBold);
     if (it.notes) d.text(`   ** ${it.notes} **`, S.norm);
     for (const mod of it.modifiers ?? []) {
       const q = mod.qty ?? 1;
@@ -532,7 +534,9 @@ export async function buildKitchen(p: KitchenPayload): Promise<Uint8Array> {
 
   const out: number[] = [...INIT];
   if (isQr) out.push(...BEEP);
-  out.push(...d.toRaster(), ...CUT);
+  // Counter printers in this shop need the older banded bitmap mode for long
+  // checklist tickets; it also avoids overrunning their small raster buffer.
+  out.push(...(p.footer === "counter" ? d.toLegacyRaster() : d.toRaster()), ...CUT);
   return Uint8Array.from(out);
 }
 
