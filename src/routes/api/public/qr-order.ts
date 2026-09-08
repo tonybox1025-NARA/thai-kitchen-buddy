@@ -198,17 +198,28 @@ export const Route = createFileRoute("/api/public/qr-order")({
           notes: entry.row.notes,
           modifiers: (entry.row.modifiers as { option_name: string; price: number }[] | null),
         }));
-        const counterLines = lines.map(({ zoneId: _zoneId, zoneLabel: _zoneLabel, printToKitchen: _printToKitchen, ...line }) => line);
-        type TicketLine = (typeof counterLines)[number];
-        const ticketPayload = { kind: "order_ticket", table: table_code, source: "qr", order_type: orderType, lines: counterLines, sent_at: sentAt };
+        const stripZone = ({ zoneId: _zoneId, zoneLabel: _zoneLabel, printToKitchen: _printToKitchen, ...line }: (typeof lines)[number]) => line;
+        type TicketLine = ReturnType<typeof stripZone>;
+        const ticketPayload = { kind: "order_ticket", table: table_code, source: "qr", order_type: orderType, sent_at: sentAt };
         const grouped = new Map<string, { zoneLabel: string; lines: TicketLine[] }>();
         for (const line of lines) {
           if (!line.printToKitchen) continue;
           const entry = grouped.get(line.zoneId) ?? { zoneLabel: line.zoneLabel, lines: [] as TicketLine[] };
-          const { zoneId: _zoneId, zoneLabel: _zoneLabel, printToKitchen: _printToKitchen, ...ticketLine } = line;
-          entry.lines.push(ticketLine);
+          entry.lines.push(stripZone(line));
           grouped.set(line.zoneId, entry);
         }
+        const foodLines = lines.filter((line) => line.printToKitchen).map(stripZone);
+        const frontLines = lines.filter((line) => !line.printToKitchen).map(stripZone);
+        const counterJobs = [
+          ...(foodLines.length > 0 ? [{
+            printer: "counter" as const,
+            payload: { ...ticketPayload, lines: foodLines, language: "th", department: "FOOD", station: "FOOD", footer: "counter" },
+          }] : []),
+          ...(frontLines.length > 0 ? [{
+            printer: "counter" as const,
+            payload: { ...ticketPayload, lines: frontLines, language: "th", department: "FRONT", station: "FRONT", footer: "counter" },
+          }] : []),
+        ];
         await supabase.from("print_jobs").insert([
           ...[...grouped.values()].map((group, index, all) => ({
             printer: "kitchen" as const,
@@ -222,7 +233,7 @@ export const Route = createFileRoute("/api/public/qr-order")({
               ticketTotal: all.length,
             },
           })),
-          { printer: "counter", payload: { ...ticketPayload, language: "th" } },
+          ...counterJobs,
         ]);
 
         // Mark table occupied + raise QR alert flag (the POS realtime listener will react)

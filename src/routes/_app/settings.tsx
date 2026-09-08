@@ -44,6 +44,7 @@ type Menu = {
   manager_menu_id?: string | null;
   is_set?: boolean;
   is_set_child?: boolean;
+  sort?: number;
 };
 
 function MarginIndicator({ price, cost }: { price: number; cost: number }) {
@@ -64,7 +65,7 @@ function MarginIndicator({ price, cost }: { price: number; cost: number }) {
     </div>
   );
 }
-type Category = { id: string; name_th: string; name_en: string; name_my: string; kitchen_zone_id?: string | null };
+type Category = { id: string; name_th: string; name_en: string; name_my: string; sort?: number; kitchen_zone_id?: string | null };
 type KitchenZone = { id: string; name_th: string; name_en: string; sort: number; active: boolean; print_to_kitchen: boolean; counter_group: string };
 // MenuIngredient as stored in state during editing (uses real DB column names: name_thai / name_english)
 type MenuIngredientRow = {
@@ -655,7 +656,7 @@ function KitchenZonesTab() {
                 <Plus className="h-4 w-4 mr-1" />{t("set_add_zone")}
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">Counter only — each its own ticket (Rice, Drinks, Alcohol, …).</p>
+            <p className="text-xs text-muted-foreground">Counter only — all front zones are combined into one FRONT ticket.</p>
           </CardHeader>
           <CardContent className="space-y-2">
             {frontZones.length === 0 && <p className="text-sm text-muted-foreground">No front zones yet.</p>}
@@ -707,7 +708,7 @@ function KitchenZonesTab() {
             </div>
             <p className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">
               <strong>On = Kitchen zone</strong> — prints its own kitchen ticket, and its food is also copied onto the counter FOOD ticket for the waitress.<br />
-              <strong>Off = Front zone</strong> — prints only its own counter ticket (e.g. Rice, Drinks, Alcohol).
+              <strong>Off = Front zone</strong> — combines all counter items (rice, drinks, alcohol, snacks, etc.) onto one FRONT ticket.
             </p>
           </div>
           <DialogFooter>
@@ -1453,7 +1454,7 @@ function AddonsSection({
 
 // ── MenuTab ───────────────────────────────────────────────────────────────────
 function MenuTab() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [menus, setMenus] = useState<Menu[]>([]);
   const [cats, setCats] = useState<Category[]>([]);
   const [edit, setEdit] = useState<Partial<Menu> | null>(null);
@@ -1576,6 +1577,30 @@ function MenuTab() {
     await supabase.from("menus").delete().eq("id", m.id); load();
   };
 
+  const categoryById = new Map(cats.map((category) => [category.id, category]));
+  const categoryLabel = (category: Category | null | undefined) => {
+    if (!category) return lang === "th" ? "ไม่มีหมวดหมู่" : "Uncategorized";
+    if (lang === "th") return category.name_th;
+    const labels: Record<string, string> = {
+      "d786c70f-e3eb-4b88-a82f-ad6c12028f54": "📦 Set Menu",
+      "24fb69e4-1b9d-41ea-b609-26f49fb921e9": "🍳 Stir-Fried Dishes",
+      "10439056-6450-4276-8393-c91909d6bc42": "🍚 Fried Rice & Rice Dishes",
+      "747ba159-f4e6-4f25-9c07-10664ca340d6": "🍲 Soups",
+      "306e9fe3-c781-425d-b402-dadcc67f0c8f": "🍖 Fried & Dry-Fried",
+      "ef231309-e3f6-4574-a07f-43c5767403fe": "🥗 Spicy Salads & Som Tam",
+      "59e6e451-994a-4293-a313-e59e8e107d01": "Meat & Seafood",
+      "f2b475d5-78f5-4bc0-940f-0b2bcb9df43a": "🐷 Grilled Mookata",
+      "fdb7fca2-b2c2-44a9-82ac-74448575c9b6": "🍚 Rice & Porridge",
+      "b177544e-db6a-4ed2-86b4-78674e4e40e2": "Snacks",
+      "7a73b072-789e-49b4-a061-e42a92ae5b3a": "🧊 Drinks & Ice Cream",
+      "ec4b9304-7672-4d83-8e4a-d8fd6240345e": "🍺 Alcoholic Drinks",
+      "59fdba25-1e80-4c80-b1fb-24cd5b9b20e5": "🛍️ Promotions & Announcements",
+      "e1c6f3c1-0c1c-4bb0-ad5d-034ca0d0cf98": "General",
+      "d95561e7-c21b-4413-a81c-6053f1982cfe": "Add-ons",
+    };
+    return labels[category.id] ?? category.name_en ?? category.name_th;
+  };
+
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const filteredMenus = menus.filter((menu) => {
     const matchesQuery = !normalizedQuery || [menu.name_th, menu.name_en, menu.name_my]
@@ -1584,8 +1609,14 @@ function MenuTab() {
     const matchesAvailability = availabilityFilter === "all"
       || (availabilityFilter === "available" ? menu.available : !menu.available);
     return matchesQuery && matchesCategory && matchesAvailability;
+  }).sort((a, b) => {
+    const categoryA = a.category_id ? categoryById.get(a.category_id) : null;
+    const categoryB = b.category_id ? categoryById.get(b.category_id) : null;
+    return (categoryA?.sort ?? 999) - (categoryB?.sort ?? 999)
+      || (a.sort ?? 0) - (b.sort ?? 0)
+      || a.name_th.localeCompare(b.name_th, "th")
+      || a.id.localeCompare(b.id);
   });
-  const categoryById = new Map(cats.map((category) => [category.id, category]));
 
   return (
     <div className="mt-4 space-y-4">
@@ -1603,7 +1634,7 @@ function MenuTab() {
           <SelectTrigger className="w-full xl:w-64"><SelectValue placeholder="All categories" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All categories</SelectItem>
-            {cats.map((category) => <SelectItem key={category.id} value={category.id}>{category.name_th}</SelectItem>)}
+            {cats.map((category) => <SelectItem key={category.id} value={category.id}>{categoryLabel(category)}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={availabilityFilter} onValueChange={setAvailabilityFilter}>
@@ -1621,15 +1652,22 @@ function MenuTab() {
         <div className="grid min-w-[900px] grid-cols-[56px_minmax(240px,1fr)_180px_110px_110px_70px_40px] items-center gap-3 border-b bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
           <span>Image</span><span>Menu</span><span>Category</span><span className="text-right">Price</span><span className="text-right">Food cost</span><span className="text-center">Sale</span><span />
         </div>
-        {filteredMenus.map((m) => {
+        {filteredMenus.map((m, index) => {
           const category = m.category_id ? categoryById.get(m.category_id) : null;
+          const previousMenu = filteredMenus[index - 1];
+          const startsCategory = categoryFilter === "all" && (!previousMenu || previousMenu.category_id !== m.category_id);
           return (
-            <button
-              type="button"
-              key={m.id}
-              onClick={() => openEdit(m)}
-              className="grid w-full min-w-[900px] grid-cols-[56px_minmax(240px,1fr)_180px_110px_110px_70px_40px] items-center gap-3 border-b px-3 py-2 text-left transition-colors last:border-b-0 hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
-            >
+            <div key={m.id} className="contents">
+              {startsCategory && (
+                <div className="min-w-[900px] border-b border-t bg-muted/70 px-4 py-2 text-sm font-semibold first:border-t-0">
+                  {categoryLabel(category)}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => openEdit(m)}
+                className="grid w-full min-w-[900px] grid-cols-[56px_minmax(240px,1fr)_180px_110px_110px_70px_40px] items-center gap-3 border-b px-3 py-2 text-left transition-colors last:border-b-0 hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+              >
               <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded border bg-muted">
                 {m.image_url ? <img src={m.image_url} alt="" className="h-full w-full object-cover" /> : <ImageIcon className="h-5 w-5 text-muted-foreground" />}
               </div>
@@ -1642,7 +1680,7 @@ function MenuTab() {
                 <div className="truncate text-xs text-muted-foreground">{m.name_en || "English name missing"}</div>
                 <div className="truncate text-xs text-muted-foreground font-burmese">{m.name_my || "Burmese kitchen name missing"}</div>
               </div>
-              <div className="truncate text-sm text-muted-foreground">{category?.name_th ?? "Uncategorized"}</div>
+              <div className="truncate text-sm text-muted-foreground">{categoryLabel(category)}</div>
               <div className="text-right font-semibold">฿{Number(m.price).toFixed(2)}</div>
               <div className="text-right">
                 <div className="font-medium">฿{Number(m.cost ?? 0).toFixed(2)}</div>
@@ -1652,7 +1690,8 @@ function MenuTab() {
                 <Switch checked={m.available} onCheckedChange={() => toggleAvail(m)} />
               </div>
               <ChevronRight className="h-4 w-4 text-muted-foreground" />
-            </button>
+              </button>
+            </div>
           );
         })}
         {filteredMenus.length === 0 && <div className="px-4 py-12 text-center text-sm text-muted-foreground">No menus match these filters.</div>}

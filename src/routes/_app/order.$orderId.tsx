@@ -120,7 +120,11 @@ function OrderPage() {
     if (m) setMenus(m as Menu[]);
     if (c) {
       const usedCategoryIds = new Set((m ?? []).map((menu) => menu.category_id).filter(Boolean));
-      setCats((c as Category[]).filter((category) => usedCategoryIds.has(category.id)));
+      setCats(
+        (c as Category[])
+          .filter((category) => usedCategoryIds.has(category.id))
+          .sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0) || a.name_th.localeCompare(b.name_th, "th") || a.id.localeCompare(b.id)),
+      );
     }
     if (it) setItems(it as Item[]);
     if (s) { setSettingsVatMode((s.vat_mode as "inclusive" | "exclusive") || "inclusive"); setSettingsVatRate(Number(s.vat_rate) || 7); setRestaurantName(s.restaurant_name); setReceiptLogoUrl((s as any).receipt_logo_url ?? null); }
@@ -159,9 +163,9 @@ function OrderPage() {
       if (!byCategory.has(key)) byCategory.set(key, []);
       byCategory.get(key)!.push(m);
     }
-    // Sort each bucket by menu.sort
+    // Keep the order stable even when imported menus share the same sort value.
     for (const bucket of byCategory.values()) {
-      bucket.sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
+      bucket.sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0) || a.name_th.localeCompare(b.name_th, "th") || a.id.localeCompare(b.id));
     }
     // Walk categories in their DB-sorted order (cats is already .order("sort"))
     const result: Menu[] = [];
@@ -327,20 +331,19 @@ function OrderPage() {
       const zoneId = zone?.id ?? "__main__";
       // print_to_kitchen = the zone TYPE: true = Kitchen zone (prints to the
       // kitchen printer, and its food is also copied onto the counter FOOD ticket);
-      // false = Front zone (prints only its own counter ticket).
+      // false = Front zone (combined onto one counter FRONT ticket).
       const printToKitchen = zone?.print_to_kitchen ?? true;
-      const zoneSort = zone?.sort ?? 999;
       if (sc) {
         const sideStr = sc.sides.map((s) => s.th).join(", ");
         const drinkStr = sc.drink ? ` | ${sc.drink.th}` : "";
         const riceStr = sc.rice === "rice" ? "ข้าวสวย" : "โจ๊ก";
         const setNotes = `หลัก: ${sc.main.th} | ${sideStr}${drinkStr} | ${riceStr}`;
-        return { name_my: p.name_en, name_en: p.name_en, name_th: p.name_th, qty: p.qty, notes: setNotes, modifiers: null, zoneId, zoneLabel, printToKitchen, zoneSort };
+        return { name_my: p.name_en, name_en: p.name_en, name_th: p.name_th, qty: p.qty, notes: setNotes, modifiers: null, zoneId, zoneLabel, printToKitchen };
       }
-      return { name_my: p.name_my, name_en: p.name_en, name_th: p.name_th, qty: p.qty, notes: p.notes, modifiers: (p.modifiers as Modifier[] | null) ?? null, zoneId, zoneLabel, printToKitchen, zoneSort };
+      return { name_my: p.name_my, name_en: p.name_en, name_th: p.name_th, qty: p.qty, notes: p.notes, modifiers: (p.modifiers as Modifier[] | null) ?? null, zoneId, zoneLabel, printToKitchen };
     });
     const displayLabel = orderSource === "takeout" ? `Takeout ${orderNumber ?? ""}` : orderSource === "staff_meal" ? `Staff ${orderNumber ?? ""}` : tableCode;
-    const stripZone = ({ zoneId: _z, zoneLabel: _zl, printToKitchen: _pk, zoneSort: _zs, ...line }: (typeof lines)[number]) => line;
+    const stripZone = ({ zoneId: _z, zoneLabel: _zl, printToKitchen: _pk, ...line }: (typeof lines)[number]) => line;
     const baseTicket = { kind: "order_ticket" as const, table: displayLabel, order_type: orderType, sent_at: sentAt };
 
     // Kitchen tickets: one per kitchen zone (Main Kitchen / Soup / Salad-Somtum …).
@@ -368,22 +371,14 @@ function OrderPage() {
     // Counter tickets (all to the counter printer, all labelled COUNTER):
     //  • ONE "FOOD" ticket = a copy of everything the kitchen is cooking, so the
     //    waitress can see what food each table ordered and what's still coming.
-    //  • one ticket per FRONT zone (rice, drinks, alcohol, …), each made at the
-    //    counter — grouped by zone so the owner controls it purely by assignment.
+    //  • ONE "FRONT" ticket = everything prepared at the counter (rice, drinks,
+    //    alcohol, snacks, ice cream, etc.).
     const counterTickets: CounterPrintPayload[] = [];
     const foodLines = lines.filter((l) => l.printToKitchen).map(stripZone);
     if (foodLines.length) counterTickets.push({ ...baseTicket, lines: foodLines, language: "th", department: "FOOD", station: "FOOD", footer: "counter" });
 
-    const frontZones = new Map<string, { label: string; sort: number; lines: ReturnType<typeof stripZone>[] }>();
-    for (const line of lines) {
-      if (line.printToKitchen) continue;
-      const entry = frontZones.get(line.zoneId) ?? { label: line.zoneLabel, sort: line.zoneSort, lines: [] };
-      entry.lines.push(stripZone(line));
-      frontZones.set(line.zoneId, entry);
-    }
-    for (const zone of [...frontZones.values()].sort((a, b) => a.sort - b.sort)) {
-      counterTickets.push({ ...baseTicket, lines: zone.lines, language: "th", department: zone.label, station: zone.label, footer: "counter" });
-    }
+    const frontLines = lines.filter((l) => !l.printToKitchen).map(stripZone);
+    if (frontLines.length) counterTickets.push({ ...baseTicket, lines: frontLines, language: "th", department: "FRONT", station: "FRONT", footer: "counter" });
     // Route through the active transport: direct raster print in the APK, or the
     // print_jobs queue (picked up by the bridge) otherwise — same as before on web.
     if (kitchenJobs.length > 0) await printKitchenJobs(kitchenJobs);
@@ -630,7 +625,7 @@ function OrderPage() {
         )}
 
         {/* Category filter bar — sticks to top when scrolling */}
-        <div className="sticky top-0 z-10 bg-background border-b px-4 py-2 flex gap-2 flex-wrap">
+        <div className="sticky top-0 z-10 bg-background border-b px-4 py-2 flex gap-2 overflow-x-auto">
           <Button variant={activeCat === "all" ? "default" : "outline"} size="sm" onClick={() => setActiveCat("all")}>{t("ord_all")}</Button>
           {cats.map((c) => (
             <Button key={c.id} variant={activeCat === c.id ? "default" : "outline"} size="sm" onClick={() => setActiveCat(c.id)}>
