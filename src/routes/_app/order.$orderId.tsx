@@ -36,18 +36,41 @@ const CLOSE_PRESETS = [
 ];
 
 const CATEGORY_BUTTON_STYLES = [
-  "bg-amber-100/80 hover:bg-amber-100 border-amber-300",
-  "bg-stone-100 hover:bg-stone-200 border-stone-300",
-  "bg-rose-100/80 hover:bg-rose-100 border-rose-300",
-  "bg-red-200/70 hover:bg-red-200 border-red-300",
-  "bg-orange-100 hover:bg-orange-200 border-orange-300",
-  "bg-yellow-100 hover:bg-yellow-200 border-yellow-300",
-  "bg-emerald-100 hover:bg-emerald-200 border-emerald-300",
-  "bg-sky-100 hover:bg-sky-200 border-sky-300",
+  "bg-amber-50 hover:bg-amber-100 border-amber-300",
+  "bg-blue-50 hover:bg-blue-100 border-blue-300",
+  "bg-rose-50 hover:bg-rose-100 border-rose-300",
+  "bg-orange-50 hover:bg-orange-100 border-orange-300",
+  "bg-yellow-50 hover:bg-yellow-100 border-yellow-300",
+  "bg-emerald-50 hover:bg-emerald-100 border-emerald-300",
+  "bg-cyan-50 hover:bg-cyan-100 border-cyan-300",
+  "bg-violet-50 hover:bg-violet-100 border-violet-300",
 ];
+
+const CATEGORY_PRESENTATION: Record<string, { order: number; en: string }> = {
+  "59fdba25-1e80-4c80-b1fb-24cd5b9b20e5": { order: 10, en: "Recommended" },
+  "d786c70f-e3eb-4b88-a82f-ad6c12028f54": { order: 20, en: "Set Menu" },
+  "24fb69e4-1b9d-41ea-b609-26f49fb921e9": { order: 30, en: "Stir-Fried Dishes" },
+  "747ba159-f4e6-4f25-9c07-10664ca340d6": { order: 40, en: "Soups / Boiled Dishes" },
+  "306e9fe3-c781-425d-b402-dadcc67f0c8f": { order: 50, en: "Fried / Roasted" },
+  "ef231309-e3f6-4574-a07f-43c5767403fe": { order: 60, en: "Spicy Salads / Som Tam" },
+  "10439056-6450-4276-8393-c91909d6bc42": { order: 70, en: "Fried Rice / Rice Dishes" },
+  "fdb7fca2-b2c2-44a9-82ac-74448575c9b6": { order: 80, en: "Cooked Rice / Porridge" },
+  "7a73b072-789e-49b4-a061-e42a92ae5b3a": { order: 90, en: "Drinks / Ice Cream" },
+  "ec4b9304-7672-4d83-8e4a-d8fd6240345e": { order: 100, en: "Alcohol" },
+  "59e6e451-994a-4293-a313-e59e8e107d01": { order: 110, en: "Meat & Seafood" },
+  "f2b475d5-78f5-4bc0-940f-0b2bcb9df43a": { order: 120, en: "Grilled Mookata" },
+  "b177544e-db6a-4ed2-86b4-78674e4e40e2": { order: 130, en: "Snacks" },
+  "e1c6f3c1-0c1c-4bb0-ad5d-034ca0d0cf98": { order: 140, en: "General" },
+  "d95561e7-c21b-4413-a81c-6053f1982cfe": { order: 150, en: "Add-ons" },
+};
 
 type Menu = { id: string; category_id: string | null; name_th: string; name_en: string; name_my: string; price: number; cost?: number; available: boolean; image_url: string | null; sort: number };
 type Category = { id: string; name_th: string; name_en: string; name_my: string; sort: number; kitchen_zone_id?: string | null };
+
+function categoryLabel(category: Category, lang: "th" | "en") {
+  if (lang === "en") return CATEGORY_PRESENTATION[category.id]?.en ?? (category.name_en || category.name_th);
+  return category.name_th || category.name_en;
+}
 type Item = {
   id: string; menu_id: string | null; name_th: string; name_en: string; name_my: string;
   qty: number; unit_price: number; notes: string | null; modifiers: unknown;
@@ -88,6 +111,7 @@ function OrderPage() {
   const [menus, setMenus] = useState<Menu[]>([]);
   const [cats, setCats] = useState<Category[]>([]);
   const [activeCat, setActiveCat] = useState<string | "all">("all");
+  const [categoryPage, setCategoryPage] = useState(0);
   const [items, setItems] = useState<Item[]>([]);
   const [selected, setSelected] = useState<Menu | null>(null);
   const [qty, setQty] = useState(1);
@@ -134,7 +158,12 @@ function OrderPage() {
       setCats(
         (c as Category[])
           .filter((category) => usedCategoryIds.has(category.id))
-          .sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0) || a.name_th.localeCompare(b.name_th, "th") || a.id.localeCompare(b.id)),
+          .sort((a, b) =>
+            (CATEGORY_PRESENTATION[a.id]?.order ?? 900 + (a.sort ?? 0))
+            - (CATEGORY_PRESENTATION[b.id]?.order ?? 900 + (b.sort ?? 0))
+            || a.name_th.localeCompare(b.name_th, "th")
+            || a.id.localeCompare(b.id),
+          ),
       );
     }
     if (it) setItems(it as Item[]);
@@ -646,19 +675,25 @@ function OrderPage() {
         )}
 
         {/* MERI-style category grid: eight large choices per horizontally scrollable page. */}
-        <div className="sticky top-0 z-10 shrink-0 bg-background border-b px-4 py-3">
-          <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-1">
+        <div className="sticky top-0 z-10 shrink-0 border-b bg-background px-4 py-3 shadow-sm">
+          <div
+            className="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-2"
+            onScroll={(event) => {
+              const element = event.currentTarget;
+              setCategoryPage(Math.round(element.scrollLeft / element.clientWidth));
+            }}
+          >
             {categoryPages.map((page, pageIndex) => (
-              <div key={pageIndex} className="grid min-w-full grid-cols-4 grid-rows-2 gap-2 snap-start">
+              <div key={pageIndex} className="grid min-w-full grid-cols-4 grid-rows-2 gap-3 snap-start">
                 {page.map((option, optionIndex) => {
                   const selectedCategory = activeCat === option.id;
-                  const label = option.id === "all" ? t("ord_all") : pickName(option.category, lang);
+                  const label = option.id === "all" ? t("ord_all") : categoryLabel(option.category, lang);
                   return (
                     <button
                       key={option.id}
                       type="button"
                       onClick={() => setActiveCat(option.id)}
-                      className={`h-16 min-w-0 rounded-lg border px-4 text-left text-sm font-semibold leading-tight transition-colors ${CATEGORY_BUTTON_STYLES[(pageIndex * 8 + optionIndex) % CATEGORY_BUTTON_STYLES.length]} ${selectedCategory ? "ring-2 ring-primary border-primary" : ""}`}
+                      className={`h-[72px] min-w-0 rounded-lg border-2 px-5 text-left text-base font-semibold leading-snug shadow-sm transition-[background-color,border-color,box-shadow,transform] active:scale-[0.99] ${CATEGORY_BUTTON_STYLES[(pageIndex * 8 + optionIndex) % CATEGORY_BUTTON_STYLES.length]} ${selectedCategory ? "border-primary bg-primary/10 shadow-md ring-2 ring-primary/25" : ""}`}
                     >
                       <span className="line-clamp-2">{label}</span>
                     </button>
@@ -667,6 +702,13 @@ function OrderPage() {
               </div>
             ))}
           </div>
+          {categoryPages.length > 1 && (
+            <div className="mt-1 flex justify-center gap-1.5" aria-hidden="true">
+              {categoryPages.map((_, index) => (
+                <span key={index} className={`h-1.5 rounded-full transition-all ${index === categoryPage ? "w-6 bg-primary" : "w-1.5 bg-muted-foreground/35"}`} />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Menu — grouped into category sections (MERI-style header + count) */}
@@ -674,7 +716,7 @@ function OrderPage() {
           {menuSections.map((sec) => (
             <section key={sec.cat.id}>
               <div className="flex items-baseline gap-2 mb-3 border-b pb-1.5">
-                <h2 className="text-lg font-bold leading-none">{pickName(sec.cat, lang)}</h2>
+                <h2 className="text-lg font-bold leading-none">{categoryLabel(sec.cat, lang)}</h2>
                 <span className="text-sm text-muted-foreground">({sec.items.length})</span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
