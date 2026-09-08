@@ -35,6 +35,17 @@ const CLOSE_PRESETS = [
   { key: "close_other",   th: "อื่นๆ",            en: "Other"          },
 ];
 
+const CATEGORY_BUTTON_STYLES = [
+  "bg-amber-100/80 hover:bg-amber-100 border-amber-300",
+  "bg-stone-100 hover:bg-stone-200 border-stone-300",
+  "bg-rose-100/80 hover:bg-rose-100 border-rose-300",
+  "bg-red-200/70 hover:bg-red-200 border-red-300",
+  "bg-orange-100 hover:bg-orange-200 border-orange-300",
+  "bg-yellow-100 hover:bg-yellow-200 border-yellow-300",
+  "bg-emerald-100 hover:bg-emerald-200 border-emerald-300",
+  "bg-sky-100 hover:bg-sky-200 border-sky-300",
+];
+
 type Menu = { id: string; category_id: string | null; name_th: string; name_en: string; name_my: string; price: number; cost?: number; available: boolean; image_url: string | null; sort: number };
 type Category = { id: string; name_th: string; name_en: string; name_my: string; sort: number; kitchen_zone_id?: string | null };
 type Item = {
@@ -197,6 +208,16 @@ function OrderPage() {
       .map((c) => ({ cat: c, items: byCat.get(c.id) ?? [] }))
       .filter((s) => s.items.length > 0);
   }, [filteredMenus, cats, activeCat]);
+
+  const categoryPages = useMemo(() => {
+    const options: ({ id: "all" } | { id: string; category: Category })[] = [
+      { id: "all" },
+      ...cats.map((category) => ({ id: category.id, category })),
+    ];
+    return Array.from({ length: Math.ceil(options.length / 8) }, (_, index) =>
+      options.slice(index * 8, index * 8 + 8),
+    );
+  }, [cats]);
 
   const openMenu = async (m: Menu) => {
     // Detect set-menu items by name (e.g. "Lon Moh - SET A", "Lon Moh - SET B", "Lon Moh - SET C")
@@ -624,14 +645,28 @@ function OrderPage() {
           </div>
         )}
 
-        {/* Category filter bar — sticks to top when scrolling */}
-        <div className="sticky top-0 z-10 min-h-14 shrink-0 bg-background border-b px-4 py-2 flex items-center gap-2 overflow-x-auto">
-          <Button className="shrink-0 whitespace-nowrap" variant={activeCat === "all" ? "default" : "outline"} size="sm" onClick={() => setActiveCat("all")}>{t("ord_all")}</Button>
-          {cats.map((c) => (
-            <Button className="shrink-0 whitespace-nowrap" key={c.id} variant={activeCat === c.id ? "default" : "outline"} size="sm" onClick={() => setActiveCat(c.id)}>
-              {pickName(c, lang)}
-            </Button>
-          ))}
+        {/* MERI-style category grid: eight large choices per horizontally scrollable page. */}
+        <div className="sticky top-0 z-10 shrink-0 bg-background border-b px-4 py-3">
+          <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-1">
+            {categoryPages.map((page, pageIndex) => (
+              <div key={pageIndex} className="grid min-w-full grid-cols-4 grid-rows-2 gap-2 snap-start">
+                {page.map((option, optionIndex) => {
+                  const selectedCategory = activeCat === option.id;
+                  const label = option.id === "all" ? t("ord_all") : pickName(option.category, lang);
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => setActiveCat(option.id)}
+                      className={`h-16 min-w-0 rounded-lg border px-4 text-left text-sm font-semibold leading-tight transition-colors ${CATEGORY_BUTTON_STYLES[(pageIndex * 8 + optionIndex) % CATEGORY_BUTTON_STYLES.length]} ${selectedCategory ? "ring-2 ring-primary border-primary" : ""}`}
+                    >
+                      <span className="line-clamp-2">{label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Menu — grouped into category sections (MERI-style header + count) */}
