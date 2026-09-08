@@ -501,10 +501,20 @@ export async function buildKitchen(p: KitchenPayload): Promise<Uint8Array> {
 }
 
 // ── TABLE QR SLIP (guest scans to self-order) ─────────────────────────────────
-// Rastered Thai header + a native 2D QR (crisp, scannable) for the menu URL.
+// Render the QR into the same raster as the text. Some counter printers accept
+// raster graphics but silently ignore the optional ESC/POS native QR commands.
 
 export async function buildTableQr(p: TableQrPayload): Promise<Uint8Array> {
   await ensureFonts();
+  const { default: QRCode } = await import("qrcode");
+  const qrCanvas = document.createElement("canvas");
+  await QRCode.toCanvas(qrCanvas, p.url, {
+    width: 320,
+    margin: 1,
+    errorCorrectionLevel: "M",
+    color: { dark: "#000000", light: "#ffffff" },
+  });
+
   const d = new Doc(24);
   d.text(p.restaurant || "Restaurant", S.big, "center");
   d.text(`โต๊ะ ${p.table ?? "-"}`, S.xl, "center");
@@ -513,8 +523,9 @@ export async function buildTableQr(p: TableQrPayload): Promise<Uint8Array> {
   d.text("สแกนเพื่อสั่งอาหาร", S.bold, "center");
   d.text("Scan to order", S.small, "center");
   d.feed(8);
+  d.logo(qrCanvas, qrCanvas.width, qrCanvas.height);
 
-  const out: number[] = [...INIT, ...d.toRaster(), 0x0a, ...ALIGN_CENTER, ...qrBytes(p.url), 0x0a, 0x0a, ...CUT];
+  const out: number[] = [...INIT, ...d.toRaster(), 0x0a, 0x0a, ...CUT];
   return Uint8Array.from(out);
 }
 
