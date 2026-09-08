@@ -208,18 +208,17 @@ export const Route = createFileRoute("/api/public/qr-order")({
           entry.lines.push(stripZone(line));
           grouped.set(line.zoneId, entry);
         }
-        const foodLines = lines.filter((line) => line.printToKitchen).map(stripZone);
-        const frontLines = lines.filter((line) => !line.printToKitchen).map(stripZone);
-        const counterJobs = [
-          ...(foodLines.length > 0 ? [{
-            printer: "counter" as const,
-            payload: { ...ticketPayload, lines: foodLines, language: "th", department: "FOOD", station: "FOOD", footer: "counter" },
-          }] : []),
-          ...(frontLines.length > 0 ? [{
-            printer: "counter" as const,
-            payload: { ...ticketPayload, lines: frontLines, language: "th", department: "FRONT", station: "FRONT", footer: "counter" },
-          }] : []),
-        ];
+        const counterJobs = [{
+          printer: "counter" as const,
+          payload: {
+            ...ticketPayload,
+            lines: lines.map(stripZone),
+            language: "th",
+            department: "ALL ITEMS",
+            station: "ALL ITEMS",
+            footer: "counter",
+          },
+        }];
         await supabase.from("print_jobs").insert([
           ...[...grouped.values()].map((group, index, all) => ({
             printer: "kitchen" as const,

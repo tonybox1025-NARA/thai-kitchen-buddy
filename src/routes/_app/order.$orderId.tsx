@@ -418,21 +418,20 @@ function OrderPage() {
       },
     }));
 
-    // Counter tickets (all to the counter printer, all labelled COUNTER):
-    //  • ONE "FOOD" ticket = a copy of everything the kitchen is cooking, so the
-    //    waitress can see what food each table ordered and what's still coming.
-    //  • ONE "FRONT" ticket = everything prepared at the counter (rice, drinks,
-    //    alcohol, snacks, ice cream, etc.).
-    const counterTickets: CounterPrintPayload[] = [];
-    const foodLines = lines.filter((l) => l.printToKitchen).map(stripZone);
-    if (foodLines.length) counterTickets.push({ ...baseTicket, lines: foodLines, language: "th", department: "FOOD", station: "FOOD", footer: "counter" });
-
-    const frontLines = lines.filter((l) => !l.printToKitchen).map(stripZone);
-    if (frontLines.length) counterTickets.push({ ...baseTicket, lines: frontLines, language: "th", department: "FRONT", station: "FRONT", footer: "counter" });
+    // The counter needs one complete checklist in the same order as the till:
+    // kitchen food plus every front item (rice, drinks, alcohol, snacks, etc.).
+    const counterTicket: CounterPrintPayload = {
+      ...baseTicket,
+      lines: lines.map(stripZone),
+      language: "th",
+      department: "ALL ITEMS",
+      station: "ALL ITEMS",
+      footer: "counter",
+    };
     // Route through the active transport: direct raster print in the APK, or the
     // print_jobs queue (picked up by the bridge) otherwise — same as before on web.
     if (kitchenJobs.length > 0) await printKitchenJobs(kitchenJobs);
-    for (const ticket of counterTickets) await printCounter(ticket);
+    await printCounter(counterTicket);
     toast.success(t("send_to_kitchen") + " ✓");
   };
 
