@@ -335,6 +335,42 @@ class Doc {
     }
     return out;
   }
+
+  /** Legacy ESC * 24-dot bitmap mode for printers that do not support GS v 0. */
+  toLegacyRaster(): number[] {
+    const h = Math.max(40, Math.ceil(this.y + 20));
+    const c = document.createElement("canvas");
+    c.width = WIDTH;
+    c.height = h;
+    const ctx = c.getContext("2d")!;
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, WIDTH, h);
+    for (const op of this.ops) op(ctx);
+    const px = ctx.getImageData(0, 0, WIDTH, h).data;
+    const isBlack = (x: number, y: number) => {
+      if (y >= h) return false;
+      const idx = (y * WIDTH + x) * 4;
+      const lum = (px[idx] * 299 + px[idx + 1] * 587 + px[idx + 2] * 114) / 1000;
+      return px[idx + 3] > 128 && lum < 128;
+    };
+
+    const out: number[] = [0x1b, 0x33, 24]; // line spacing = 24 dots
+    for (let y0 = 0; y0 < h; y0 += 24) {
+      out.push(0x1b, 0x2a, 33, WIDTH & 0xff, (WIDTH >> 8) & 0xff);
+      for (let x = 0; x < WIDTH; x++) {
+        for (let block = 0; block < 3; block++) {
+          let value = 0;
+          for (let bit = 0; bit < 8; bit++) {
+            if (isBlack(x, y0 + block * 8 + bit)) value |= 0x80 >> bit;
+          }
+          out.push(value);
+        }
+      }
+      out.push(0x0a);
+    }
+    out.push(0x1b, 0x32); // restore default line spacing
+    return out;
+  }
 }
 
 // ── native 2D QR (loyalty claim on the receipt) ───────────────────────────────
@@ -525,7 +561,7 @@ export async function buildTableQr(p: TableQrPayload): Promise<Uint8Array> {
   d.feed(8);
   d.logo(qrCanvas, qrCanvas.width, qrCanvas.height);
 
-  const out: number[] = [...INIT, ...d.toRaster(), 0x0a, 0x0a, ...CUT];
+  const out: number[] = [...INIT, ...d.toLegacyRaster(), 0x0a, 0x0a, ...CUT];
   return Uint8Array.from(out);
 }
 
