@@ -1419,35 +1419,121 @@ function AddonsSection({
   onChange: (ids: Set<string>) => void;
 }) {
   const { t } = useI18n();
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
   if (allGroups.length === 0)
     return <p className="text-xs text-muted-foreground">{t("no_addon_groups")}</p>;
 
-  const toggle = (id: string, checked: boolean) => {
+  const setLinked = (id: string, linked: boolean) => {
     const next = new Set(linkedIds);
-    checked ? next.add(id) : next.delete(id);
+    linked ? next.add(id) : next.delete(id);
     onChange(next);
   };
 
+  const linkedGroups = allGroups.filter((group) => linkedIds.has(group.id));
+  const normalizedSearch = search.trim().toLocaleLowerCase();
+  const availableGroups = allGroups.filter((group) => {
+    if (linkedIds.has(group.id)) return false;
+    if (!normalizedSearch) return true;
+    return [group.name, group.kitchen_name, ...group.addon_options.map((option) => option.name)]
+      .filter(Boolean)
+      .some((value) => value!.toLocaleLowerCase().includes(normalizedSearch));
+  });
+
   return (
-    <div className="space-y-2">
-      {allGroups.map((g) => (
-        <div key={g.id} className="flex items-start gap-3">
-          <Switch
-            checked={linkedIds.has(g.id)}
-            onCheckedChange={(v) => toggle(g.id, v)}
-            className="mt-0.5"
-          />
-          <div className="min-w-0">
-            <div className="text-sm font-medium leading-tight">{g.name}</div>
-            {g.kitchen_name && (
-              <div className="text-xs text-muted-foreground">Kitchen: {g.kitchen_name}</div>
-            )}
-            <div className="text-xs text-muted-foreground">
-              {g.addon_options.map((o) => `${o.name} ฿${Number(o.price).toFixed(0)}`).join(" · ")}
-            </div>
-          </div>
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm text-muted-foreground">
+          {linkedGroups.length} {linkedGroups.length === 1 ? "group" : "groups"}
+        </span>
+        <Button type="button" variant="outline" size="sm" onClick={() => setPickerOpen(true)}>
+          <Plus className="mr-1.5 h-4 w-4" />
+          Add options
+        </Button>
+      </div>
+
+      {linkedGroups.length === 0 ? (
+        <div className="border-y py-5 text-center text-sm text-muted-foreground">
+          No add-on groups linked
         </div>
-      ))}
+      ) : (
+        <div className="divide-y border-y">
+          {linkedGroups.map((group) => (
+            <div key={group.id} className="flex items-start gap-3 py-3">
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold leading-tight">{group.name}</div>
+                {group.kitchen_name && (
+                  <div className="mt-1 text-xs text-muted-foreground">Kitchen: {group.kitchen_name}</div>
+                )}
+                <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  {group.addon_options.map((option) => `${option.name} ฿${Number(option.price).toFixed(0)}`).join(" · ")}
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0"
+                aria-label={`Remove ${group.name}`}
+                onClick={() => setLinked(group.id, false)}
+              >
+                <Trash2 className="h-4 w-4 text-destructive" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Dialog
+        open={pickerOpen}
+        onOpenChange={(open) => {
+          setPickerOpen(open);
+          if (!open) setSearch("");
+        }}
+      >
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Add options</DialogTitle>
+          </DialogHeader>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search add-on groups"
+              className="pl-9"
+            />
+          </div>
+          <div className="max-h-[50vh] divide-y overflow-y-auto border-y">
+            {availableGroups.length === 0 ? (
+              <div className="py-8 text-center text-sm text-muted-foreground">
+                {normalizedSearch ? "No matching add-on groups" : "All add-on groups are already linked"}
+              </div>
+            ) : (
+              availableGroups.map((group) => (
+                <div key={group.id} className="flex items-start gap-3 py-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-semibold">{group.name}</div>
+                    {group.kitchen_name && (
+                      <div className="mt-1 text-xs text-muted-foreground">Kitchen: {group.kitchen_name}</div>
+                    )}
+                    <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                      {group.addon_options.map((option) => option.name).join(" · ")}
+                    </div>
+                  </div>
+                  <Button type="button" size="sm" onClick={() => setLinked(group.id, true)}>
+                    <Plus className="mr-1 h-4 w-4" />Add
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
+          <DialogFooter>
+            <Button type="button" onClick={() => setPickerOpen(false)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
