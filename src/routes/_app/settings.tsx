@@ -1552,7 +1552,7 @@ function MenuTab() {
   const [linkedAddonIds, setLinkedAddonIds] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
-  const [availabilityFilter, setAvailabilityFilter] = useState("available");
+  const [availabilityFilter, setAvailabilityFilter] = useState("all");
 
   const db = supabase as any;
 
@@ -1707,12 +1707,24 @@ function MenuTab() {
 
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const orderedCategories = [...cats].sort((a, b) => categoryRank(a) - categoryRank(b) || a.name_th.localeCompare(b.name_th, "th"));
+  const saleMenus = menus.filter((menu) => !menu.is_set_child);
+  const availabilityCounts = {
+    all: saleMenus.length,
+    available: saleMenus.filter((menu) => menu.available).length,
+    unavailable: saleMenus.filter((menu) => !menu.available).length,
+    components: menus.filter((menu) => menu.is_set_child).length,
+  };
+  const availabilityLabels = lang === "th"
+    ? { all: "เมนูทั้งหมด", available: "กำลังขาย", unavailable: "หยุดขาย", components: "รายการในชุด" }
+    : { all: "All menus", available: "On sale", unavailable: "Stopped", components: "Set components" };
   const filteredMenus = menus.filter((menu) => {
     const matchesQuery = !normalizedQuery || [menu.name_th, menu.name_en, menu.name_my]
       .some((value) => value?.toLocaleLowerCase().includes(normalizedQuery));
     const matchesCategory = categoryFilter === "all" || menu.category_id === categoryFilter;
-    const matchesAvailability = availabilityFilter === "all"
-      || (availabilityFilter === "available" ? menu.available : !menu.available);
+    const matchesAvailability = availabilityFilter === "components"
+      ? Boolean(menu.is_set_child)
+      : !menu.is_set_child && (availabilityFilter === "all"
+        || (availabilityFilter === "available" ? menu.available : !menu.available));
     return matchesQuery && matchesCategory && matchesAvailability;
   }).sort((a, b) => {
     const categoryA = a.category_id ? categoryById.get(a.category_id) : null;
@@ -1742,15 +1754,28 @@ function MenuTab() {
             {orderedCategories.map((category) => <SelectItem key={category.id} value={category.id}>{categoryLabel(category)}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Select value={availabilityFilter} onValueChange={setAvailabilityFilter}>
-          <SelectTrigger className="w-full xl:w-44"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="available">Available</SelectItem>
-            <SelectItem value="unavailable">Unavailable</SelectItem>
-            <SelectItem value="all">All statuses</SelectItem>
-          </SelectContent>
-        </Select>
         <Button onClick={() => openEdit({ available: true })}><Plus className="h-4 w-4 mr-1" />{t("add")}</Button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4" role="group" aria-label="Menu availability">
+        {(["all", "available", "unavailable", "components"] as const).map((status) => {
+          const active = availabilityFilter === status;
+          return (
+            <Button
+              key={status}
+              type="button"
+              variant={active ? "default" : "outline"}
+              className="h-auto min-h-12 justify-between gap-3 px-4 py-2"
+              aria-pressed={active}
+              onClick={() => setAvailabilityFilter(status)}
+            >
+              <span className="truncate">{availabilityLabels[status]}</span>
+              <span className={`tabular-nums ${active ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
+                {availabilityCounts[status]}
+              </span>
+            </Button>
+          );
+        })}
       </div>
 
       <div className="overflow-x-auto rounded-md border bg-background">
