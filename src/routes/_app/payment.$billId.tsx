@@ -10,7 +10,7 @@ import { KeypadInput } from "@/components/KeypadInput";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { ArrowLeft, Banknote, QrCode, CreditCard, Printer, RotateCcw, PencilLine, Eye, Tag, X, Percent, DollarSign, Gift, Scissors, Check, Heart, Search } from "lucide-react";
+import { ArrowLeft, Banknote, QrCode, CreditCard, Printer, RotateCcw, PencilLine, Eye, Tag, X, Percent, DollarSign, Gift, Scissors, Check, Heart, Search, Split } from "lucide-react";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -949,11 +949,49 @@ function PaymentPage() {
               </Button>
             ) : (
             <Tabs defaultValue="cash">
-              <TabsList className={`grid ${govQrEnabled ? "grid-cols-4" : "grid-cols-3"} w-full`}>
-                <TabsTrigger value="cash"><Banknote className="h-4 w-4 mr-1" />{t("cash")}</TabsTrigger>
-                <TabsTrigger value="qr"><QrCode className="h-4 w-4 mr-1" />QR</TabsTrigger>
-                {govQrEnabled && <TabsTrigger value="gov_qr"><QrCode className="h-4 w-4 mr-1" />{govQrLabel}</TabsTrigger>}
-                <TabsTrigger value="card"><CreditCard className="h-4 w-4 mr-1" />{t("card")}</TabsTrigger>
+              <TabsList className="grid h-auto w-full grid-cols-2 gap-3 bg-transparent p-0">
+                <TabsTrigger
+                  value="cash"
+                  className="group relative h-28 flex-col gap-2 overflow-hidden rounded-lg border-2 border-emerald-300 bg-emerald-50 px-3 py-3 text-emerald-950 shadow-sm transition-all hover:border-emerald-500 hover:bg-emerald-100 data-[state=active]:border-emerald-700 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:ring-4 data-[state=active]:ring-emerald-200 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100 dark:hover:bg-emerald-950/70 dark:data-[state=active]:border-emerald-300 dark:data-[state=active]:bg-emerald-700 dark:data-[state=active]:ring-emerald-900"
+                >
+                  <span className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-white text-emerald-700 opacity-0 shadow-sm transition-opacity group-data-[state=active]:opacity-100">
+                    <Check className="h-4 w-4 stroke-[3]" />
+                  </span>
+                  <Banknote className="h-9 w-9" strokeWidth={2.25} />
+                  <span className="text-base font-bold">{t("cash")}</span>
+                </TabsTrigger>
+                <TabsTrigger
+                  value="qr"
+                  className="group relative h-28 flex-col gap-2 overflow-hidden rounded-lg border-2 border-sky-300 bg-sky-50 px-3 py-3 text-sky-950 shadow-sm transition-all hover:border-sky-500 hover:bg-sky-100 data-[state=active]:border-sky-700 data-[state=active]:bg-sky-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:ring-4 data-[state=active]:ring-sky-200 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-100 dark:hover:bg-sky-950/70 dark:data-[state=active]:border-sky-300 dark:data-[state=active]:bg-sky-700 dark:data-[state=active]:ring-sky-900"
+                >
+                  <span className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-white text-sky-700 opacity-0 shadow-sm transition-opacity group-data-[state=active]:opacity-100">
+                    <Check className="h-4 w-4 stroke-[3]" />
+                  </span>
+                  <QrCode className="h-9 w-9" strokeWidth={2.25} />
+                  <span className="text-base font-bold">QR</span>
+                </TabsTrigger>
+                {govQrEnabled && (
+                  <TabsTrigger
+                    value="gov_qr"
+                    className="group relative h-28 flex-col gap-2 overflow-hidden rounded-lg border-2 border-amber-300 bg-amber-50 px-3 py-3 text-amber-950 shadow-sm transition-all hover:border-amber-500 hover:bg-amber-100 data-[state=active]:border-amber-700 data-[state=active]:bg-amber-500 data-[state=active]:text-amber-950 data-[state=active]:shadow-lg data-[state=active]:ring-4 data-[state=active]:ring-amber-200 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100 dark:hover:bg-amber-950/70 dark:data-[state=active]:border-amber-300 dark:data-[state=active]:bg-amber-500 dark:data-[state=active]:text-amber-950 dark:data-[state=active]:ring-amber-900"
+                  >
+                    <span className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-white text-amber-700 opacity-0 shadow-sm transition-opacity group-data-[state=active]:opacity-100">
+                      <Check className="h-4 w-4 stroke-[3]" />
+                    </span>
+                    <Split className="h-9 w-9" strokeWidth={2.25} />
+                    <span className="text-base font-bold">{govQrLabel}</span>
+                  </TabsTrigger>
+                )}
+                <TabsTrigger
+                  value="card"
+                  className="group relative h-28 flex-col gap-2 overflow-hidden rounded-lg border-2 border-violet-300 bg-violet-50 px-3 py-3 text-violet-950 shadow-sm transition-all hover:border-violet-500 hover:bg-violet-100 data-[state=active]:border-violet-700 data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:ring-4 data-[state=active]:ring-violet-200 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-100 dark:hover:bg-violet-950/70 dark:data-[state=active]:border-violet-300 dark:data-[state=active]:bg-violet-700 dark:data-[state=active]:ring-violet-900"
+                >
+                  <span className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-white text-violet-700 opacity-0 shadow-sm transition-opacity group-data-[state=active]:opacity-100">
+                    <Check className="h-4 w-4 stroke-[3]" />
+                  </span>
+                  <CreditCard className="h-9 w-9" strokeWidth={2.25} />
+                  <span className="text-base font-bold">{t("card")}</span>
+                </TabsTrigger>
               </TabsList>
               <TabsContent value="cash" className="pt-3">
                 <Button className="w-full" size="lg" onClick={openCash} disabled={remaining <= 0}>
