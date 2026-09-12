@@ -140,7 +140,12 @@ export const Route = createFileRoute("/api/public/qr-order")({
           const m = menuMap.get(it.menu_id)!;
           const sc = it.set_config as { main?: { th: string }; sides?: { th: string }[]; drink?: { th: string }; rice?: string } | null | undefined;
           const baseNotes = sc
-            ? `หลัก: ${sc.main?.th ?? "—"} | ${(sc.sides ?? []).map((s) => s.th).join(", ")}${sc.drink ? ` | ${sc.drink.th}` : ""} | ${sc.rice === "porridge" ? "โจ๊ก" : "ข้าวสวย"}`
+            ? [
+                `หลัก: ${sc.main?.th ?? "—"}`,
+                ...(sc.sides ?? []).map((side) => `เครื่อง: ${side.th}`),
+                ...(sc.drink ? [`เครื่องดื่ม: ${sc.drink.th}`] : []),
+                `ข้าว: ${sc.rice === "porridge" ? "โจ๊ก" : "ข้าวสวย"}`,
+              ].join("\n")
             : it.notes ?? null;
 
           // Build modifiers list from selected addon options (with quantity)

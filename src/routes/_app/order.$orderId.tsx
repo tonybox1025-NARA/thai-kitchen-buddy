@@ -325,10 +325,13 @@ function OrderPage() {
 
   const addSetToOrder = async (config: SetConfig) => {
     const setDef = SETS.find(s => s.id === config.set_id)!;
-    const sideNames = config.sides.map(s => s.th).join(", ");
-    const drinkNote = config.drink ? ` | เครื่องดื่ม: ${config.drink.th}` : "";
     const riceNote = config.rice === "rice" ? "ข้าวสวย" : "โจ๊ก";
-    const kitchenNotes = `หลัก: ${config.main.th} | เครื่อง: ${sideNames}${drinkNote} | ${riceNote}`;
+    const kitchenNotes = [
+      `หลัก: ${config.main.th}`,
+      ...config.sides.map((side) => `เครื่อง: ${side.th}`),
+      ...(config.drink ? [`เครื่องดื่ม: ${config.drink.th}`] : []),
+      `ข้าว: ${riceNote}`,
+    ].join("\n");
     const { error } = await (supabase as any).from("order_items").insert({
       order_id: orderId,
       menu_id: null,
@@ -384,10 +387,13 @@ function OrderPage() {
       // false = Front zone (combined onto one counter FRONT ticket).
       const printToKitchen = zone?.print_to_kitchen ?? true;
       if (sc) {
-        const sideStr = sc.sides.map((s) => s.th).join(", ");
-        const drinkStr = sc.drink ? ` | ${sc.drink.th}` : "";
         const riceStr = sc.rice === "rice" ? "ข้าวสวย" : "โจ๊ก";
-        const setNotes = `หลัก: ${sc.main.th} | ${sideStr}${drinkStr} | ${riceStr}`;
+        const setNotes = [
+          `หลัก: ${sc.main.th}`,
+          ...sc.sides.map((side) => `เครื่อง: ${side.th}`),
+          ...(sc.drink ? [`เครื่องดื่ม: ${sc.drink.th}`] : []),
+          `ข้าว: ${riceStr}`,
+        ].join("\n");
         return { name_my: p.name_en, name_en: p.name_en, name_th: p.name_th, qty: p.qty, notes: setNotes, modifiers: null, zoneId, zoneLabel, printToKitchen };
       }
       return { name_my: p.name_my, name_en: p.name_en, name_th: p.name_th, qty: p.qty, notes: p.notes, modifiers: (p.modifiers as Modifier[] | null) ?? null, zoneId, zoneLabel, printToKitchen };
@@ -609,6 +615,7 @@ function OrderPage() {
   };
 
   const liveItems = items.filter((i) => i.status !== "voided");
+  const pendingCount = liveItems.filter((i) => i.status === "pending").length;
   const subtotal = liveItems.reduce((s, i) => s + i.qty * Number(i.unit_price), 0);
 
   // Bill preview totals (mirrors payment screen VAT logic)
@@ -631,9 +638,9 @@ function OrderPage() {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[1fr_420px] h-[calc(100vh-3.5rem)]">
+    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_420px] h-[calc(100vh-3.5rem)] min-h-0 overflow-hidden">
       {/* Menu */}
-      <div className="overflow-auto flex flex-col">
+      <div className="min-h-0 min-w-0 overflow-y-auto overscroll-contain flex flex-col">
         {/* Page header — scrolls away */}
         <div className="flex items-center gap-3 px-4 pt-4 pb-2 flex-wrap">
           <Link to="/pos"><Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4 mr-1" />{t("back")}</Button></Link>
@@ -751,11 +758,11 @@ function OrderPage() {
       </div>
 
       {/* Order panel */}
-      <aside className="border-l bg-card flex flex-col">
+      <aside className="min-h-0 min-w-0 overflow-hidden border-l bg-card flex flex-col">
         <div className="p-4 border-b">
           <h2 className="font-bold">{t("order")}</h2>
         </div>
-        <div className="flex-1 overflow-auto p-3 space-y-2">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 space-y-3">
           {liveItems.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">{t("empty_order")}</p>}
           {liveItems.map((i) => {
             const sc = i.set_config as SetConfig | undefined | null;
@@ -858,8 +865,15 @@ function OrderPage() {
           <div className="flex justify-between text-lg font-bold">
             <span>{t("subtotal")}</span><span>{thb(subtotal)}</span>
           </div>
-          <Button className="w-full" size="lg" variant="secondary" onClick={sendToKitchen}>
-            <ChefHat className="h-4 w-4 mr-2" />{t("send_to_kitchen")}
+          <Button
+            className={`w-full transition-all ${pendingCount > 0 ? "bg-amber-500 text-amber-950 shadow-lg ring-2 ring-amber-300 hover:bg-amber-600" : ""}`}
+            size="lg"
+            variant={pendingCount > 0 ? "default" : "secondary"}
+            onClick={sendToKitchen}
+            disabled={pendingCount === 0}
+          >
+            <ChefHat className="h-4 w-4 mr-2" />
+            {t("send_to_kitchen")}{pendingCount > 0 ? ` (${pendingCount})` : ""}
           </Button>
           {(orderSource === "pos" || orderSource === "qr") ? (
             <div className="flex gap-3">

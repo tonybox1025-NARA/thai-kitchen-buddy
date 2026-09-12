@@ -527,7 +527,8 @@ export async function buildKitchen(p: KitchenPayload): Promise<Uint8Array> {
       const on = mod.option_name ?? "Option";
       d.text(`   + ${on}${qs}${ps}`, S.norm);
     }
-    d.feed(4);
+    // Keep adjacent dishes visually distinct when staff scan a long ticket.
+    d.feed(12);
   }
   d.rule(true);
   d.text(p.footer === "counter" ? "COUNTER" : "KITCHEN  မီးဖိုချောင်", S.bold, "center");
