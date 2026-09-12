@@ -328,7 +328,7 @@ function OrderPage() {
     const riceNote = config.rice === "rice" ? "ข้าวสวย" : "โจ๊ก";
     const kitchenNotes = [
       `หลัก: ${config.main.th}`,
-      ...config.sides.map((side) => `เครื่อง: ${side.th}`),
+      ...config.sides.map((side) => `เมนูรอง: ${side.th}`),
       ...(config.drink ? [`เครื่องดื่ม: ${config.drink.th}`] : []),
       `ข้าว: ${riceNote}`,
     ].join("\n");
@@ -390,7 +390,7 @@ function OrderPage() {
         const riceStr = sc.rice === "rice" ? "ข้าวสวย" : "โจ๊ก";
         const setNotes = [
           `หลัก: ${sc.main.th}`,
-          ...sc.sides.map((side) => `เครื่อง: ${side.th}`),
+          ...sc.sides.map((side) => `เมนูรอง: ${side.th}`),
           ...(sc.drink ? [`เครื่องดื่ม: ${sc.drink.th}`] : []),
           `ข้าว: ${riceStr}`,
         ].join("\n");

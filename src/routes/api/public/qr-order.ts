@@ -142,7 +142,7 @@ export const Route = createFileRoute("/api/public/qr-order")({
           const baseNotes = sc
             ? [
                 `หลัก: ${sc.main?.th ?? "—"}`,
-                ...(sc.sides ?? []).map((side) => `เครื่อง: ${side.th}`),
+                ...(sc.sides ?? []).map((side) => `เมนูรอง: ${side.th}`),
                 ...(sc.drink ? [`เครื่องดื่ม: ${sc.drink.th}`] : []),
                 `ข้าว: ${sc.rice === "porridge" ? "โจ๊ก" : "ข้าวสวย"}`,
               ].join("\n")
