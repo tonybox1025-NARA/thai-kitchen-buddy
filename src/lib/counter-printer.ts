@@ -177,6 +177,53 @@ export async function printKitchenJobs(
   if (error) throw error;
 }
 
+/**
+ * Print several counter tickets reliably and in order. For direct printing the
+ * ESC/POS documents are sent in one transport write; each document already ends
+ * with its own cut command, so they still come out as separate paper tickets.
+ */
+export async function printCounterJobs(payloads: CounterPrintPayload[]) {
+  if (payloads.length === 0) return;
+
+  if (getPrintTransport() === "direct" && canPrintDirect()) {
+    const documents = await Promise.all(
+      payloads.map((payload) => buildEscPos(payload as unknown as PrintPayload, "counter")),
+    );
+    const byteLength = documents.reduce((total, document) => total + document.length, 0);
+    const batch = new Uint8Array(byteLength);
+    let offset = 0;
+    for (const document of documents) {
+      batch.set(document, offset);
+      offset += document.length;
+    }
+    const data = toBase64(batch);
+
+    if (getCounterLink() === "usb") {
+      await PosPrinter.printUsb({ data });
+      return;
+    }
+
+    const { counter: host } = await loadPrinterIps(true);
+    if (host) {
+      await PosPrinter.printTcp({ host, data });
+      return;
+    }
+
+    const { available } = await PosPrinter.sunmiStatus().catch(() => ({ available: false }));
+    if (available) {
+      await PosPrinter.printSunmi({ data });
+      return;
+    }
+
+    throw new Error("No counter printer configured — set its IP or switch it to USB.");
+  }
+
+  const { error } = await supabase.from("print_jobs").insert(
+    payloads.map((payload) => ({ printer: "counter" as const, payload: payload as Json })),
+  );
+  if (error) throw error;
+}
+
 // ── Back-compat entry points ──────────────────────────────────────────────────
 
 /** Counter/receipt print. Routes through the active transport. */
