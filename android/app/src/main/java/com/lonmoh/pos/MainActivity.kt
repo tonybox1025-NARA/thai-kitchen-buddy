@@ -7,6 +7,7 @@ import android.view.View
 import android.view.WindowManager
 import com.getcapacitor.BridgeActivity
 import com.lonmoh.pos.printer.PosPrinterPlugin
+import com.lonmoh.pos.update.AppUpdatePlugin
 
 class MainActivity : BridgeActivity() {
 
@@ -14,6 +15,7 @@ class MainActivity : BridgeActivity() {
         // Must be registered before super.onCreate() — that is where the bridge
         // is built and the plugin list is frozen.
         registerPlugin(PosPrinterPlugin::class.java)
+        registerPlugin(AppUpdatePlugin::class.java)
         super.onCreate(savedInstanceState)
 
         // A till screen that sleeps mid-order is worse than a slightly hot tablet.

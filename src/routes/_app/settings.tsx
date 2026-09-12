@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Trash2, Plus, Printer, QrCode, Wifi, WifiOff, ChevronDown, LayoutGrid, Search, ImageIcon, Link2, ChevronRight, ChefHat, Copy, Check } from "lucide-react";
+import { Trash2, Plus, Printer, QrCode, Wifi, WifiOff, ChevronDown, LayoutGrid, Search, ImageIcon, Link2, ChevronRight, ChefHat, Copy, Check, Download, RefreshCw, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 import { makeDriver, printInDedicatedDocument, type DriverId } from "@/lib/print/PrintService";
 import {
@@ -25,6 +25,8 @@ import { ReceiptPreview72, receiptToHtml } from "@/components/print/ReceiptPrevi
 import { KitchenTicketPreview72, kitchenToHtml } from "@/components/print/KitchenTicketPreview72";
 import { sampleReceipt, sampleKitchen, sampleDepartmentOrder, splitOrderByDepartment } from "@/lib/print/sampleData";
 import { parseBuckets, isValidBucket, type QrTimeBucket } from "@/lib/qr-buckets";
+import { isNativeApp } from "@/lib/print/native-printer";
+import { AppUpdate, getLatestAppRelease, newerVersion, type GithubRelease } from "@/lib/app-update";
 // qrcode is dynamically imported inside QrCodesTab to avoid Node deps at SSR module-eval
 
 export const Route = createFileRoute("/_app/settings")({ component: SettingsPage });
@@ -131,6 +133,7 @@ function SettingsPage() {
           <TabsTrigger value="qr">{t("qr_codes")}</TabsTrigger>
           <TabsTrigger value="staff">{t("staff")}</TabsTrigger>
           <TabsTrigger value="sync">{t("set_sync")}</TabsTrigger>
+          {isNativeApp() && <TabsTrigger value="app-update">App Update</TabsTrigger>}
         </TabsList>
         <TabsContent value="general"><GeneralTab /></TabsContent>
         <TabsContent value="menu"><MenuTab /></TabsContent>
@@ -142,8 +145,74 @@ function SettingsPage() {
         <TabsContent value="qr"><QrCodesTab /></TabsContent>
         <TabsContent value="staff"><StaffTab /></TabsContent>
         <TabsContent value="sync"><SyncTab /></TabsContent>
+        {isNativeApp() && <TabsContent value="app-update"><AppUpdateTab /></TabsContent>}
       </Tabs>
     </div>
+  );
+}
+
+function AppUpdateTab() {
+  const [current, setCurrent] = useState("");
+  const [release, setRelease] = useState<GithubRelease | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [installing, setInstalling] = useState(false);
+  const updateAvailable = !!release && !!current && newerVersion(current, release.tag_name);
+
+  const check = async () => {
+    setChecking(true);
+    try {
+      const [version, latest] = await Promise.all([AppUpdate.currentVersion(), getLatestAppRelease()]);
+      setCurrent(version.versionName);
+      setRelease(latest);
+      toast.success(newerVersion(version.versionName, latest.tag_name) ? "Update available" : "App is up to date");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not check updates");
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  useEffect(() => { void check(); }, []);
+
+  const install = async () => {
+    const apk = release?.assets.find((asset) => asset.name.endsWith(".apk"));
+    if (!apk) { toast.error("This release does not contain an APK"); return; }
+    setInstalling(true);
+    try {
+      const { allowed } = await AppUpdate.canInstallPackages();
+      if (!allowed) {
+        await AppUpdate.openInstallPermission();
+        toast.info("Allow installs from LONMOH POS, then return and tap Download & Install again");
+        return;
+      }
+      toast.info("Downloading update…");
+      await AppUpdate.downloadAndInstall({ url: apk.browser_download_url });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Update failed");
+    } finally {
+      setInstalling(false);
+    }
+  };
+
+  return (
+    <Card className="max-w-2xl">
+      <CardHeader><CardTitle className="flex items-center gap-2"><Smartphone className="h-5 w-5" />LONMOH POS App Update</CardTitle></CardHeader>
+      <CardContent className="space-y-5">
+        <div className="grid grid-cols-2 gap-4 rounded-md border p-4">
+          <div><p className="text-sm text-muted-foreground">Installed version</p><p className="text-lg font-semibold">{current || "Checking…"}</p></div>
+          <div><p className="text-sm text-muted-foreground">Latest version</p><p className="text-lg font-semibold">{release?.tag_name.replace(/^v/, "") || "Checking…"}</p></div>
+        </div>
+        <div className={`rounded-md border p-4 ${updateAvailable ? "border-amber-400 bg-amber-50" : "border-emerald-300 bg-emerald-50"}`}>
+          <p className="font-semibold">{updateAvailable ? "A new version is available" : "App is up to date"}</p>
+          {updateAvailable && release?.body && <p className="mt-2 whitespace-pre-line text-sm text-muted-foreground">{release.body}</p>}
+        </div>
+        <div className="flex gap-3">
+          <Button variant="outline" onClick={check} disabled={checking}><RefreshCw className={`mr-2 h-4 w-4 ${checking ? "animate-spin" : ""}`} />Check for updates</Button>
+          {updateAvailable && <Button onClick={install} disabled={installing}><Download className="mr-2 h-4 w-4" />{installing ? "Downloading…" : "Download & Install"}</Button>}
+        </div>
+        <p className="text-xs text-muted-foreground">The first update requires Android permission to install apps from LONMOH POS. Existing app data and login are preserved.</p>
+      </CardContent>
+    </Card>
   );
 }
 
