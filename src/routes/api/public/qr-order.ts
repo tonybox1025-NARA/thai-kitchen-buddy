@@ -102,8 +102,15 @@ export const Route = createFileRoute("/api/public/qr-order")({
         }
 
         // Find or create an open order for this table (source=qr OR pos — reuse existing open table order)
-        let { data: order } = await supabase
-          .from("orders").select("id").eq("table_id", table.id).eq("status", "open").maybeSingle();
+        const { data: openOrders, error: openOrderErr } = await supabase
+          .from("orders")
+          .select("id")
+          .eq("table_id", table.id)
+          .eq("status", "open")
+          .order("opened_at", { ascending: false })
+          .limit(1);
+        if (openOrderErr) return new Response(`DB error: ${openOrderErr.message}`, { status: 500 });
+        let order = openOrders?.[0] ?? null;
         let orderType: "new" | "added" = "new";
         if (!order) {
           const { data: newOrder, error: orderErr } = await supabase.from("orders").insert({
@@ -237,6 +244,7 @@ export const Route = createFileRoute("/api/public/qr-order")({
               language: "my",
               department: group.zoneLabel,
               station: group.zoneLabel,
+              footer: "kitchen",
               alert_beep: true,
               ticketIndex: index + 1,
               ticketTotal: all.length,

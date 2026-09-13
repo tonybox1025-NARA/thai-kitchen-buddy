@@ -3,31 +3,29 @@ type CategoryRoute = {
   name_en?: string | null;
 };
 
-const FRONT_CATEGORY_NAMES = new Set([
+const normalize = (value?: string | null) =>
+  value
+    ?.normalize("NFKC")
+    .toLowerCase()
+    .replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}\s\p{P}]/gu, "") ?? "";
+
+const FRONT_CATEGORY_TOKENS = new Set([
   "alcohol",
-  "alcoholic drinks",
-  "cooked rice / porridge",
-  "cooked rice/porridge",
-  "drink / ice cream",
-  "drink/ice cream",
+  "alcoholicdrinks",
+  "cookedriceporridge",
+  "drinkicecream",
   "drinks",
-  "drinks / ice cream",
-  "drinks/ice cream",
   "snack",
   "snacks",
-  "ข้าวสวย/ข้าวต้ม",
+  "ข้าวสวยข้าวต้ม",
   "ของทานเล่น",
-  "เครื่องดื่ม / ไอศกรีม",
-  "เครื่องดื่ม/ไอศกรีม",
+  "เครื่องดื่มไอศกรีม",
   "แอลกอฮอล์",
 ]);
 
-const normalize = (value?: string | null) => value?.trim().toLowerCase() ?? "";
-
 /** These categories are always prepared at the front counter. */
 export function isFrontCounterCategory(category?: CategoryRoute | null) {
-  return Boolean(category) && (
-    FRONT_CATEGORY_NAMES.has(normalize(category?.name_en))
-    || FRONT_CATEGORY_NAMES.has(normalize(category?.name_th))
-  );
+  if (!category) return false;
+  const names = [category.name_en, category.name_th].map(normalize);
+  return names.some((name) => FRONT_CATEGORY_TOKENS.has(name));
 }
