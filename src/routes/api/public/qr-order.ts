@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { createFileRoute } from "@tanstack/react-router";
 import type { Database } from "@/integrations/supabase/types";
+import { isFrontCounterCategory } from "@/lib/print/routing";
 import { setCostFromLabels } from "@/lib/set-menu";
 import { z } from "zod";
 
@@ -130,7 +131,7 @@ export const Route = createFileRoute("/api/public/qr-order")({
         const categoryIds = [...new Set((menus ?? []).map((m: any) => m.category_id).filter(Boolean))] as string[];
         const [{ data: categories }, { data: zones }] = await Promise.all([
           categoryIds.length
-            ? supabase.from("categories").select("id,kitchen_zone_id").in("id", categoryIds)
+            ? supabase.from("categories").select("id,name_th,name_en,kitchen_zone_id").in("id", categoryIds)
             : Promise.resolve({ data: [] }),
           supabase.from("kitchen_zones").select("id,name_th,name_en,sort,active,print_to_kitchen").eq("active", true).order("sort"),
         ]);
@@ -166,11 +167,12 @@ export const Route = createFileRoute("/api/public/qr-order")({
           const unit_price = Number(m.price) + addonTotal;
           const category = (m as any).category_id ? categoryMap.get((m as any).category_id) : null;
           const zone = category?.kitchen_zone_id ? zoneMap.get(category.kitchen_zone_id) : null;
+          const routeToFront = isFrontCounterCategory(category);
 
           return {
-            zoneId: zone?.id ?? "__main__",
-            zoneLabel: zone?.name_en ?? "Main Kitchen",
-            printToKitchen: zone?.print_to_kitchen ?? true,
+            zoneId: routeToFront ? "__front__" : zone?.id ?? "__main__",
+            zoneLabel: routeToFront ? "FRONT" : zone?.name_en ?? "Main Kitchen",
+            printToKitchen: routeToFront ? false : zone?.print_to_kitchen ?? true,
             row: {
               order_id: order!.id,
               menu_id: it.menu_id,
@@ -226,7 +228,7 @@ export const Route = createFileRoute("/api/public/qr-order")({
             payload: { ...ticketPayload, lines: frontLines, language: "th", department: "FRONT", station: "FRONT", footer: "counter" },
           }] : []),
         ];
-        await supabase.from("print_jobs").insert([
+        const { error: printErr } = await supabase.from("print_jobs").insert([
           ...[...grouped.values()].map((group, index, all) => ({
             printer: "kitchen" as const,
             payload: {
@@ -242,6 +244,7 @@ export const Route = createFileRoute("/api/public/qr-order")({
           })),
           ...counterJobs,
         ]);
+        if (printErr) return new Response(`Print queue error: ${printErr.message}`, { status: 500 });
 
         // Mark table occupied + raise QR alert flag (the POS realtime listener will react)
         await supabase.from("restaurant_tables").update({
@@ -256,7 +259,12 @@ export const Route = createFileRoute("/api/public/qr-order")({
           await supabase.from("orders").update({ source: "qr" }).eq("id", order.id).eq("source", "pos").select();
         }
 
-        return Response.json({ ok: true, order_id: order.id, count: rows.length });
+        return Response.json({
+          ok: true,
+          order_id: order.id,
+          count: rows.length,
+          print_routing: { kitchen: foodLines.length, front: frontLines.length },
+        });
       },
     },
   },

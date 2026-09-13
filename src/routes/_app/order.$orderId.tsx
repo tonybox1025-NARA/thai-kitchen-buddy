@@ -15,6 +15,7 @@ import { ManagerPinDialog } from "@/components/ManagerPinDialog";
 import { SetMenuDialog } from "@/components/SetMenuDialog";
 import { SETS, setConfigCost, type SetConfig } from "@/lib/set-menu";
 import { printCounter, printCounterJobs, printKitchenJobs, type CounterPrintPayload } from "@/lib/counter-printer";
+import { isFrontCounterCategory } from "@/lib/print/routing";
 import { isOffline } from "@/lib/online-status";
 import { tableLabel } from "@/lib/table";
 import { publicBaseUrl } from "@/lib/public-url";
@@ -380,12 +381,13 @@ function OrderPage() {
       const menu = p.menu_id ? menuById.get(p.menu_id) : null;
       const category = menu?.category_id ? categoryById.get(menu.category_id) : null;
       const zone = category?.kitchen_zone_id ? zoneById.get(category.kitchen_zone_id) : null;
-      const zoneLabel = zone ? (lang === "th" ? zone.name_th : zone.name_en) : "Main Kitchen";
-      const zoneId = zone?.id ?? "__main__";
+      const routeToFront = isFrontCounterCategory(category);
+      const zoneLabel = routeToFront ? "FRONT" : zone ? (lang === "th" ? zone.name_th : zone.name_en) : "Main Kitchen";
+      const zoneId = routeToFront ? "__front__" : zone?.id ?? "__main__";
       // print_to_kitchen = the zone TYPE: true = Kitchen zone (prints to the
       // kitchen printer, and its food is also copied onto the counter FOOD ticket);
       // false = Front zone (combined onto one counter FRONT ticket).
-      const printToKitchen = zone?.print_to_kitchen ?? true;
+      const printToKitchen = routeToFront ? false : zone?.print_to_kitchen ?? true;
       if (sc) {
         const riceStr = sc.rice === "rice" ? "ข้าวสวย" : "โจ๊ก";
         const setNotes = [
