@@ -35,9 +35,9 @@ export function isAudioUnlocked() {
 }
 
 /**
- * Plays a loud, repeating "ding-dong-ding" alert to grab attention over kitchen
- * noise. Defaults: fairly loud and repeated 3× (~1.7s). Actual loudness is still
- * capped by the device's media volume, so keep the SUNMI volume up too.
+ * Plays one distinctive three-note QR-order chime. Each note combines a bright
+ * tone with a lower harmonic so this sounds like an alert, not a printer beep.
+ * Actual loudness is still capped by the SUNMI media volume.
  */
 export function playAlertBeep(opts?: { volume?: number; repeat?: number }) {
   const c = getCtx();
@@ -46,30 +46,39 @@ export function playAlertBeep(opts?: { volume?: number; repeat?: number }) {
     // Try resume non-blocking; will work if user has interacted before.
     c.resume().catch(() => {});
   }
-  const volume = Math.min(0.9, Math.max(0.05, opts?.volume ?? 0.7));
-  const repeat = Math.min(6, Math.max(1, Math.round(opts?.repeat ?? 3)));
-  // One chime: rising ding-dong-ding, ~0.56s.
+  const volume = Math.min(0.9, Math.max(0.05, opts?.volume ?? 0.78));
+  const repeat = Math.min(3, Math.max(1, Math.round(opts?.repeat ?? 1)));
   const chime: Array<[number, number]> = [
-    [880, 0],
-    [660, 0.18],
-    [988, 0.36],
+    [659, 0],
+    [880, 0.24],
+    [1047, 0.48],
   ];
-  const chimeLen = 0.56;
+  const chimeLen = 0.84;
   const now = c.currentTime;
   for (let r = 0; r < repeat; r++) {
     const base = now + r * chimeLen;
     for (const [freq, delay] of chime) {
       const osc = c.createOscillator();
+      const harmonic = c.createOscillator();
       const gain = c.createGain();
-      osc.type = "triangle"; // a touch harsher than sine → carries further
+      const harmonicGain = c.createGain();
+      osc.type = "triangle";
       osc.frequency.value = freq;
+      harmonic.type = "sine";
+      harmonic.frequency.value = freq / 2;
       const t = base + delay;
       gain.gain.setValueAtTime(0.0001, t);
       gain.gain.exponentialRampToValueAtTime(volume, t + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.28);
+      harmonicGain.gain.setValueAtTime(0.0001, t);
+      harmonicGain.gain.exponentialRampToValueAtTime(volume * 0.32, t + 0.02);
+      harmonicGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
       osc.connect(gain).connect(c.destination);
+      harmonic.connect(harmonicGain).connect(c.destination);
       osc.start(t);
-      osc.stop(t + 0.22);
+      harmonic.start(t);
+      osc.stop(t + 0.31);
+      harmonic.stop(t + 0.31);
     }
   }
 }

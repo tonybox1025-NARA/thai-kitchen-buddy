@@ -419,6 +419,7 @@ function OrderPage() {
         department: group.zoneLabel,
         station: group.zoneLabel,
         footer: "kitchen" as const,
+        alert_beep: true,
         ticketIndex: index + 1,
         ticketTotal: all.length,
       },

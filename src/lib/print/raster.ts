@@ -20,7 +20,7 @@ const CONTENT_W = WIDTH - PAD_X * 2;
 
 const INIT = [0x1b, 0x40];
 const CUT = [0x1d, 0x56, 0x42, 0x05]; // partial cut + feed
-const BEEP = [0x1b, 0x42, 0x03, 0x05]; // buzzer on QR orders
+const BEEP = [0x1b, 0x42, 0x01, 0x03]; // one short kitchen-printer buzzer
 const ALIGN_CENTER = [0x1b, 0x61, 0x01];
 
 // Font stack: Latin first (Inter), then Thai, then Myanmar — the browser falls back
@@ -103,6 +103,7 @@ export type KitchenPayload = {
   department?: string;
   station?: string;
   footer?: "kitchen" | "counter";
+  alert_beep?: boolean;
   lines?: KitchenLine[];
 };
 
@@ -535,7 +536,7 @@ export async function buildKitchen(p: KitchenPayload): Promise<Uint8Array> {
   d.text(p.footer === "counter" ? "COUNTER" : "KITCHEN  မီးဖိုချောင်", S.bold, "center");
 
   const out: number[] = [...INIT];
-  if (isQr) out.push(...BEEP);
+  if (p.alert_beep && p.footer !== "counter") out.push(...BEEP);
   // Counter printers in this shop need the older banded bitmap mode for long
   // checklist tickets; it also avoids overrunning their small raster buffer.
   out.push(...(p.footer === "counter" ? d.toLegacyRaster() : d.toRaster()), ...CUT);

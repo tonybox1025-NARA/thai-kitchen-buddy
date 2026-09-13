@@ -235,6 +235,7 @@ export const Route = createFileRoute("/api/public/qr-order")({
               language: "my",
               department: group.zoneLabel,
               station: group.zoneLabel,
+              alert_beep: true,
               ticketIndex: index + 1,
               ticketTotal: all.length,
             },
