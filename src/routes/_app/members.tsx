@@ -12,9 +12,10 @@ import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { RefreshCw, Search, Upload } from "lucide-react";
+import { AlertTriangle, Merge, RefreshCw, Search, SlidersHorizontal, Upload } from "lucide-react";
 import { segmentFor, type Segment } from "@/lib/rfm";
 import { useI18n } from "@/lib/i18n";
+import { useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/_app/members")({ component: MembersPage });
 
@@ -31,6 +32,9 @@ type Member = {
   legacy_last_visit_at: string | null;
   status: string;
   guest_token: string | null;
+  line_user_id: string | null;
+  imported_from: string | null;
+  created_at: string;
   // Computed at load time: MERI seed (legacy_*) + live POS activity from bills.
   pos_visits: number;
   pos_spend: number;
@@ -177,7 +181,7 @@ async function fetchAllMembers() {
     const to = from + pageSize - 1;
     const { data, error } = await supabase
       .from("members")
-      .select("id,full_name,nickname,phone,member_group_en,member_level,current_points,legacy_visit_count,legacy_total_spend,legacy_last_visit_at,status,guest_token")
+      .select("id,full_name,nickname,phone,member_group_en,member_level,current_points,legacy_visit_count,legacy_total_spend,legacy_last_visit_at,status,guest_token,line_user_id,imported_from,created_at")
       .order("current_points", { ascending: false })
       .range(from, to);
     if (error) throw error;
@@ -240,6 +244,8 @@ function enrichMember(m: Member, act: MemberActivity | undefined): Member {
 
 function MembersPage() {
   const { t } = useI18n();
+  const { staff } = useAuth();
+  const canManageLoyalty = staff?.role !== "staff";
   const [members, setMembers] = useState<Member[]>([]);
   const [settings, setSettings] = useState<LoyaltySettings>({
     loyalty_enabled: true,
@@ -257,6 +263,41 @@ function MembersPage() {
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [ledgerRows, setLedgerRows] = useState<PointLedgerRow[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [mergeCandidate, setMergeCandidate] = useState<{ survivor: Member; merged: Member } | null>(null);
+  const [merging, setMerging] = useState(false);
+  const [mergePin, setMergePin] = useState("");
+  const [mergeKeepByPhone, setMergeKeepByPhone] = useState<Record<string, string>>({});
+  const [adjustOpen, setAdjustOpen] = useState(false);
+  const [adjustDirection, setAdjustDirection] = useState<"add" | "deduct">("add");
+  const [adjustPoints, setAdjustPoints] = useState(0);
+  const [adjustReason, setAdjustReason] = useState("");
+  const [adjustPin, setAdjustPin] = useState("");
+  const [adjusting, setAdjusting] = useState(false);
+  const adjustmentDelta = adjustDirection === "add" ? adjustPoints : -adjustPoints;
+  const adjustedBalance = Number(selectedMember?.current_points ?? 0) + adjustmentDelta;
+  const adjustmentExceedsBalance = adjustDirection === "deduct" && adjustedBalance < 0;
+
+  const duplicatePhoneGroups = useMemo(() => {
+    const normalize = (phone: string | null) => {
+      const digits = String(phone ?? "").replace(/\D/g, "");
+      if (!digits) return "";
+      if (digits.startsWith("0066")) return `0${digits.slice(4)}`;
+      if (digits.startsWith("66")) return `0${digits.slice(2)}`;
+      return digits;
+    };
+    const groups = new Map<string, Member[]>();
+    for (const member of members) {
+      const phone = normalize(member.phone);
+      if (!phone) continue;
+      groups.set(phone, [...(groups.get(phone) ?? []), member]);
+    }
+    return [...groups.entries()]
+      .filter(([, group]) => group.length > 1)
+      .map(([phone, group]) => ({
+        phone,
+        members: group.sort((a, b) => a.created_at.localeCompare(b.created_at)),
+      }));
+  }, [members]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -283,6 +324,8 @@ function MembersPage() {
 
   const load = async () => {
     setLoading(true);
+    const { error: expiryError } = await (supabase as any).rpc("expire_due_member_points");
+    if (expiryError) toast.error(expiryError.message);
     const [memberResult, activityResult, { data: settingsRow, error: settingsErr }] = await Promise.all([
       fetchAllMembers().then((data) => ({ data, error: null as Error | null })).catch((error: Error) => ({ data: [] as Member[], error })),
       fetchMemberActivity().then((data) => ({ data, error: null as Error | null })).catch((error: Error) => ({ data: new Map<string, MemberActivity>(), error })),
@@ -374,6 +417,51 @@ function MembersPage() {
     setLedgerRows((data ?? []) as PointLedgerRow[]);
   };
 
+  const mergeMembers = async () => {
+    if (!mergeCandidate) return;
+    setMerging(true);
+    const { error } = await (supabase as any).rpc("merge_duplicate_members", {
+      p_survivor_member_id: mergeCandidate.survivor.id,
+      p_merged_member_id: mergeCandidate.merged.id,
+      p_manager_pin: mergePin,
+    });
+    setMerging(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(t("mem_merge_success"));
+    setMergeCandidate(null);
+    setMergePin("");
+    await load();
+  };
+
+  const adjustMemberPoints = async () => {
+    if (!selectedMember || adjustPoints <= 0 || !adjustReason.trim() || !adjustPin) return;
+    setAdjusting(true);
+    const delta = adjustDirection === "add" ? adjustPoints : -adjustPoints;
+    const { data, error } = await (supabase as any).rpc("adjust_member_points", {
+      p_member_id: selectedMember.id,
+      p_delta: delta,
+      p_reason: adjustReason.trim(),
+      p_manager_pin: adjustPin,
+    });
+    setAdjusting(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(t("mem_adjust_success"));
+    setAdjustOpen(false);
+    setAdjustPoints(0);
+    setAdjustReason("");
+    setAdjustPin("");
+    const nextBalance = Number(data?.[0]?.balance_after ?? selectedMember.current_points + delta);
+    const refreshedMember = { ...selectedMember, current_points: nextBalance };
+    await load();
+    await openMemberDetail(refreshedMember);
+  };
+
   return (
     <div className="p-4 md:p-6 space-y-4">
       <div className="flex flex-wrap items-center gap-3">
@@ -385,9 +473,11 @@ function MembersPage() {
           <Button variant="outline" onClick={() => void load()} disabled={loading}>
             <RefreshCw className="h-4 w-4 mr-2" />{t("refresh")}
           </Button>
-          <Button onClick={() => setImportOpen(true)}>
-            <Upload className="h-4 w-4 mr-2" />{t("mem_import_csv")}
-          </Button>
+          {canManageLoyalty && (
+            <Button onClick={() => setImportOpen(true)}>
+              <Upload className="h-4 w-4 mr-2" />{t("mem_import_csv")}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -397,6 +487,56 @@ function MembersPage() {
         <Card><CardHeader><CardTitle className="text-sm">{t("mem_available_points")}</CardTitle></CardHeader><CardContent className="text-2xl font-bold">{stats.points.toLocaleString()}</CardContent></Card>
         <Card><CardHeader><CardTitle className="text-sm">{t("mem_total_spend")}</CardTitle></CardHeader><CardContent className="text-2xl font-bold">{thb(stats.spend)}</CardContent></Card>
       </div>
+
+      {canManageLoyalty && duplicatePhoneGroups.length > 0 && (
+        <Card className="border-amber-300 bg-amber-50/40">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <AlertTriangle className="h-5 w-5 text-amber-700" />
+              {t("mem_duplicates")} ({duplicatePhoneGroups.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">{t("mem_duplicates_help")}</p>
+            {duplicatePhoneGroups.map(({ phone, members: group }) => {
+              const survivor = group.find((member) => member.id === mergeKeepByPhone[phone]) ?? group[0];
+              return (
+                <div key={phone} className="rounded-md border bg-background p-3">
+                  <div className="mb-2 font-semibold tabular-nums">{phone}</div>
+                  <div className="space-y-2">
+                    {group.map((member) => {
+                      const isSurvivor = member.id === survivor.id;
+                      return (
+                      <div key={member.id} className="flex flex-wrap items-center gap-2 text-sm">
+                        <Badge variant={isSurvivor ? "default" : "outline"}>
+                          {isSurvivor ? t("mem_keep") : t("mem_duplicate")}
+                        </Badge>
+                        <span className="font-medium">{member.full_name}</span>
+                        <span className="text-muted-foreground">
+                          {Number(member.current_points).toLocaleString()} {t("mem_points_word")} · {member.imported_from ?? "POS"}
+                        </span>
+                        {!isSurvivor && (
+                          <div className="ml-auto flex gap-2">
+                            <Button size="sm" variant="ghost"
+                              onClick={() => setMergeKeepByPhone((current) => ({ ...current, [phone]: member.id }))}>
+                              {t("mem_select_keep")}
+                            </Button>
+                            <Button size="sm" variant="outline"
+                              onClick={() => setMergeCandidate({ survivor, merged: member })}>
+                              <Merge className="mr-2 h-4 w-4" />{t("mem_merge_into_keep")}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
 
       {segmentCounts.length > 0 && (
         <Card>
@@ -423,7 +563,7 @@ function MembersPage() {
       )}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <Card>
+        {canManageLoyalty && <Card>
           <CardHeader>
             <div className="flex flex-wrap items-center gap-3">
               <CardTitle className="text-base">{t("mem_customer_list")}</CardTitle>
@@ -471,7 +611,7 @@ function MembersPage() {
             {filtered.length > 200 && <p className="mt-3 text-xs text-muted-foreground">{t("mem_showing_200")}</p>}
             {filtered.length === 0 && <p className="py-8 text-center text-sm text-muted-foreground">{t("mem_none")}</p>}
           </CardContent>
-        </Card>
+        </Card>}
 
         <Card>
           <CardHeader><CardTitle className="text-base">{t("mem_loyalty_settings")}</CardTitle></CardHeader>
@@ -526,6 +666,11 @@ function MembersPage() {
                 <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">{t("mem_total_spend")}</div><div className="text-xl font-bold">{thb(selectedMember.spend)}</div>{selectedMember.pos_spend > 0 && <div className="text-[10px] text-muted-foreground mt-0.5">{thb(selectedMember.pos_spend)} {t("mem_in_pos")}</div>}</CardContent></Card>
                 <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">{t("col_last_visit")}</div><div className="text-xl font-bold">{selectedMember.last_visit ?? "-"}</div></CardContent></Card>
               </div>
+              {canManageLoyalty && <div className="flex justify-end">
+                <Button variant="outline" onClick={() => setAdjustOpen(true)}>
+                  <SlidersHorizontal className="mr-2 h-4 w-4" />{t("mem_adjust_points")}
+                </Button>
+              </div>}
               <div className="rounded-lg border">
                 <div className="border-b p-3 font-medium">{t("mem_point_history")}</div>
                 {detailLoading ? (
@@ -563,6 +708,62 @@ function MembersPage() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => { setSelectedMember(null); setLedgerRows([]); }}>{t("close")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={adjustOpen} onOpenChange={(open) => {
+        setAdjustOpen(open);
+        if (!open) setAdjustPin("");
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>{t("mem_adjust_points")}</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            {selectedMember && (
+              <div className="grid grid-cols-3 gap-2 rounded-lg border bg-muted/30 p-3 text-center">
+                <div>
+                  <div className="text-xs text-muted-foreground">{t("mem_adjust_current")}</div>
+                  <div className="font-semibold tabular-nums">{Number(selectedMember.current_points).toLocaleString()}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">{t("mem_adjust_change")}</div>
+                  <div className={`font-semibold tabular-nums ${adjustDirection === "add" ? "text-emerald-700" : "text-red-700"}`}>
+                    {adjustDirection === "add" ? "+" : "-"}{adjustPoints.toLocaleString()}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">{t("mem_adjust_after")}</div>
+                  <div className={`font-bold tabular-nums ${adjustmentExceedsBalance ? "text-red-700" : ""}`}>
+                    {adjustedBalance.toLocaleString()}
+                  </div>
+                </div>
+              </div>
+            )}
+            {adjustmentExceedsBalance && (
+              <p className="text-sm font-medium text-red-700">{t("mem_adjust_insufficient")}</p>
+            )}
+            <div className="grid grid-cols-2 gap-2">
+              <Button type="button" variant={adjustDirection === "add" ? "default" : "outline"} onClick={() => setAdjustDirection("add")}>{t("mem_adjust_add")}</Button>
+              <Button type="button" variant={adjustDirection === "deduct" ? "destructive" : "outline"} onClick={() => setAdjustDirection("deduct")}>{t("mem_adjust_deduct")}</Button>
+            </div>
+            <div>
+              <Label>{t("col_points")}</Label>
+              <KeypadInput value={adjustPoints} onChange={setAdjustPoints} title={t("col_points")} display={(n) => String(n)} />
+            </div>
+            <div>
+              <Label htmlFor="adjust-reason">{t("mem_adjust_reason")}</Label>
+              <Input id="adjust-reason" value={adjustReason} onChange={(e) => setAdjustReason(e.target.value)} />
+            </div>
+            <div>
+              <Label htmlFor="adjust-pin">{t("manager_pin")}</Label>
+              <Input id="adjust-pin" type="password" inputMode="numeric" autoComplete="off" value={adjustPin} onChange={(e) => setAdjustPin(e.target.value.replace(/\D/g, ""))} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAdjustOpen(false)}>{t("cancel")}</Button>
+            <Button onClick={() => void adjustMemberPoints()} disabled={adjusting || adjustPoints <= 0 || adjustmentExceedsBalance || !adjustReason.trim() || !adjustPin}>
+              {adjusting ? t("mem_working") : t("confirm")}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -614,6 +815,37 @@ function MembersPage() {
                 <RefreshCw className="h-4 w-4 mr-2" />{t("mem_replace_btn")}
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!mergeCandidate} onOpenChange={(open) => { if (!open) { setMergeCandidate(null); setMergePin(""); } }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>{t("mem_merge_confirm")}</DialogTitle></DialogHeader>
+          {mergeCandidate && (
+            <div className="space-y-3 text-sm">
+              <div className="rounded-md border p-3">
+                <div className="text-xs text-muted-foreground">{t("mem_keep")}</div>
+                <div className="font-semibold">{mergeCandidate.survivor.full_name}</div>
+                <div>{mergeCandidate.survivor.phone} · {mergeCandidate.survivor.current_points.toLocaleString()} {t("mem_points_word")}</div>
+              </div>
+              <div className="rounded-md border border-destructive/30 p-3">
+                <div className="text-xs text-muted-foreground">{t("mem_merge_remove")}</div>
+                <div className="font-semibold">{mergeCandidate.merged.full_name}</div>
+                <div>{mergeCandidate.merged.phone} · {mergeCandidate.merged.current_points.toLocaleString()} {t("mem_points_word")}</div>
+              </div>
+              <p className="text-muted-foreground">{t("mem_merge_warning")}</p>
+              <div>
+                <Label htmlFor="merge-pin">{t("manager_pin")}</Label>
+                <Input id="merge-pin" type="password" inputMode="numeric" autoComplete="off" value={mergePin} onChange={(e) => setMergePin(e.target.value.replace(/\D/g, ""))} />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setMergeCandidate(null); setMergePin(""); }}>{t("cancel")}</Button>
+            <Button variant="destructive" onClick={() => void mergeMembers()} disabled={merging || !mergePin}>
+              {merging ? t("mem_working") : t("mem_merge_confirm_button")}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

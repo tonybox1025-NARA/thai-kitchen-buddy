@@ -19,7 +19,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import type { DateRange } from "react-day-picker";
-import { PencilLine, ArrowRight, CalendarIcon, XCircle, Printer } from "lucide-react";
+import { PencilLine, ArrowRight, CalendarIcon, Download, XCircle, Printer } from "lucide-react";
 import { bucketizeQr, parseBuckets, type QrBucketTotal, type QrTimeBucket } from "@/lib/qr-buckets";
 
 export const Route = createFileRoute("/_app/reports")({ component: Reports });
@@ -433,7 +433,10 @@ function Reports() {
           <TabsTrigger value="history">{t("rep_bill_history")}</TabsTrigger>
           <TabsTrigger value="item_sales">{t("item_sales")}</TabsTrigger>
           {(staff?.role === "admin" || staff?.role === "manager") && (
-            <TabsTrigger value="cancelled">{t("rep_cancelled")}</TabsTrigger>
+            <>
+              <TabsTrigger value="cancelled">{t("rep_cancelled")}</TabsTrigger>
+              <TabsTrigger value="loyalty_audit">{t("rep_loyalty_audit")}</TabsTrigger>
+            </>
           )}
         </TabsList>
 
@@ -446,9 +449,14 @@ function Reports() {
         </TabsContent>
 
         {(staff?.role === "admin" || staff?.role === "manager") && (
-          <TabsContent value="cancelled" className="mt-4">
-            <CancelledOrdersTab />
-          </TabsContent>
+          <>
+            <TabsContent value="cancelled" className="mt-4">
+              <CancelledOrdersTab />
+            </TabsContent>
+            <TabsContent value="loyalty_audit" className="mt-4">
+              <LoyaltyAuditTab />
+            </TabsContent>
+          </>
         )}
       </Tabs>
 
@@ -632,6 +640,190 @@ function Reports() {
         onOpenChange={setManagerOpen}
         onApproved={() => { if (pendingZ) doZ(); setPendingZ(false); }}
       />
+    </div>
+  );
+}
+
+type LoyaltyAuditRange = "today" | "week" | "month" | "all";
+type LoyaltyAuditRow = {
+  id: string;
+  member_id: string;
+  bill_id: string | null;
+  refund_id: string | null;
+  type: string;
+  points: number;
+  balance_after: number;
+  description: string | null;
+  expires_at: string | null;
+  approved_by: string | null;
+  created_at: string;
+  member_name: string;
+  member_phone: string | null;
+  approver_name: string | null;
+};
+
+const POINT_TYPES = [
+  "opening", "signup_bonus", "earn", "redeem", "adjust", "expire",
+  "refund_earn_reversal", "refund_redeem_restore", "merge",
+];
+
+function loyaltyAuditStart(range: LoyaltyAuditRange) {
+  if (range === "all") return null;
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  if (range === "week") start.setDate(start.getDate() - 6);
+  if (range === "month") start.setDate(start.getDate() - 29);
+  return start;
+}
+
+function csvCell(value: unknown) {
+  return `"${String(value ?? "").replace(/"/g, '""')}"`;
+}
+
+function LoyaltyAuditTab() {
+  const { t } = useI18n();
+  const [range, setRange] = useState<LoyaltyAuditRange>("month");
+  const [type, setType] = useState("all");
+  const [query, setQuery] = useState("");
+  const [rows, setRows] = useState<LoyaltyAuditRow[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      let request = (supabase as any)
+        .from("member_point_ledger")
+        .select("id,member_id,bill_id,refund_id,type,points,balance_after,description,expires_at,approved_by,created_at")
+        .order("created_at", { ascending: false })
+        .limit(1000);
+      const start = loyaltyAuditStart(range);
+      if (start) request = request.gte("created_at", start.toISOString());
+      if (type !== "all") request = request.eq("type", type);
+
+      const { data, error } = await request;
+      if (error) throw error;
+      const ledger = (data ?? []) as Omit<LoyaltyAuditRow, "member_name" | "member_phone" | "approver_name">[];
+      const memberIds = [...new Set(ledger.map((row) => row.member_id))];
+      const approverIds = [...new Set(ledger.map((row) => row.approved_by).filter(Boolean))] as string[];
+      const [{ data: members }, { data: approvers }] = await Promise.all([
+        memberIds.length
+          ? supabase.from("members").select("id,full_name,phone").in("id", memberIds)
+          : Promise.resolve({ data: [] as { id: string; full_name: string; phone: string | null }[], error: null }),
+        approverIds.length
+          ? supabase.from("staff").select("id,name").in("id", approverIds)
+          : Promise.resolve({ data: [] as { id: string; name: string }[], error: null }),
+      ]);
+      const memberMap = new Map((members ?? []).map((member) => [member.id, member]));
+      const approverMap = new Map((approvers ?? []).map((person) => [person.id, person.name]));
+      setRows(ledger.map((row) => {
+        const member = memberMap.get(row.member_id);
+        return {
+          ...row,
+          member_name: member?.full_name ?? "Unknown member",
+          member_phone: member?.phone ?? null,
+          approver_name: row.approved_by ? (approverMap.get(row.approved_by) ?? "Unknown") : null,
+        };
+      }));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("rep_load_failed"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { void load(); /* eslint-disable-next-line */ }, [range, type]);
+
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase();
+    if (!needle) return rows;
+    return rows.filter((row) =>
+      `${row.member_name} ${row.member_phone ?? ""} ${row.description ?? ""}`.toLocaleLowerCase().includes(needle));
+  }, [query, rows]);
+
+  const totals = useMemo(() => filtered.reduce((sum, row) => {
+    if (row.points > 0) sum.added += row.points;
+    if (row.points < 0) sum.deducted += Math.abs(row.points);
+    sum.net += row.points;
+    return sum;
+  }, { added: 0, deducted: 0, net: 0 }), [filtered]);
+
+  const exportCsv = () => {
+    const header = ["Date", "Member", "Phone", "Type", "Points", "Balance after", "Reason", "Approved by", "Bill ID", "Refund ID", "Expires"];
+    const body = filtered.map((row) => [
+      new Date(row.created_at).toLocaleString(), row.member_name, row.member_phone, row.type,
+      row.points, row.balance_after, row.description, row.approver_name, row.bill_id, row.refund_id, row.expires_at,
+    ]);
+    const csv = [header, ...body].map((line) => line.map(csvCell).join(",")).join("\n");
+    const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `loyalty-audit-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        {(["today", "week", "month", "all"] as const).map((value) => (
+          <Button key={value} size="sm" variant={range === value ? "default" : "outline"} onClick={() => setRange(value)}>
+            {value === "today" ? t("today") : value === "week" ? t("this_week") : value === "month" ? t("this_month") : t("all")}
+          </Button>
+        ))}
+        <Select value={type} onValueChange={setType}>
+          <SelectTrigger className="w-52"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t("rep_all_point_types")}</SelectItem>
+            {POINT_TYPES.map((value) => <SelectItem key={value} value={value}>{value.replaceAll("_", " ")}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <div className="min-w-56 flex-1">
+          <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("rep_search_member")} />
+        </div>
+        <Button variant="outline" onClick={exportCsv} disabled={!filtered.length}>
+          <Download className="mr-2 h-4 w-4" />{t("rep_export_csv")}
+        </Button>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Card><CardContent className="py-4"><p className="text-sm text-muted-foreground">{t("rep_points_added")}</p><p className="text-2xl font-bold text-green-700">+{totals.added.toLocaleString()}</p></CardContent></Card>
+        <Card><CardContent className="py-4"><p className="text-sm text-muted-foreground">{t("rep_points_deducted")}</p><p className="text-2xl font-bold text-red-600">-{totals.deducted.toLocaleString()}</p></CardContent></Card>
+        <Card><CardContent className="py-4"><p className="text-sm text-muted-foreground">{t("rep_points_net")}</p><p className="text-2xl font-bold">{totals.net > 0 ? "+" : ""}{totals.net.toLocaleString()}</p></CardContent></Card>
+      </div>
+
+      <div className="overflow-hidden rounded-lg border bg-card">
+        <div className="max-h-[58vh] overflow-auto">
+          <table className="w-full min-w-[900px] text-sm">
+            <thead className="sticky top-0 z-10 bg-muted">
+              <tr className="border-b text-left">
+                <th className="px-3 py-2 font-medium">{t("rep_date")}</th>
+                <th className="px-3 py-2 font-medium">{t("nav_members")}</th>
+                <th className="px-3 py-2 font-medium">{t("rep_transaction_type")}</th>
+                <th className="px-3 py-2 text-right font-medium">{t("col_points")}</th>
+                <th className="px-3 py-2 text-right font-medium">{t("rep_balance")}</th>
+                <th className="px-3 py-2 font-medium">{t("mem_adjust_reason")}</th>
+                <th className="px-3 py-2 font-medium">{t("rep_approved_by")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((row) => (
+                <tr key={row.id} className="border-b last:border-0 align-top">
+                  <td className="whitespace-nowrap px-3 py-3 text-muted-foreground">{new Date(row.created_at).toLocaleString()}</td>
+                  <td className="px-3 py-3"><p className="font-medium">{row.member_name}</p><p className="text-xs text-muted-foreground">{row.member_phone || "—"}</p></td>
+                  <td className="px-3 py-3"><Badge variant="secondary">{row.type.replaceAll("_", " ")}</Badge></td>
+                  <td className={`px-3 py-3 text-right font-bold tabular-nums ${row.points >= 0 ? "text-green-700" : "text-red-600"}`}>{row.points > 0 ? "+" : ""}{row.points.toLocaleString()}</td>
+                  <td className="px-3 py-3 text-right tabular-nums">{row.balance_after.toLocaleString()}</td>
+                  <td className="max-w-xs px-3 py-3 text-muted-foreground">{row.description || "—"}</td>
+                  <td className="px-3 py-3">{row.approver_name || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!loading && !filtered.length && <div className="p-10 text-center text-muted-foreground">{t("rep_no_point_activity")}</div>}
+          {loading && <div className="p-10 text-center text-muted-foreground">{t("loading")}</div>}
+        </div>
+      </div>
+      {rows.length >= 1000 && <p className="text-xs text-muted-foreground">{t("rep_latest_1000")}</p>}
     </div>
   );
 }

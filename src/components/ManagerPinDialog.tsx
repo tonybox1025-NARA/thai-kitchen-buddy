@@ -7,7 +7,7 @@ import { useI18n } from "@/lib/i18n";
 type Props = {
   open: boolean;
   onOpenChange: (o: boolean) => void;
-  onApproved: () => void;
+  onApproved: (pin: string) => void;
 };
 
 export function ManagerPinDialog({ open, onOpenChange, onApproved }: Props) {
@@ -29,7 +29,7 @@ export function ManagerPinDialog({ open, onOpenChange, onApproved }: Props) {
             if (ok) {
               setErr(null);
               onOpenChange(false);
-              onApproved();
+              onApproved(pin);
             } else setErr(t("wrong_pin"));
           }}
           onCancel={() => onOpenChange(false)}

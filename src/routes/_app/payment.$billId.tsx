@@ -458,9 +458,21 @@ function PaymentPage() {
   const addPayment = async (method: Payment["method"], amount: number, extras: Record<string, unknown> = {}) => {
     if (!bill || amount <= 0) return;
     if (isOffline()) { toast.error(t("err_offline")); return; }
-    await supabase.from("payments").insert({ bill_id: bill.id, method, amount, ...extras });
+    const { data: inserted, error } = await supabase.from("payments")
+      .insert({ bill_id: bill.id, method, amount, ...extras })
+      .select("id,method,amount,cash_received,change_due,tip_amount,reference")
+      .single();
+    if (error) { toast.error(error.message); return; }
+    if (paid + amount + 0.001 >= total) {
+      const completed = await finalize(inserted as Payment);
+      if (!completed && inserted?.id) {
+        const { error: rollbackError } = await supabase.from("payments").delete().eq("id", inserted.id);
+        if (rollbackError) toast.error(`Payment rollback failed: ${rollbackError.message}`);
+        await load();
+      }
+      return;
+    }
     await load();
-    if (paid + amount + 0.001 >= total) await finalize();
   };
 
   const completeZeroTotal = async () => {
@@ -511,30 +523,30 @@ function PaymentPage() {
     const fullName = newName.trim() || newNick.trim();
     const phone = newPhone.trim().replace(/[^\d+]/g, "") || null;
     if (!fullName) { toast.error(t("pay_name_required")); return; }
+    if (!phone) { toast.error("Phone number is required"); return; }
     setCreatingMember(true);
     try {
+      const { data: result, error: createError } = await (supabase as any).rpc("create_or_get_member", {
+        p_full_name: fullName,
+        p_nickname: newNick.trim() || null,
+        p_phone: phone,
+        p_signup_points: signupBonus,
+        p_imported_from: "pos",
+        p_signup_description: "Signup bonus (registered at POS)",
+      });
+      if (createError) throw createError;
+
       const { data, error } = await supabase
         .from("members")
-        .insert({
-          full_name: fullName,
-          nickname: newNick.trim() || null,
-          phone,
-          opening_points: signupBonus,
-          current_points: signupBonus,
-          imported_from: "pos",
-        })
         .select("id,full_name,nickname,phone,current_points,member_group_en")
+        .eq("id", result.member_id)
         .single();
       if (error) throw error;
-      if (signupBonus > 0) {
-        await supabase.from("member_point_ledger").insert({
-          member_id: data.id, type: "signup_bonus", points: signupBonus,
-          balance_after: signupBonus, description: "Signup bonus (registered at POS)",
-        });
-      }
       resetNewMember();
       await selectMember(data as MemberLookup);
-      toast.success(signupBonus > 0 ? `Member created · +${signupBonus} pts` : "Member created");
+      toast.success(result.created
+        ? (signupBonus > 0 ? `Member created · +${signupBonus} pts` : "Member created")
+        : "Existing member selected");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not create member");
     } finally {
@@ -542,80 +554,19 @@ function PaymentPage() {
     }
   };
 
-  // Deduct redeemed points from the member and log it. Mirrors awardLoyaltyPoints:
-  // idempotent per bill (won't double-deduct if finalize runs twice).
-  const redeemLoyaltyPoints = async () => {
-    if (!bill || !selectedMember || pointsRedeemed <= 0) return;
-    const { data: existing } = await supabase
-      .from("member_point_ledger")
-      .select("id")
-      .eq("bill_id", bill.id)
-      .eq("type", "redeem")
-      .maybeSingle();
-    if (existing) return;
-
-    const { data: freshMember, error: memberErr } = await supabase
-      .from("members").select("current_points").eq("id", selectedMember.id).single();
-    if (memberErr || !freshMember) { toast.error(memberErr?.message ?? "Could not load member points"); return; }
-
-    const current = Number((freshMember as any).current_points ?? 0);
-    const use = Math.min(pointsRedeemed, current); // never go negative
-    if (use <= 0) return;
-    const balanceAfter = current - use;
-
-    const { error: updateErr } = await supabase
-      .from("members").update({ current_points: balanceAfter, updated_at: new Date().toISOString() }).eq("id", selectedMember.id);
-    if (updateErr) { toast.error(updateErr.message); return; }
-
-    const { error: ledgerErr } = await supabase.from("member_point_ledger").insert({
-      member_id: selectedMember.id,
-      bill_id: bill.id,
-      type: "redeem",
-      points: -use,
-      balance_after: balanceAfter,
-      description: `Redeemed on bill ${bill.id}`,
+  const processBillLoyalty = async () => {
+    if (!bill || !selectedMember) return;
+    const { data, error } = await (supabase as any).rpc("process_bill_loyalty", {
+      p_bill_id: bill.id,
+      p_member_id: selectedMember.id,
+      p_redeem_points: pointsRedeemed,
+      p_earn_points: loyaltyEnabled ? earnPoints : 0,
     });
-    if (ledgerErr) { toast.error(ledgerErr.message); return; }
-    setSelectedMember({ ...selectedMember, current_points: balanceAfter });
-  };
-
-  const awardLoyaltyPoints = async () => {
-    if (!bill || !selectedMember || !loyaltyEnabled || earnPoints <= 0) return;
-    const { data: existing } = await supabase
-      .from("member_point_ledger")
-      .select("id")
-      .eq("bill_id", bill.id)
-      .eq("type", "earn")
-      .maybeSingle();
-    if (existing) return;
-
-    const { data: freshMember, error: memberErr } = await supabase
-      .from("members")
-      .select("current_points")
-      .eq("id", selectedMember.id)
-      .single();
-    if (memberErr || !freshMember) {
-      toast.error(memberErr?.message ?? "Could not load member points");
-      return;
+    if (error) throw error;
+    const result = Array.isArray(data) ? data[0] : data;
+    if (result) {
+      setSelectedMember({ ...selectedMember, current_points: Number(result.balance_after) });
     }
-
-    const balanceAfter = Number((freshMember as any).current_points ?? 0) + earnPoints;
-    const { error: updateErr } = await supabase
-      .from("members")
-      .update({ current_points: balanceAfter, updated_at: new Date().toISOString() })
-      .eq("id", selectedMember.id);
-    if (updateErr) { toast.error(updateErr.message); return; }
-
-    const { error: ledgerErr } = await supabase.from("member_point_ledger").insert({
-      member_id: selectedMember.id,
-      bill_id: bill.id,
-      type: "earn",
-      points: earnPoints,
-      balance_after: balanceAfter,
-      description: `Earned from bill ${bill.id}`,
-    });
-    if (ledgerErr) { toast.error(ledgerErr.message); return; }
-    setSelectedMember({ ...selectedMember, current_points: balanceAfter });
   };
 
   const ensureLoyaltyClaim = async () => {
@@ -654,29 +605,35 @@ function PaymentPage() {
     return { token, url: `${publicBaseUrl()}/loyalty/claim/${token}`, points };
   };
 
-  const finalize = async () => {
-    if (!bill) return;
-    if (isOffline()) { toast.error(t("err_offline")); return; }
-    await supabase.from("bills").update({ status: "paid", paid_at: new Date().toISOString(), cashier_id: staff?.id }).eq("id", bill.id);
+  const finalize = async (latestPayment?: Payment) => {
+    if (!bill) return false;
+    if (isOffline()) { toast.error(t("err_offline")); return false; }
+    const isTestBill = (bill as any).is_test === true;
+    try {
+      if (!isTestBill) await processBillLoyalty();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not process member points");
+      return false;
+    }
+    const { error: paidError } = await supabase.from("bills").update({ status: "paid", paid_at: new Date().toISOString(), cashier_id: staff?.id }).eq("id", bill.id);
+    if (paidError) { toast.error(paidError.message); return false; }
     await supabase.from("orders").update({ status: "closed", closed_at: new Date().toISOString() }).eq("id", bill.order_id);
     const { data: ord } = await supabase.from("orders").select("table_id").eq("id", bill.order_id).single();
     if (ord?.table_id) {
       await supabase.from("restaurant_tables").update({ status: "available", guests: 0, has_qr_alert: false }).eq("id", ord.table_id);
     }
     // Test tables must not touch real member points or issue loyalty claims.
-    const isTestBill = (bill as any).is_test === true;
-    if (!isTestBill) {
-      await redeemLoyaltyPoints();
-      await awardLoyaltyPoints();
-    }
     const loyaltyClaim = isTestBill ? null : await ensureLoyaltyClaim();
+    const receiptPayments = latestPayment && !payments.some((payment) => payment.id === latestPayment.id)
+      ? [...payments, latestPayment]
+      : payments;
     await printCounter({
       kind: "receipt", bill_id: bill.id, restaurant: restName, table: tableCode,
       logoUrl: receiptLogoUrl || undefined,
       address: receiptAddress || undefined,
       promo: receiptPromo || undefined,
       items, total, vatAmount: settingsVatEnabled && settingsVatMode === "exclusive" ? vatAmount : 0,
-      vat_mode: settingsVatMode, payments: [...payments], language: lang,
+      vat_mode: settingsVatMode, payments: receiptPayments, language: lang,
       discountAmount: appliedDiscount?.amount ?? 0,
       memberDiscountAmount: memberDisc,
       pointsDiscountAmount: pointsDiscount,
@@ -689,6 +646,7 @@ function PaymentPage() {
     });
     toast.success(t("paid"));
     await load();
+    return true;
   };
 
   const openCash = () => { setCashCount({}); setCashAmount(remaining); setCashOpen(true); };
@@ -710,9 +668,18 @@ function PaymentPage() {
   };
   const doRefund = async () => {
     if (!bill) return;
-    await supabase.from("refunds").insert({ bill_id: bill.id, amount: refundAmt, reason: refundReason, refunded_by: staff?.id });
-    await supabase.from("bills").update({ status: "partial_refund" }).eq("id", bill.id);
+    const { error } = await (supabase as any).rpc("refund_bill_with_loyalty", {
+      p_bill_id: bill.id,
+      p_amount: refundAmt,
+      p_reason: refundReason,
+      p_refunded_by: staff?.id ?? null,
+    });
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     setRefundOpen(false); setRefundAmt(0); setRefundReason("");
+    await load();
     toast.success(t("pay_refunded"));
   };
 

@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Gift, MinusCircle, PlusCircle, RefreshCw, Search, UserPlus } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
+import { ManagerPinDialog } from "@/components/ManagerPinDialog";
 
 export const Route = createFileRoute("/_app/loyalty")({ component: LoyaltyPage });
 
@@ -43,6 +44,12 @@ type LoyaltySettings = {
   loyalty_signup_bonus: number;
 };
 
+type PendingPointAction = {
+  type: "earn" | "redeem";
+  points: number;
+  description: string;
+};
+
 const cleanPhone = (value: string) => value.replace(/[^\d+]/g, "");
 const formatDate = (value: string) => new Date(value).toLocaleString();
 
@@ -59,6 +66,8 @@ function LoyaltyPage() {
   });
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [pendingPointAction, setPendingPointAction] = useState<PendingPointAction | null>(null);
+  const [managerPinOpen, setManagerPinOpen] = useState(false);
 
   const [earnReceipt, setEarnReceipt] = useState("");
   const [earnAmount, setEarnAmount] = useState("");
@@ -151,40 +160,37 @@ function LoyaltyPage() {
     await loadLedger(member.id);
   };
 
-  const postPoints = async (type: "earn" | "redeem", points: number, description: string) => {
+  const requestPointChange = (type: "earn" | "redeem", points: number, description: string) => {
     if (!selected || points <= 0) return;
+    setPendingPointAction({ type, points, description });
+    setManagerPinOpen(true);
+  };
+
+  const postPoints = async (pin: string) => {
+    if (!selected || !pendingPointAction) return;
+    const { type, points, description } = pendingPointAction;
     setBusy(true);
     try {
-      const { data: fresh, error: freshErr } = await supabase
-        .from("members")
-        .select("current_points")
-        .eq("id", selected.id)
-        .single();
-      if (freshErr || !fresh) throw freshErr ?? new Error("Could not load current points");
-
-      const current = Number((fresh as any).current_points ?? 0);
-      const balanceAfter = type === "earn" ? current + points : current - points;
-      if (balanceAfter < 0) {
-        toast.error(t("loy_not_enough"));
-        return;
-      }
-
-      const { error: updateErr } = await supabase
-        .from("members")
-        .update({ current_points: balanceAfter, updated_at: new Date().toISOString() })
-        .eq("id", selected.id);
-      if (updateErr) throw updateErr;
-
-      const { error: ledgerErr } = await supabase.from("member_point_ledger").insert({
-        member_id: selected.id,
-        type,
-        points: type === "earn" ? points : -points,
-        balance_after: balanceAfter,
-        description,
+      const { error } = await (supabase as any).rpc("record_manual_member_points", {
+        p_member_id: selected.id,
+        p_type: type,
+        p_points: points,
+        p_description: description,
+        p_manager_pin: pin,
       });
-      if (ledgerErr) throw ledgerErr;
+      if (error) throw error;
 
       toast.success((type === "earn" ? t("loy_added") : t("loy_redeemed")) + points.toLocaleString() + t("loy_points_suffix"));
+      if (type === "earn") {
+        setEarnAmount("");
+        setEarnReceipt("");
+        setEarnNote("");
+      } else {
+        setRedeemPoints("");
+        setRedeemReceipt("");
+        setRedeemNote("");
+      }
+      setPendingPointAction(null);
       await refreshSelected();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("loy_update_failed"));
@@ -203,10 +209,7 @@ function LoyaltyPage() {
       earnReceipt.trim() ? `Receipt: ${earnReceipt.trim()}` : null,
       earnNote.trim() || null,
     ].filter(Boolean).join(" · ");
-    await postPoints("earn", earnPoints, desc);
-    setEarnAmount("");
-    setEarnReceipt("");
-    setEarnNote("");
+    requestPointChange("earn", earnPoints, desc);
   };
 
   const redeem = async () => {
@@ -221,10 +224,7 @@ function LoyaltyPage() {
       redeemReceipt.trim() ? `Receipt: ${redeemReceipt.trim()}` : null,
       redeemNote.trim() || null,
     ].filter(Boolean).join(" · ");
-    await postPoints("redeem", points, desc);
-    setRedeemPoints("");
-    setRedeemReceipt("");
-    setRedeemNote("");
+    requestPointChange("redeem", points, desc);
   };
 
   const createMember = async () => {
@@ -236,36 +236,29 @@ function LoyaltyPage() {
     setBusy(true);
     try {
       const signup = Math.max(0, Math.floor(Number(settings.loyalty_signup_bonus ?? 0)));
+      const { data: result, error: createError } = await (supabase as any).rpc("create_or_get_member", {
+        p_full_name: fullName,
+        p_nickname: newNick.trim() || null,
+        p_phone: phone,
+        p_signup_points: signup,
+        p_imported_from: "loyalty_desk",
+        p_signup_description: "Signup bonus from Loyalty Desk",
+      });
+      if (createError) throw createError;
+
       const { data, error } = await supabase
         .from("members")
-        .insert({
-          full_name: fullName,
-          nickname: newNick.trim() || null,
-          phone,
-          opening_points: signup,
-          current_points: signup,
-          imported_from: "loyalty_desk",
-        })
         .select("id,full_name,nickname,phone,member_group_en,current_points,legacy_visit_count,legacy_total_spend,status")
+        .eq("id", result.member_id)
         .single();
       if (error) throw error;
 
-      if (signup > 0) {
-        await supabase.from("member_point_ledger").insert({
-          member_id: data.id,
-          type: "signup_bonus",
-          points: signup,
-          balance_after: signup,
-          description: "Signup bonus from Loyalty Desk",
-        });
-      }
-
-      toast.success(t("loy_member_created"));
+      toast.success(result.created ? t("loy_member_created") : "Existing member selected");
       setNewOpen(false);
       setNewName("");
       setNewNick("");
       setNewPhone("");
-      setMembers((prev) => [data as Member, ...prev]);
+      setMembers((prev) => [data as Member, ...prev.filter((member) => member.id !== data.id)]);
       await selectMember(data as Member);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("loy_create_failed"));
@@ -469,6 +462,15 @@ function LoyaltyPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ManagerPinDialog
+        open={managerPinOpen}
+        onOpenChange={(open) => {
+          setManagerPinOpen(open);
+          if (!open && !busy) setPendingPointAction(null);
+        }}
+        onApproved={(pin) => void postPoints(pin)}
+      />
     </div>
   );
 }
