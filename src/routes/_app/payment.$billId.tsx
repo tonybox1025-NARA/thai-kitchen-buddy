@@ -633,6 +633,7 @@ function PaymentPage() {
       address: receiptAddress || undefined,
       promo: receiptPromo || undefined,
       items, total, vatAmount: settingsVatEnabled && settingsVatMode === "exclusive" ? vatAmount : 0,
+      vatRate: Number(bill.vat_rate) || 7,
       vat_mode: settingsVatMode, payments: receiptPayments, language: lang,
       discountAmount: appliedDiscount?.amount ?? 0,
       memberDiscountAmount: memberDisc,

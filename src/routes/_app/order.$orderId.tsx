@@ -632,6 +632,7 @@ function OrderPage() {
       logoUrl: receiptLogoUrl || undefined,
       items: liveItems, total: billTotal,
       vatAmount: settingsVatMode === "exclusive" ? billVatAmount : 0,
+      vatRate: settingsVatRate,
       vat_mode: settingsVatMode, payments: [], language: lang,
     });
     toast.success(t("ord_bill_sent"));

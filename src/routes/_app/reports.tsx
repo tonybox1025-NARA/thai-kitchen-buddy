@@ -108,8 +108,8 @@ function openPrintWindow(
 ${row("Gross sales", thb(r.gross))}
 ${row("Discount", `- ${thb(r.discount)}`)}
 ${row("Member discount", `- ${thb(r.member)}`)}
-${r.vatIncluded > 0 ? row("VAT (included)", thb(r.vatIncluded)) : ""}
-${r.vatAdded > 0 ? row("VAT (added)", thb(r.vatAdded)) : ""}
+${r.vatIncluded > 0 ? row("VAT (7%) (included)", thb(r.vatIncluded)) : ""}
+${r.vatAdded > 0 ? row("VAT (7%) (added)", thb(r.vatAdded)) : ""}
 ${row("Net sales", thb(r.net), true)}
 </table>
 <h2>Payments</h2><table>
@@ -1764,8 +1764,8 @@ function ReportCard({ r }: { r: ReportData }) {
         ) : (
           <Row label="Discounts" value={thb(0)} />
         )}
-        {r.vatIncluded > 0 && <Row label="VAT (included)" value={thb(r.vatIncluded)} />}
-        {r.vatAdded > 0 && <Row label="VAT (added)" value={thb(r.vatAdded)} />}
+        {r.vatIncluded > 0 && <Row label="VAT (7%) (included)" value={thb(r.vatIncluded)} />}
+        {r.vatAdded > 0 && <Row label="VAT (7%) (added)" value={thb(r.vatAdded)} />}
         <Row label="Net sales" value={thb(r.net)} bold />
         <div className="border-t pt-2 mt-2" />
         <Row label="Cash" value={thb(r.byMethod.cash)} />

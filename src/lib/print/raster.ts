@@ -71,6 +71,7 @@ export type ReceiptPayload = {
   pointsDiscountAmount?: number;
   serviceFeeAmount?: number;
   vatAmount?: number;
+  vatRate?: number;
   roundingAdjustment?: number;
   total: number;
   payments?: {
@@ -460,7 +461,7 @@ export async function buildReceipt(p: ReceiptPayload): Promise<Uint8Array> {
   if ((p.memberDiscountAmount ?? 0) > 0) d.row("ส่วนลดสมาชิก", "-" + money(p.memberDiscountAmount!), S.norm);
   if ((p.pointsDiscountAmount ?? 0) > 0) d.row("ใช้แต้ม", "-" + money(p.pointsDiscountAmount!), S.norm);
   if ((p.serviceFeeAmount ?? 0) > 0) d.row("ค่าบริการ", money(p.serviceFeeAmount!), S.norm);
-  if ((p.vatAmount ?? 0) > 0) d.row("VAT", money(p.vatAmount!), S.norm);
+  if ((p.vatAmount ?? 0) > 0) d.row(`VAT (${p.vatRate ?? 7}%)`, money(p.vatAmount!), S.norm);
   if ((p.roundingAdjustment ?? 0) !== 0) d.row("ปัดเศษ", money(p.roundingAdjustment!), S.norm);
 
   d.rule(true);
