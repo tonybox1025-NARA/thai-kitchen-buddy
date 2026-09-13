@@ -190,7 +190,25 @@ function OrderPage() {
       .channel(`order-${orderId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "order_items", filter: `order_id=eq.${orderId}` }, () => loadAll())
       .subscribe();
-    return () => { supabase.removeChannel(ch); };
+
+    // Realtime can briefly disconnect on the SUNMI device while Android sleeps
+    // or changes network state. Polling keeps QR orders visible even if an event
+    // is missed, and focus/visibility refreshes update the screen immediately.
+    const poll = window.setInterval(() => {
+      if (document.visibilityState === "visible") void loadAll();
+    }, 2_000);
+    const refresh = () => {
+      if (document.visibilityState === "visible") void loadAll();
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+
+    return () => {
+      window.clearInterval(poll);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+      supabase.removeChannel(ch);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderId]);
 
