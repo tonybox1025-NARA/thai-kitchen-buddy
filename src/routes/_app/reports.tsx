@@ -31,6 +31,7 @@ const DENOMS = [...BILLS, ...COINS];
 type Shift = { id: string; business_day: string; opened_at: string; closed_at: string | null; opening_float: number; status: "open" | "closed" };
 type ReportData = {
   gross: number; net: number; discount: number; member: number;
+  vatIncluded: number; vatAdded: number;
   voids: number; refunds: number; byMethod: Record<string, number>;
   openingFloat: number; bills: number;
   tipTotal: number; // sum of tip_amount on QR payments; payment.amount excludes tip
@@ -56,7 +57,7 @@ type BillRow = {
 };
 
 function getQrGrossReceived(r: ReportData) {
-  return r.byMethod.qr + r.byMethod.gov_qr + r.tipTotal;
+  return r.byMethod.qr + r.tipTotal;
 }
 
 function getNetQrSales(r: ReportData) {
@@ -107,13 +108,15 @@ function openPrintWindow(
 ${row("Gross sales", thb(r.gross))}
 ${row("Discount", `- ${thb(r.discount)}`)}
 ${row("Member discount", `- ${thb(r.member)}`)}
+${r.vatIncluded > 0 ? row("VAT (included)", thb(r.vatIncluded)) : ""}
+${r.vatAdded > 0 ? row("VAT (added)", thb(r.vatAdded)) : ""}
 ${row("Net sales", thb(r.net), true)}
 </table>
 <h2>Payments</h2><table>
 ${row("Cash", thb(r.byMethod.cash))}
 ${row("QR PAYMENT", thb(getQrGrossReceived(r)))}
 ${(r.qrByBucket ?? []).map((b) => subRow(b.label, thb(b.gross))).join("")}
-${r.byMethod.gov_qr > 0 ? row("  60/40 PAYMENT", thb(r.byMethod.gov_qr)) : ""}
+${r.byMethod.gov_qr > 0 ? row("60/40 PAYMENT", thb(r.byMethod.gov_qr)) : ""}
 ${r.tipTotal > 0 ? row("  Tips collected (QR)", thb(r.tipTotal)) : ""}
 ${r.tipTotal > 0 ? row("  Tips paid out (cash)", `- ${thb(r.tipTotal)}`) : ""}
 ${r.tipTotal > 0 ? row("  Net QR sales", thb(getNetQrSales(r)), true) : ""}
@@ -189,7 +192,7 @@ function Reports() {
   }, []);
 
   const buildReport = async (s: Shift): Promise<ReportData> => {
-    const { data: bills } = await supabase.from("bills").select("id,total,subtotal,discount_amount,member_discount_amount,order_id").eq("shift_id", s.id).eq("status", "paid").not("is_test", "is", true);
+    const { data: bills } = await supabase.from("bills").select("id,total,subtotal,discount_amount,member_discount_amount,vat_amount,vat_mode,order_id").eq("shift_id", s.id).eq("status", "paid").not("is_test", "is", true);
     const billIds = (bills ?? []).map((b) => b.id);
     const orderIds = (bills ?? []).map((b) => (b as any).order_id).filter(Boolean) as string[];
     const [{ data: pays }, { data: voids }, { data: refunds }, { data: cancelledOrds }, { data: orderSources }, { data: billDiscs }] = await Promise.all([
@@ -210,14 +213,16 @@ function Reports() {
     const net = (bills ?? []).reduce((x, b) => x + Number(b.total), 0);
     const discount = (bills ?? []).reduce((x, b) => x + Number(b.discount_amount), 0);
     const member = (bills ?? []).reduce((x, b) => x + Number(b.member_discount_amount), 0);
+    const vatIncluded = (bills ?? []).filter((b) => b.vat_mode === "inclusive").reduce((x, b) => x + Number(b.vat_amount ?? 0), 0);
+    const vatAdded = (bills ?? []).filter((b) => b.vat_mode === "exclusive").reduce((x, b) => x + Number(b.vat_amount ?? 0), 0);
     const byMethod: Record<string, number> = { cash: 0, qr: 0, gov_qr: 0, card: 0 };
     (pays ?? []).forEach((p) => { byMethod[p.method] = (byMethod[p.method] ?? 0) + Number(p.amount); });
     const tipTotal = (pays ?? []).filter((p) => p.method === "qr").reduce((s, p) => s + Number(p.tip_amount ?? 0), 0);
     const cardTipTotal = (pays ?? []).filter((p) => p.method === "card").reduce((s, p) => s + Number(p.tip_amount ?? 0), 0);
 
-    // QR revenue split into the user-defined time windows (matches getQrGrossReceived: qr + gov_qr + tips)
+    // QR revenue split into the user-defined time windows. 60/40 is reported separately.
     const qrPays = (pays ?? [])
-      .filter((p) => p.method === "qr" || p.method === "gov_qr")
+      .filter((p) => p.method === "qr")
       .map((p) => ({ amount: Number(p.amount), tip: Number(p.tip_amount ?? 0), at: (p as any).created_at ?? "" }));
     const qrByBucket = bucketizeQr(qrPays, qrBuckets);
 
@@ -253,7 +258,7 @@ function Reports() {
     const discountByStaff = [...discountByStaffMap.values()].sort((a, b) => b.amount - a.amount);
 
     return {
-      gross, net, discount, member,
+      gross, net, discount, member, vatIncluded, vatAdded,
       voids: (voids ?? []).reduce((x, v) => x + Number(v.amount), 0),
       refunds: (refunds ?? []).reduce((x, v) => x + Number(v.amount), 0),
       byMethod, openingFloat: Number(s.opening_float), bills: (bills ?? []).length,
@@ -1759,6 +1764,8 @@ function ReportCard({ r }: { r: ReportData }) {
         ) : (
           <Row label="Discounts" value={thb(0)} />
         )}
+        {r.vatIncluded > 0 && <Row label="VAT (included)" value={thb(r.vatIncluded)} />}
+        {r.vatAdded > 0 && <Row label="VAT (added)" value={thb(r.vatAdded)} />}
         <Row label="Net sales" value={thb(r.net)} bold />
         <div className="border-t pt-2 mt-2" />
         <Row label="Cash" value={thb(r.byMethod.cash)} />
@@ -1766,7 +1773,7 @@ function ReportCard({ r }: { r: ReportData }) {
         {(r.qrByBucket ?? []).map((b) => (
           <SubRow key={b.label} label={b.label} value={thb(b.gross)} />
         ))}
-        {r.byMethod.gov_qr > 0 && <Row label="  ↳ 60/40 PAYMENT" value={thb(r.byMethod.gov_qr)} />}
+        {r.byMethod.gov_qr > 0 && <Row label="60/40 PAYMENT" value={thb(r.byMethod.gov_qr)} />}
         {r.tipTotal > 0 && <>
           <Row label="  ↳ Tips collected (QR)" value={thb(r.tipTotal)} />
           <Row label="  ↳ Tips paid out (cash)" value={`- ${thb(r.tipTotal)}`} />
