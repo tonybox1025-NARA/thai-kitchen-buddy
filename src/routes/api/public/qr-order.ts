@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { createFileRoute } from "@tanstack/react-router";
 import type { Database } from "@/integrations/supabase/types";
+import { setCostFromLabels } from "@/lib/set-menu";
 import { z } from "zod";
 
 function createPublicServerClient() {
@@ -178,7 +179,7 @@ export const Route = createFileRoute("/api/public/qr-order")({
               name_my: m.name_my,
               qty: it.qty,
               unit_price,
-              unit_cost: Number((m as any).cost ?? 0),
+              unit_cost: sc ? setCostFromLabels(sc) : Number((m as any).cost ?? 0),
               notes: baseNotes,
               modifiers: modifiers.length > 0 ? modifiers : null,
               status: "sent" as const,

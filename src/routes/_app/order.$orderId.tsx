@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Plus, Minus, Trash2, ChefHat, Receipt, ArrowLeft, AlertTriangle, ArrowLeftRight, X, Printer, Eye, Layers, Bell, QrCode, Check } from "lucide-react";
 import { ManagerPinDialog } from "@/components/ManagerPinDialog";
 import { SetMenuDialog } from "@/components/SetMenuDialog";
-import { SETS, type SetConfig } from "@/lib/set-menu";
+import { SETS, setConfigCost, type SetConfig } from "@/lib/set-menu";
 import { printCounter, printCounterJobs, printKitchenJobs, type CounterPrintPayload } from "@/lib/counter-printer";
 import { isOffline } from "@/lib/online-status";
 import { tableLabel } from "@/lib/table";
@@ -340,7 +340,7 @@ function OrderPage() {
       name_my: setDef.name_en,
       qty: 1,
       unit_price: setDef.price,
-      unit_cost: 0,
+      unit_cost: setConfigCost(config),
       notes: kitchenNotes,
       status: "pending",
       set_config: config,
