@@ -367,6 +367,29 @@ async function processJob(job) {
   }
 }
 
+let printQueue = Promise.resolve();
+const queuedJobIds = new Set();
+
+function enqueueJob(job) {
+  if (!job?.id || queuedJobIds.has(job.id)) return printQueue;
+
+  queuedJobIds.add(job.id);
+  const run = async () => {
+    try {
+      await processJob(job);
+      // Some ESC/POS printers drop a second connection opened immediately
+      // after the previous ticket. Keep all destinations serialized because
+      // counter and kitchen can share one printer during field testing.
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    } finally {
+      queuedJobIds.delete(job.id);
+    }
+  };
+
+  printQueue = printQueue.then(run, run);
+  return printQueue;
+}
+
 // ── Drain any pending jobs from before bridge started ─────────────────────────
 async function drainPending() {
   const { data: jobs, error } = await supabase
@@ -383,7 +406,7 @@ async function drainPending() {
   }
   if (!jobs?.length) { console.log("✓  No pending jobs in queue."); return; }
   console.log(`⏳  ${jobs.length} pending job(s) in queue — processing…`);
-  for (const job of jobs) await processJob(job);
+  for (const job of jobs) await enqueueJob(job);
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -400,7 +423,7 @@ async function main() {
       { event: "INSERT", schema: "public", table: "print_jobs" },
       (payload) => {
         const job = payload.new;
-        if (job.status === "pending") processJob(job);
+        if (job.status === "pending") void enqueueJob(job);
       },
     )
     .subscribe((status) => {

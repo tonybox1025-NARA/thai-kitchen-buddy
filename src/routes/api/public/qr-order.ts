@@ -235,8 +235,7 @@ export const Route = createFileRoute("/api/public/qr-order")({
             payload: { ...ticketPayload, ticket_type: "front", route_version: 2, lines: frontLines, language: "th", department: "FRONT", station: "FRONT", footer: "counter" },
           }] : []),
         ];
-        const { error: printErr } = await supabase.from("print_jobs").insert([
-          ...[...grouped.values()].map((group, index, all) => ({
+        const kitchenJobs = [...grouped.values()].map((group, index, all) => ({
             printer: "kitchen" as const,
             payload: {
               ...ticketPayload,
@@ -251,10 +250,21 @@ export const Route = createFileRoute("/api/public/qr-order")({
               ticketIndex: index + 1,
               ticketTotal: all.length,
             },
-          })),
-          ...counterJobs,
-        ]);
-        if (printErr) return new Response(`Print queue error: ${printErr.message}`, { status: 500 });
+          }));
+
+        // Insert tickets one at a time, counter first. The restaurant's bridge
+        // receives INSERT events immediately; a batch can make it open several
+        // connections to the same ESC/POS printer at once, and some printers
+        // silently drop the later connection. Spacing the events also protects
+        // installations still running an older bridge without its own queue.
+        const printJobs = [...counterJobs, ...kitchenJobs];
+        for (let index = 0; index < printJobs.length; index += 1) {
+          const { error: printErr } = await supabase.from("print_jobs").insert(printJobs[index]);
+          if (printErr) return new Response(`Print queue error: ${printErr.message}`, { status: 500 });
+          if (index < printJobs.length - 1) {
+            await new Promise((resolve) => setTimeout(resolve, 400));
+          }
+        }
 
         // Mark table occupied + raise QR alert flag (the POS realtime listener will react)
         await supabase.from("restaurant_tables").update({
