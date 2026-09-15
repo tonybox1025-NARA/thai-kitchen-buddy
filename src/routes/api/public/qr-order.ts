@@ -259,7 +259,7 @@ export const Route = createFileRoute("/api/public/qr-order")({
         // installations still running an older bridge without its own queue.
         const printJobs = [...counterJobs, ...kitchenJobs];
         for (let index = 0; index < printJobs.length; index += 1) {
-          const { error: printErr } = await supabase.from("print_jobs").insert(printJobs[index]);
+          const { error: printErr } = await (supabase as any).from("print_jobs").insert(printJobs[index]);
           if (printErr) return new Response(`Print queue error: ${printErr.message}`, { status: 500 });
           if (index < printJobs.length - 1) {
             await new Promise((resolve) => setTimeout(resolve, 400));

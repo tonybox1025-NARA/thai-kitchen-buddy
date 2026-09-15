@@ -21,6 +21,7 @@ import { format } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import { PencilLine, ArrowRight, CalendarIcon, XCircle, Printer } from "lucide-react";
 import { bucketizeQr, parseBuckets, type QrBucketTotal, type QrTimeBucket } from "@/lib/qr-buckets";
+import { canPrintDirect, printDirect } from "@/lib/counter-printer";
 
 export const Route = createFileRoute("/_app/register")({ component: Register });
 
@@ -81,7 +82,7 @@ function calcCashSummary(cashCount: Record<number, number>, r: ReportData) {
   return { cashTotal, expected, overShort: cashTotal - expected };
 }
 
-function openPrintWindow(
+async function openPrintWindow(
   kind: "X" | "Z",
   r: ReportData,
   shift: Shift,
@@ -99,6 +100,51 @@ function openPrintWindow(
     .map((d) => row(`${d}฿ × ${counts[d]}`, thb(d * counts[d])))
     .join("") || `<tr><td colspan="2" style="color:#888">No denominations entered</td></tr>`;
   const now = new Date();
+  if (canPrintDirect()) {
+    const rows = (entries: Array<[string, string, boolean?, boolean?]>) =>
+      entries.map(([label, value, bold, indent]) => ({ label, value, bold, indent }));
+    const sections = [
+      { title: "Sales", rows: rows([
+        ["Gross sales", thb(r.gross)], ["Discount", `- ${thb(r.discount)}`],
+        ["Member discount", `- ${thb(r.member)}`],
+        ...(r.vatIncluded > 0 ? [["VAT (7%) included", thb(r.vatIncluded)] as [string, string]] : []),
+        ...(r.vatAdded > 0 ? [["VAT (7%) added", thb(r.vatAdded)] as [string, string]] : []),
+        ["Net sales", thb(r.net), true],
+      ]) },
+      { title: "Payments", rows: rows([
+        ["Cash", thb(r.byMethod.cash)], ["QR PAYMENT", thb(getQrGrossReceived(r))],
+        ...(r.qrByBucket ?? []).map((b) => [b.label, thb(b.gross), false, true] as [string, string, boolean, boolean]),
+        ...(r.byMethod.gov_qr > 0 ? [["60/40 PAYMENT", thb(r.byMethod.gov_qr)] as [string, string]] : []),
+        ...(r.tipTotal > 0 ? [["Tips collected (QR)", thb(r.tipTotal), false, true] as [string, string, boolean, boolean], ["Tips paid out (cash)", `- ${thb(r.tipTotal)}`, false, true] as [string, string, boolean, boolean], ["Net QR sales", thb(getNetQrSales(r)), true] as [string, string, boolean]] : []),
+        ["Credit card", thb(getCardGrossReceived(r))],
+        ...(r.cardTipTotal > 0 ? [["Tips collected (card)", thb(r.cardTipTotal), false, true] as [string, string, boolean, boolean], ["Tips paid out (cash)", `- ${thb(r.cardTipTotal)}`, false, true] as [string, string, boolean, boolean], ["Net card sales", thb(r.byMethod.card), true] as [string, string, boolean]] : []),
+      ]) },
+      { title: "Other", rows: rows([
+        ["Voids & Cancellations", thb(r.voids)], ["Refunds total", thb(r.refunds)], ["Bills", String(r.bills)],
+        ...(r.cancelledCount > 0 ? [["Cancelled orders", String(r.cancelledCount)] as [string, string]] : []),
+        ...(r.takeoutTotal > 0 ? [["Takeout sales", thb(r.takeoutTotal)] as [string, string]] : []),
+        ...(r.staffMealTotal > 0 ? [["Staff meal cost", thb(r.staffMealTotal)] as [string, string]] : []),
+      ]) },
+      ...(r.discount > 0 ? [{ title: "Discount breakdown", rows: rows([
+        ["Total discounts", `- ${thb(r.discount)}`],
+        ...(r.discountByType.percent > 0 ? [["% Off", `- ${thb(r.discountByType.percent)}`, false, true] as [string, string, boolean, boolean]] : []),
+        ...(r.discountByType.fixed > 0 ? [["Fixed amount", `- ${thb(r.discountByType.fixed)}`, false, true] as [string, string, boolean, boolean]] : []),
+        ...(r.discountByType.free_item > 0 ? [["Free items", `- ${thb(r.discountByType.free_item)}`, false, true] as [string, string, boolean, boolean]] : []),
+        ...r.discountByStaff.map((s) => [`${s.staffName} (x${s.count})`, `- ${thb(s.amount)}`, false, true] as [string, string, boolean, boolean]),
+      ]) }] : []),
+      { title: "Cash count", rows: rows(DENOMS.filter((d) => (counts[d] ?? 0) > 0).map((d) => [`${d} THB x ${counts[d]}`, thb(d * counts[d])] as [string, string])) },
+      { title: "Cash drawer", rows: rows([
+        ["Opening float", thb(r.openingFloat)], ["Cash sales", thb(r.byMethod.cash)],
+        ...(cashTipsPaidOut(r) > 0 ? [["Tips paid out (cash)", `- ${thb(cashTipsPaidOut(r))}`] as [string, string]] : []),
+        ["Expected", thb(expected), true], ["Counted", thb(cashTotal)], ["Over / Short", thb(overShort), true],
+      ]) },
+    ];
+    await printDirect("counter", {
+      kind: "report", restaurant: restaurantName || "Restaurant", report_type: kind,
+      business_day: shift.business_day, printed_at: now.toISOString(), sections,
+    });
+    return;
+  }
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>${kind} Report</title>
 <style>body{font-family:ui-sans-serif,system-ui;padding:24px;max-width:480px;margin:auto}h1{font-size:20px;margin:0 0 4px;text-align:center}h2{font-size:14px;margin:16px 0 4px;border-bottom:1px solid #ccc;padding-bottom:2px}table{width:100%;border-collapse:collapse;font-size:13px}td{padding:2px 0}.meta{text-align:center;font-size:12px;color:#555;margin-bottom:8px}</style>
 </head><body>
@@ -524,7 +570,7 @@ function Register() {
           )}
           <DialogFooter className="pt-2">
             <Button variant="outline" onClick={() => setXDlg(false)}>{t("cancel")}</Button>
-            <Button onClick={() => { if (report && shift) openPrintWindow("X", report, shift, xCashCount, restaurantName); }}>
+            <Button onClick={() => { if (report && shift) void openPrintWindow("X", report, shift, xCashCount, restaurantName).catch((error) => toast.error(error instanceof Error ? error.message : "Print failed")); }}>
               Print X Report
             </Button>
           </DialogFooter>
@@ -554,9 +600,13 @@ function Register() {
           )}
           <DialogFooter className="pt-2">
             <Button variant="outline" onClick={() => setZDlg(false)}>{t("cancel")}</Button>
-            <Button onClick={() => {
-              if (report && shift) openPrintWindow("Z", report, shift, cashCount, restaurantName);
-              submitZ();
+            <Button onClick={async () => {
+              try {
+                if (report && shift) await openPrintWindow("Z", report, shift, cashCount, restaurantName);
+                await submitZ();
+              } catch (error) {
+                toast.error(error instanceof Error ? error.message : "Print failed");
+              }
             }}>
               Print &amp; Close shift
             </Button>

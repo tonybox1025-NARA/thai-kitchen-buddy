@@ -117,7 +117,19 @@ export type TableQrPayload = {
   guests?: number;
 };
 
-export type PrintPayload = ReceiptPayload | KitchenPayload | TableQrPayload;
+export type ReportPayload = {
+  kind: "report";
+  restaurant?: string;
+  report_type: "X" | "Z";
+  business_day: string;
+  printed_at?: string;
+  sections: {
+    title: string;
+    rows: { label: string; value: string; bold?: boolean; indent?: boolean }[];
+  }[];
+};
+
+export type PrintPayload = ReceiptPayload | KitchenPayload | TableQrPayload | ReportPayload;
 
 // ── formatting ────────────────────────────────────────────────────────────────
 
@@ -574,6 +586,31 @@ export async function buildTableQr(p: TableQrPayload): Promise<Uint8Array> {
   return Uint8Array.from(out);
 }
 
+// ── X / Z SHIFT REPORT ───────────────────────────────────────────────────────
+
+export async function buildReport(p: ReportPayload): Promise<Uint8Array> {
+  await ensureFonts();
+  const d = new Doc(32);
+  const printedAt = p.printed_at ? new Date(p.printed_at) : new Date();
+
+  d.text(p.restaurant || "Restaurant", S.big, "center");
+  d.text(`${p.report_type} REPORT`, S.xl, "center");
+  d.text(`Business day ${p.business_day}`, S.small, "center");
+  d.text(`${fmtDate(printedAt)} ${fmtTime(printedAt)}`, S.small, "center");
+  d.rule(true);
+
+  for (const section of p.sections) {
+    d.text(section.title.toUpperCase(), S.bold);
+    for (const row of section.rows) {
+      d.row(`${row.indent ? "  " : ""}${row.label}`, row.value, row.bold ? S.bold : S.small);
+    }
+    d.rule();
+  }
+
+  d.text(`${p.report_type} REPORT`, S.bold, "center");
+  return Uint8Array.from([...INIT, ...d.toLegacyRaster(), 0x0a, 0x0a, ...CUT]);
+}
+
 // ── on-screen / self test (Latin + Thai + Burmese) ────────────────────────────
 
 export async function buildTest(label = "APP"): Promise<Uint8Array> {
@@ -595,6 +632,7 @@ export async function buildTest(label = "APP"): Promise<Uint8Array> {
 export async function buildEscPos(payload: PrintPayload, printer?: "counter" | "kitchen"): Promise<Uint8Array> {
   if (payload.kind === "receipt") return buildReceipt(payload);
   if (payload.kind === "table_qr") return buildTableQr(payload);
+  if (payload.kind === "report") return buildReport(payload);
   if (payload.kind === "order_ticket" || printer === "kitchen") return buildKitchen(payload as KitchenPayload);
   throw new Error(`Unknown print payload kind: ${(payload as { kind?: string }).kind}`);
 }

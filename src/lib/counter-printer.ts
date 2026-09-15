@@ -9,7 +9,7 @@ const COUNTER_BRIDGE_IMAGE_URL = "http://127.0.0.1:9001/print/counter-img";
 export type PrinterName = "counter" | "kitchen";
 
 export type CounterPrintPayload = Record<string, unknown> & {
-  kind: "receipt" | "order_ticket" | "table_qr";
+  kind: "receipt" | "order_ticket" | "table_qr" | "report";
 };
 
 /**
