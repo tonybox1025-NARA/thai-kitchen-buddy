@@ -228,11 +228,11 @@ export const Route = createFileRoute("/api/public/qr-order")({
         const counterJobs = [
           ...(foodLines.length ? [{
             printer: "counter" as const,
-            payload: { ...ticketPayload, lines: foodLines, language: "my", department: "KITCHEN CHECK", station: "KITCHEN CHECK", footer: "counter" },
+            payload: { ...ticketPayload, ticket_type: "kitchen_check", route_version: 2, lines: foodLines, language: "my", department: "KITCHEN CHECK", station: "KITCHEN CHECK", footer: "counter" },
           }] : []),
           ...(frontLines.length ? [{
             printer: "counter" as const,
-            payload: { ...ticketPayload, lines: frontLines, language: "th", department: "FRONT", station: "FRONT", footer: "counter" },
+            payload: { ...ticketPayload, ticket_type: "front", route_version: 2, lines: frontLines, language: "th", department: "FRONT", station: "FRONT", footer: "counter" },
           }] : []),
         ];
         const { error: printErr } = await supabase.from("print_jobs").insert([
@@ -240,6 +240,8 @@ export const Route = createFileRoute("/api/public/qr-order")({
             printer: "kitchen" as const,
             payload: {
               ...ticketPayload,
+              ticket_type: "kitchen",
+              route_version: 2,
               lines: group.lines,
               language: "my",
               department: group.zoneLabel,

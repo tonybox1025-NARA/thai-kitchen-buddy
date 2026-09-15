@@ -100,6 +100,8 @@ export type KitchenPayload = {
   waiter?: string;
   order_type?: "added" | "new" | string;
   source?: "qr" | "pos" | string;
+  ticket_type?: "kitchen" | "kitchen_check" | "front" | string;
+  route_version?: number;
   department?: string;
   station?: string;
   footer?: "kitchen" | "counter";

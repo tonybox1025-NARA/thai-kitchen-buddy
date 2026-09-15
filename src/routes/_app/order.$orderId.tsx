@@ -434,6 +434,8 @@ function OrderPage() {
       printer: "kitchen" as const,
       payload: {
         ...baseTicket,
+        ticket_type: "kitchen",
+        route_version: 2,
         lines: group.lines,
         language: "my",
         department: group.zoneLabel,
@@ -451,6 +453,8 @@ function OrderPage() {
     const foodLines = lines.filter((line) => line.printToKitchen).map(stripZone);
     if (foodLines.length) counterTickets.push({
       ...baseTicket,
+      ticket_type: "kitchen_check",
+      route_version: 2,
       lines: foodLines,
       language: "my",
       department: "KITCHEN CHECK",
@@ -460,6 +464,8 @@ function OrderPage() {
     const frontLines = lines.filter((line) => !line.printToKitchen).map(stripZone);
     if (frontLines.length) counterTickets.push({
       ...baseTicket,
+      ticket_type: "front",
+      route_version: 2,
       lines: frontLines,
       language: "th",
       department: "FRONT",

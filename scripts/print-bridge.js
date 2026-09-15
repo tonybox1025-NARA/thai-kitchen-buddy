@@ -199,14 +199,18 @@ function buildReceipt(p) {
 }
 
 // ── Kitchen ticket formatter (kitchen printer) ────────────────────────────────
-function buildKitchen(p) {
+function buildOrderTicket(p, targetPrinter) {
   const _kd  = new Date(p.sent_at ?? Date.now());
   const time = `${String(_kd.getHours()).padStart(2,"0")}:${String(_kd.getMinutes()).padStart(2,"0")}:${String(_kd.getSeconds()).padStart(2,"0")}`;
   const orderTypeLabel = p.order_type === "added" ? "ADDED ORDER" : "NEW ORDER";
+  const isCounter = targetPrinter === "counter" || p.footer === "counter" || p.ticket_type === "kitchen_check" || p.ticket_type === "front";
+  const zoneLabel = asciiText(p.department || p.station, isCounter ? "COUNTER" : "KITCHEN");
+  const footerLabel = isCounter ? "COUNTER" : "KITCHEN";
   const parts = [
     CMD.INIT,
-    ...(p.alert_beep ? [CMD.BEEP] : []),
+    ...(p.alert_beep && !isCounter ? [CMD.BEEP] : []),
     CMD.ALIGN_CENTER,
+    `ZONE  ${zoneLabel}`, lf(),
     CMD.BOLD_ON, CMD.DSIZE_ON,
     `TABLE  ${p.table ?? "?"}`, lf(),
     orderTypeLabel, lf(),
@@ -236,7 +240,8 @@ function buildKitchen(p) {
   }
 
   parts.push(
-    line("="), lf(3),
+    line("="), lf(),
+    CMD.ALIGN_CENTER, CMD.BOLD_ON, footerLabel, CMD.BOLD_OFF, lf(3),
     CMD.CUT,
   );
 
@@ -342,7 +347,7 @@ async function processJob(job) {
     } else if (kind === "table_qr") {
       data = buildQrSlip(pl);
     } else if (kind === "order_ticket" || printer === "kitchen") {
-      data = buildKitchen(pl);
+      data = buildOrderTicket(pl, printer);
     } else {
       throw new Error(`Unknown job kind: ${kind}`);
     }
