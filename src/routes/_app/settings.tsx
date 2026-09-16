@@ -1639,21 +1639,26 @@ function MenuTab() {
   const openEdit = async (m: Partial<Menu>) => {
     setEdit(m);
     if (!m.id) { setEditIngRows([]); setLinkedAddonIds(new Set()); return; }
-    // Load ingredients
-    const { data: ingData } = await db
-      .from("menu_ingredients")
-      .select("id, ingredient_id, quantity, ingredients(id, name_thai, name_english, unit, cost_per_unit)")
-      .eq("menu_id", m.id);
-    const rows: MenuIngredientRow[] = (ingData ?? []).map((row: any) => ({
-      id: row.id,
-      ingredient_id: row.ingredient_id,
-      quantity: row.quantity,
-      name_thai: row.ingredients?.name_thai ?? "",
-      name_english: row.ingredients?.name_english ?? null,
-      unit: row.ingredients?.unit ?? "",
-      cost_per_unit: row.ingredients?.cost_per_unit ?? 0,
-    }));
-    setEditIngRows(rows);
+    // Manager-linked menus use Manager's recipe-derived food cost as the only
+    // source of truth. Legacy POS recipe rows must never overwrite that value.
+    if (m.manager_menu_id) {
+      setEditIngRows([]);
+    } else {
+      const { data: ingData } = await db
+        .from("menu_ingredients")
+        .select("id, ingredient_id, quantity, ingredients(id, name_thai, name_english, unit, cost_per_unit)")
+        .eq("menu_id", m.id);
+      const rows: MenuIngredientRow[] = (ingData ?? []).map((row: any) => ({
+        id: row.id,
+        ingredient_id: row.ingredient_id,
+        quantity: row.quantity,
+        name_thai: row.ingredients?.name_thai ?? "",
+        name_english: row.ingredients?.name_english ?? null,
+        unit: row.ingredients?.unit ?? "",
+        cost_per_unit: row.ingredients?.cost_per_unit ?? 0,
+      }));
+      setEditIngRows(rows);
+    }
     // Load linked addon groups
     const { data: addonData } = await db
       .from("menu_addons")
@@ -1684,7 +1689,7 @@ function MenuTab() {
       image_url: edit.image_url?.trim() || null,
     };
     let menuId = edit.id;
-    if (menuId) {
+    if (menuId && !edit.manager_menu_id) {
       await db.from("menus").update(payload).eq("id", menuId);
     } else {
       const { data: inserted } = await db.from("menus").insert(payload).select("id").single();
@@ -1932,7 +1937,16 @@ function MenuTab() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div><Label>{t("price")} (฿)</Label><KeypadInput value={edit?.price ?? 0} onChange={(n) => setEdit({ ...edit, price: n })} title={t("price")} decimal /></div>
-                <div><Label>{t("lbl_cost")} (฿)</Label><KeypadInput value={edit?.cost ?? 0} onChange={(n) => setEdit({ ...edit, cost: n })} title={t("lbl_cost")} decimal /></div>
+                <div>
+                  <Label>{t("lbl_cost")} (฿)</Label>
+                  {edit?.manager_menu_id ? (
+                    <div className="flex h-11 w-full items-center justify-end rounded-md border bg-muted/40 px-3 text-lg font-semibold tabular-nums">
+                      ฿{Number(edit.cost ?? 0).toFixed(2)}
+                    </div>
+                  ) : (
+                    <KeypadInput value={edit?.cost ?? 0} onChange={(n) => setEdit({ ...edit, cost: n })} title={t("lbl_cost")} decimal />
+                  )}
+                </div>
               </div>
               <MarginIndicator price={Number(edit?.price ?? 0)} cost={Number(edit?.cost ?? 0)} />
               <div className="flex items-center justify-between rounded-md border px-3 py-2">
@@ -1944,11 +1958,21 @@ function MenuTab() {
           <div className="grid gap-4 lg:grid-cols-2">
             {/* ── Ingredients section ── */}
             <div className="border rounded-md p-4 bg-muted/20">
-              <IngredientsSection
-                menuId={edit?.id}
-                rows={editIngRows}
-                onChange={setEditIngRows}
-              />
+              {edit?.manager_menu_id ? (
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold">Ingredients &amp; food cost</Label>
+                  <p className="text-sm text-muted-foreground">Managed in Manager. The recipe and food cost are calculated there and published to POS.</p>
+                  <div className="rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-800">
+                    Manager food cost: <strong>฿{Number(edit.cost ?? 0).toFixed(2)}</strong>
+                  </div>
+                </div>
+              ) : (
+                <IngredientsSection
+                  menuId={edit?.id}
+                  rows={editIngRows}
+                  onChange={setEditIngRows}
+                />
+              )}
             </div>
 
             {/* ── Add-ons section ── */}

@@ -44,13 +44,14 @@ Deno.serve(async (req) => {
       auth: { persistSession: false },
       global: { fetch: apiKeyOnlyFetch },
     });
-    const [menusResult, categoriesResult, groupsResult, optionsResult] = await Promise.all([
+    const [menusResult, categoriesResult, groupsResult, optionsResult, menuIngredientsResult] = await Promise.all([
       db.from("menus").select("id,manager_menu_id,name_th,name_en,name_my,price,cost,image_url,available,category_id,sort,is_set,is_set_child"),
       db.from("categories").select("id,name_th,name_en,name_my,sort"),
       db.from("addon_groups").select("id,name,kitchen_name"),
       db.from("addon_options").select("id,addon_group_id,name,price,sort_order"),
+      db.from("menu_ingredients").select("menu_id"),
     ]);
-    for (const result of [menusResult, categoriesResult, groupsResult, optionsResult]) if (result.error) throw result.error;
+    for (const result of [menusResult, categoriesResult, groupsResult, optionsResult, menuIngredientsResult]) if (result.error) throw result.error;
     const posMenus = menusResult.data ?? [];
     const menuById = new Map(posMenus.map((menu) => [menu.id, menu]));
     const menuByManagerId = new Map(posMenus.filter((menu) => menu.manager_menu_id).map((menu) => [menu.manager_menu_id, menu]));
@@ -97,6 +98,18 @@ Deno.serve(async (req) => {
         available: item.source.is_active !== false && item.source.available_pos !== false && item.source.is_set_child !== true,
       }));
     const sellableCostChanges = costChanges.filter((item: any) => item.available);
+    const managerLinkedTargets = new Map(
+      menuPlan.filter((item: any) => item.target).map((item: any) => [item.target.id, item.source.name_th]),
+    );
+    const legacyIngredientCounts = new Map<string, number>();
+    for (const row of menuIngredientsResult.data ?? []) {
+      if (!managerLinkedTargets.has(row.menu_id)) continue;
+      legacyIngredientCounts.set(row.menu_id, (legacyIngredientCounts.get(row.menu_id) ?? 0) + 1);
+    }
+    const legacyIngredientMenus = [...legacyIngredientCounts.entries()].map(([menuId, rows]) => ({
+      name: managerLinkedTargets.get(menuId) ?? menuId,
+      rows,
+    })).sort((a, b) => b.rows - a.rows || a.name.localeCompare(b.name, "th"));
     const summary = {
       menus: { total: menuPlan.length, create: menuPlan.filter((item: any) => item.action === "create").length, update: menuPlan.filter((item: any) => item.action === "update").length, same: menuPlan.filter((item: any) => item.action === "same").length, skipped: menuPlan.filter((item: any) => item.action === "skip").length },
       categories: { total: categoryNames.length, create: categoryNames.filter((name) => !categoryByName.has(normalize(name))).length },
@@ -111,6 +124,11 @@ Deno.serve(async (req) => {
         topDifferences: sellableCostChanges
           .sort((a: any, b: any) => Math.abs(b.after - b.before) - Math.abs(a.after - a.before))
           .slice(0, 10),
+        legacyPosIngredients: {
+          menus: legacyIngredientMenus.length,
+          rows: legacyIngredientMenus.reduce((sum, item) => sum + item.rows, 0),
+          affectedMenus: legacyIngredientMenus,
+        },
       },
     };
     if (!execute) return Response.json({ mode: "preview", summary }, { headers: corsHeaders });
