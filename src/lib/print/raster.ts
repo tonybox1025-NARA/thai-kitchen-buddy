@@ -256,10 +256,10 @@ class Doc {
     }
   }
 
-  row(left: string, right: string, s: Style) {
+  row(left: string, right: string, s: Style, indentPx = 0) {
     const { asc, lh } = this.metrics(s);
     const rightW = this.measure(right, s);
-    const maxLeftW = Math.max(40, CONTENT_W - rightW - 14);
+    const maxLeftW = Math.max(40, CONTENT_W - rightW - 14 - indentPx);
     const lines = this.wrap(left, s, maxLeftW);
     lines.forEach((ln, i) => {
       const baseline = this.y + asc;
@@ -268,7 +268,7 @@ class Doc {
         ctx.fillStyle = "#000";
         ctx.textBaseline = "alphabetic";
         ctx.textAlign = "left";
-        ctx.fillText(ln, PAD_X, baseline);
+        ctx.fillText(ln, PAD_X + indentPx, baseline);
         if (i === 0) {
           ctx.textAlign = "right";
           ctx.fillText(right, WIDTH - PAD_X, baseline);
@@ -603,7 +603,7 @@ export async function buildReport(p: ReportPayload): Promise<Uint8Array> {
   for (const section of p.sections) {
     d.text(section.title.toUpperCase(), S.bold);
     for (const row of section.rows) {
-      d.row(`${row.indent ? "  " : ""}${row.label}`, row.value, row.bold ? S.bold : S.small);
+      d.row(row.label, row.value, row.bold ? S.bold : S.small, row.indent ? 30 : 0);
     }
     d.rule();
   }

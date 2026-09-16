@@ -32,6 +32,7 @@ const DENOMS = [...BILLS, ...COINS];
 type Shift = { id: string; business_day: string; opened_at: string; closed_at: string | null; opening_float: number; status: "open" | "closed" };
 type ReportData = {
   gross: number; net: number; discount: number; member: number;
+  coupon: number; // reserved for the upcoming coupon system
   vatIncluded: number; vatAdded: number;
   voids: number; refunds: number; byMethod: Record<string, number>;
   openingFloat: number; bills: number;
@@ -105,17 +106,18 @@ async function openPrintWindow(
       entries.map(([label, value, bold, indent]) => ({ label, value, bold, indent }));
     const sections = [
       { title: "Sales", rows: rows([
-        ["Gross sales", thb(r.gross)], ["Discount", `- ${thb(r.discount)}`], ["Member discount", `- ${thb(r.member)}`],
+        ["Gross sales", thb(r.gross)], ["Discount", `- ${thb(r.discount)}`], ["Member discount", `- ${thb(r.member)}`], ["Coupon", `- ${thb(r.coupon)}`],
         ...(r.vatIncluded > 0 ? [["VAT (7%) included", thb(r.vatIncluded)] as [string, string]] : []),
         ...(r.vatAdded > 0 ? [["VAT (7%) added", thb(r.vatAdded)] as [string, string]] : []), ["Net sales", thb(r.net), true],
       ]) },
       { title: "Payments", rows: rows([
-        ["Cash", thb(r.byMethod.cash)], ["QR PAYMENT", thb(getQrGrossReceived(r))],
+        ["QR PAYMENT", thb(getQrGrossReceived(r))],
         ...(r.qrByBucket ?? []).map((b) => [b.label, thb(b.gross), false, true] as [string, string, boolean, boolean]),
         ...(r.byMethod.gov_qr > 0 ? [["60/40 PAYMENT", thb(r.byMethod.gov_qr)] as [string, string]] : []),
         ...(r.tipTotal > 0 ? [["Tips collected (QR)", thb(r.tipTotal), false, true] as [string, string, boolean, boolean], ["Tips paid out (cash)", `- ${thb(r.tipTotal)}`, false, true] as [string, string, boolean, boolean], ["Net QR sales", thb(getNetQrSales(r)), true] as [string, string, boolean]] : []),
         ["Credit card", thb(getCardGrossReceived(r))],
         ...(r.cardTipTotal > 0 ? [["Tips collected (card)", thb(r.cardTipTotal), false, true] as [string, string, boolean, boolean], ["Tips paid out (cash)", `- ${thb(r.cardTipTotal)}`, false, true] as [string, string, boolean, boolean], ["Net card sales", thb(r.byMethod.card), true] as [string, string, boolean]] : []),
+        ["Cash", thb(r.byMethod.cash)],
       ]) },
       { title: "Other", rows: rows([
         ["Voids & Cancellations", thb(r.voids)], ["Refunds total", thb(r.refunds)], ["Bills", String(r.bills)],
@@ -149,12 +151,12 @@ async function openPrintWindow(
 ${row("Gross sales", thb(r.gross))}
 ${row("Discount", `- ${thb(r.discount)}`)}
 ${row("Member discount", `- ${thb(r.member)}`)}
+${row("Coupon", `- ${thb(r.coupon)}`)}
 ${r.vatIncluded > 0 ? row("VAT (7%) (included)", thb(r.vatIncluded)) : ""}
 ${r.vatAdded > 0 ? row("VAT (7%) (added)", thb(r.vatAdded)) : ""}
 ${row("Net sales", thb(r.net), true)}
 </table>
 <h2>Payments</h2><table>
-${row("Cash", thb(r.byMethod.cash))}
 ${row("QR PAYMENT", thb(getQrGrossReceived(r)))}
 ${(r.qrByBucket ?? []).map((b) => subRow(b.label, thb(b.gross))).join("")}
 ${r.byMethod.gov_qr > 0 ? row("60/40 PAYMENT", thb(r.byMethod.gov_qr)) : ""}
@@ -165,6 +167,7 @@ ${row("Credit card", thb(getCardGrossReceived(r)))}
 ${r.cardTipTotal > 0 ? row("  Tips collected (card)", thb(r.cardTipTotal)) : ""}
 ${r.cardTipTotal > 0 ? row("  Tips paid out (cash)", `- ${thb(r.cardTipTotal)}`) : ""}
 ${r.cardTipTotal > 0 ? row("  Net card sales", thb(r.byMethod.card), true) : ""}
+${row("Cash", thb(r.byMethod.cash))}
 </table>
 <h2>Other</h2><table>
 ${row("Voids &amp; Cancellations", thb(r.voids))}
@@ -299,7 +302,7 @@ function Reports() {
     const discountByStaff = [...discountByStaffMap.values()].sort((a, b) => b.amount - a.amount);
 
     return {
-      gross, net, discount, member, vatIncluded, vatAdded,
+      gross, net, discount, member, coupon: 0, vatIncluded, vatAdded,
       voids: (voids ?? []).reduce((x, v) => x + Number(v.amount), 0),
       refunds: (refunds ?? []).reduce((x, v) => x + Number(v.amount), 0),
       byMethod, openingFloat: Number(s.opening_float), bills: (bills ?? []).length,
@@ -524,6 +527,7 @@ function Reports() {
             </TabsContent>
           </>
         )}
+        <Row label="Coupon" value={`- ${thb(r.coupon)}`} />
       </Tabs>
 
       {/* Open register dialog — count starting cash */}
@@ -1833,7 +1837,6 @@ function ReportCard({ r }: { r: ReportData }) {
         {r.vatAdded > 0 && <Row label="VAT (7%) (added)" value={thb(r.vatAdded)} />}
         <Row label="Net sales" value={thb(r.net)} bold />
         <div className="border-t pt-2 mt-2" />
-        <Row label="Cash" value={thb(r.byMethod.cash)} />
         <Row label="QR PAYMENT" value={thb(getQrGrossReceived(r))} />
         {(r.qrByBucket ?? []).map((b) => (
           <SubRow key={b.label} label={b.label} value={thb(b.gross)} />
@@ -1850,6 +1853,7 @@ function ReportCard({ r }: { r: ReportData }) {
           <Row label="  ↳ Tips paid out (cash)" value={`- ${thb(r.cardTipTotal)}`} />
           <Row label="  ↳ Net card sales" value={thb(r.byMethod.card)} bold />
         </>}
+        <Row label="Cash" value={thb(r.byMethod.cash)} />
         <div className="border-t pt-2 mt-2" />
         <Row label="Voids & Cancellations" value={thb(r.voids)} />
         <Row label="Refunds total" value={thb(r.refunds)} />
