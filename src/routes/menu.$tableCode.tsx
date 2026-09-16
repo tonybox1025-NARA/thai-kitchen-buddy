@@ -19,7 +19,7 @@ export const Route = createFileRoute("/menu/$tableCode")({
   }),
 });
 
-type Menu = { id: string; category_id: string | null; name_th: string; name_en: string; price: number; image_url: string | null; sort: number };
+type Menu = { id: string; category_id: string | null; name_th: string; name_en: string; price: number; image_url: string | null; sort: number; is_set?: boolean };
 type Category = { id: string; name_th: string; name_en: string; sort: number };
 type AddonOption = { id: string; name: string; price: number };
 type AddonGroup = { id: string; name: string; kitchen_name: string | null; max_select: number; addon_options: AddonOption[] };
@@ -90,21 +90,23 @@ function QrSetDialog({ setDef, lang, tr, onClose, onConfirm }: {
   const [sides, setSides] = useState<SetItem[]>([]);
   const [drink, setDrink] = useState<SetItem | null>(null);
   const [rice, setRice] = useState<"rice" | "porridge">("rice");
+  const sideMin = setDef.sideMin ?? 2;
+  const sideMax = setDef.sideMax ?? 2;
 
   const toggleSide = (item: SetItem) => {
     setSides((prev) => {
       const exists = prev.some((s) => s.th === item.th);
       if (exists) return prev.filter((s) => s.th !== item.th);
-      if (prev.length >= 2) return prev;
+      if (prev.length >= sideMax) return prev;
       return [...prev, item];
     });
   };
 
-  const isReady = !!main && sides.length === 2 && (!setDef.hasDrink || !!drink);
+  const isReady = !!main && sides.length >= sideMin && sides.length <= sideMax && (!setDef.hasDrink || !!drink);
 
   const handleConfirm = () => {
     if (!isReady) return;
-    onConfirm({ set_id: setDef.id, main: main!, sides: sides as [SetItem, SetItem], drink: drink ?? undefined, rice });
+    onConfirm({ set_id: setDef.id, main: main!, sides, drink: drink ?? undefined, rice, rice_cost: setDef.riceCosts?.[rice] });
   };
 
   const pick = (item: SetItem) => lang === "th" ? item.th : item.en;
@@ -153,14 +155,14 @@ function QrSetDialog({ setDef, lang, tr, onClose, onConfirm }: {
           <section>
             <div className="flex items-center justify-between mb-2">
               <h3 className="font-semibold text-sm uppercase tracking-wide">{tr.set_sides}</h3>
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sides.length === 2 ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"}`}>
-                {sides.length === 2 ? `✓ 2/2` : `${sides.length}/2`}
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sides.length >= sideMin ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"}`}>
+                {sides.length >= sideMin ? `✓ ${sides.length}/${sideMax}` : `${sides.length}/${sideMax}`}
               </span>
             </div>
             <div className="grid grid-cols-1 gap-1.5">
               {setDef.sides.map((item) => {
                 const selected = sides.some((s) => s.th === item.th);
-                const disabled = !selected && sides.length >= 2;
+                const disabled = !selected && sides.length >= sideMax;
                 return (
                   <button
                     key={item.th}
@@ -191,7 +193,7 @@ function QrSetDialog({ setDef, lang, tr, onClose, onConfirm }: {
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-1.5">
-                {SET_C_DRINKS.map((item) => (
+                {(setDef.drinks ?? SET_C_DRINKS).map((item) => (
                   <button
                     key={item.th}
                     onClick={() => setDrink(item)}
@@ -329,7 +331,7 @@ function PopupHeroImage({ src }: { src: string }) {
 function CustomerMenu() {
   const { tableCode } = Route.useParams();
   const [lang, setLang] = useState<Lang>("th");
-  const [data, setData] = useState<{ table: { id: string; code: string }; categories: Category[]; menus: Menu[]; restaurant_name: string; addonsByMenuId: Record<string, AddonGroup[]> } | null>(null);
+  const [data, setData] = useState<{ table: { id: string; code: string }; categories: Category[]; menus: Menu[]; restaurant_name: string; addonsByMenuId: Record<string, AddonGroup[]>; setDefsByMenuId?: Record<string, SetDef> } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeCat, setActiveCat] = useState<string | "all">("all");
@@ -403,6 +405,12 @@ function CustomerMenu() {
   const cartCount = useMemo(() => cart.reduce((s, c) => s + c.qty, 0), [cart]);
 
   const openAdd = (m: Menu) => {
+    if (m.is_set) {
+      const published = data?.setDefsByMenuId?.[m.id];
+      if (published) { setSelectedSetDef(published); setSetMenuOrigin(m); return; }
+      toast.error(lang === "th" ? "ยังไม่มีข้อมูล SET จาก Manager" : "No Manager SET configuration published");
+      return;
+    }
     // Detect set-menu items by name (e.g. "Lon Moh - SET A", "SET B", etc.)
     const combined = `${m.name_en} ${m.name_th}`.toLowerCase();
     const setId = combined.includes("set a") ? "A" : combined.includes("set b") ? "B" : combined.includes("set c") ? "C" : null;

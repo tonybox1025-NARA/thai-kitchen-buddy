@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import { thb } from "@/lib/format";
-import { SETS, SET_C_DRINKS, type SetDef, type SetConfig, type SetItem } from "@/lib/set-menu";
+import { SET_C_DRINKS, type SetDef, type SetConfig, type SetItem } from "@/lib/set-menu";
 
 interface SetMenuDialogProps {
   setDef: SetDef | null;
@@ -20,33 +20,36 @@ export function SetMenuDialog({ setDef, onClose, onConfirm }: SetMenuDialogProps
   const [rice, setRice] = useState<"rice" | "porridge">("rice");
 
   const isOpen = !!setDef;
+  const sideMin = setDef?.sideMin ?? 2;
+  const sideMax = setDef?.sideMax ?? 2;
 
   const toggleSide = (item: SetItem) => {
     setSides((prev) => {
       const exists = prev.some((s) => s.th === item.th);
       if (exists) return prev.filter((s) => s.th !== item.th);
-      if (prev.length >= 2) return prev; // already 2 selected, ignore
+      if (prev.length >= sideMax) return prev;
       return [...prev, item];
     });
   };
 
   const isSideSelected = (item: SetItem) => sides.some((s) => s.th === item.th);
-  const isSideDisabled = (item: SetItem) => sides.length >= 2 && !isSideSelected(item);
+  const isSideDisabled = (item: SetItem) => sides.length >= sideMax && !isSideSelected(item);
 
   const canConfirm =
     !!main &&
-    sides.length === 2 &&
+    sides.length >= sideMin && sides.length <= sideMax &&
     (!setDef?.hasDrink || !!drink);
 
   const handleConfirm = () => {
-    if (!setDef || !main || sides.length !== 2) return;
+    if (!setDef || !main || sides.length < sideMin || sides.length > sideMax) return;
     if (setDef.hasDrink && !drink) return;
     onConfirm({
       set_id: setDef.id,
       main,
-      sides: sides as [SetItem, SetItem],
+      sides,
       drink: drink ?? undefined,
       rice,
+      rice_cost: setDef.riceCosts?.[rice],
     });
   };
 
@@ -106,8 +109,8 @@ export function SetMenuDialog({ setDef, onClose, onConfirm }: SetMenuDialogProps
           <section>
             <div className="flex items-center justify-between mb-2">
               <h3 className="font-semibold text-sm">{t("set_side_dish")}</h3>
-              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${sidesDoneCount === 2 ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" : "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300"}`}>
-                {sidesDoneCount === 2 ? `✓ 2/2` : `${sidesDoneCount}/2`}
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${sidesDoneCount >= sideMin ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" : "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300"}`}>
+                {sidesDoneCount >= sideMin ? `✓ ${sidesDoneCount}/${sideMax}` : `${sidesDoneCount}/${sideMax}`}
               </span>
             </div>
             <div className="space-y-2">
@@ -144,7 +147,7 @@ export function SetMenuDialog({ setDef, onClose, onConfirm }: SetMenuDialogProps
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-2">
-                {SET_C_DRINKS.map((item) => {
+                {(setDef.drinks ?? SET_C_DRINKS).map((item) => {
                   const selected = drink?.th === item.th;
                   return (
                     <button

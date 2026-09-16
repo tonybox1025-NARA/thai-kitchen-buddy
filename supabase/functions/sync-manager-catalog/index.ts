@@ -87,7 +87,9 @@ Deno.serve(async (req) => {
         || target.image_url !== (menu.image_url || null)
         || target.available !== sellable || target.sort !== (menu.sort_order ?? 0)
         || target.is_set !== (menu.is_set === true) || target.is_set_child !== (menu.is_set_child === true);
-      return { source: menu, target, action: !target && !sellable ? "skip" : !target ? "create" : changed ? "update" : "same" };
+      // SET children are intentionally hidden from sale, but they still need a
+      // POS row so the Manager's set composition can reference them.
+      return { source: menu, target, action: !target && !sellable && menu.is_set_child !== true ? "skip" : !target ? "create" : changed ? "update" : "same" };
     });
     const costChanges = menuPlan
       .filter((item: any) => item.target && Math.abs(Number(item.target.cost ?? 0) - Number(item.source.food_cost ?? 0)) >= 0.005)
@@ -114,6 +116,14 @@ Deno.serve(async (req) => {
       menus: { total: menuPlan.length, create: menuPlan.filter((item: any) => item.action === "create").length, update: menuPlan.filter((item: any) => item.action === "update").length, same: menuPlan.filter((item: any) => item.action === "same").length, skipped: menuPlan.filter((item: any) => item.action === "skip").length },
       categories: { total: categoryNames.length, create: categoryNames.filter((name) => !categoryByName.has(normalize(name))).length },
       addons: { groups: (catalog.addonGroups ?? []).length, options: (catalog.addonOptions ?? []).length, links: (catalog.menuAddons ?? []).length },
+      sets: {
+        parents: new Set((catalog.setItems ?? []).map((item: any) => item.set_menu_id)).size,
+        items: (catalog.setItems ?? []).length,
+        unresolved: (catalog.setItems ?? []).filter((item: any) =>
+          !catalog.menus.some((menu: any) => menu.id === item.set_menu_id)
+          || !catalog.menus.some((menu: any) => menu.id === item.child_menu_id)
+        ).length,
+      },
       costs: {
         changed: costChanges.length,
         sellableChanged: sellableCostChanges.length,
@@ -211,6 +221,35 @@ Deno.serve(async (req) => {
     }
 
     const posMenuIdByManagerId = new Map(menuMappings.map((mapping) => [mapping.managerId, mapping.posId]));
+
+    const setParentIds = [...new Set((catalog.setItems ?? [])
+      .map((item: any) => posMenuIdByManagerId.get(item.set_menu_id))
+      .filter(Boolean))] as string[];
+    if (setParentIds.length > 0) {
+      const { error } = await db.from("menu_set_items").delete().in("set_menu_id", setParentIds);
+      if (error) throw new Error(`set items delete: ${errorMessage(error)}`);
+    }
+    const setRows = (catalog.setItems ?? []).flatMap((item: any) => {
+      const setMenuId = posMenuIdByManagerId.get(item.set_menu_id);
+      const childMenuId = posMenuIdByManagerId.get(item.child_menu_id);
+      if (!setMenuId || !childMenuId) return [];
+      return [{
+        manager_set_item_id: item.id,
+        set_menu_id: setMenuId,
+        child_menu_id: childMenuId,
+        quantity: Math.max(1, Number(item.quantity) || 1),
+        group_key: item.group_key || "items",
+        group_name: item.group_name || "Items",
+        min_select: Math.max(0, Number(item.min_select) || 0),
+        max_select: Math.max(1, Number(item.max_select) || 1),
+        sort_order: Number(item.sort_order) || 0,
+      }];
+    });
+    if (setRows.length > 0) {
+      const { error } = await db.from("menu_set_items").insert(setRows);
+      if (error) throw new Error(`set items insert: ${errorMessage(error)}`);
+    }
+
     const synchronizedMenuIds = [...posMenuIdByManagerId.values()];
     if (synchronizedMenuIds.length > 0) {
       const { error: deleteError } = await db.from("menu_addons").delete().in("menu_id", synchronizedMenuIds);

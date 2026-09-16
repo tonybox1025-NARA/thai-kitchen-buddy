@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { createFileRoute } from "@tanstack/react-router";
 import type { Database } from "@/integrations/supabase/types";
+import { buildSetDef, type SetItemRow } from "@/lib/set-menu";
 
 function createPublicServerClient() {
   const url =
@@ -51,7 +52,7 @@ export const Route = createFileRoute("/api/public/qr-menu/$tableCode")({
           supabase.from("categories").select("id,name_th,name_en,sort").order("sort"),
           supabase
             .from("menus")
-            .select("id,category_id,name_th,name_en,price,available,sort,image_url")
+            .select("id,category_id,name_th,name_en,price,available,sort,image_url,is_set")
             .eq("available", true)
             .order("sort"),
           supabase.from("settings").select("restaurant_name").eq("id", 1).maybeSingle(),
@@ -65,6 +66,7 @@ export const Route = createFileRoute("/api/public/qr-menu/$tableCode")({
         // steps (same as the staff order screen).
         const menuIds = (menus ?? []).map((m: { id: string }) => m.id);
         const addonsByMenuId: Record<string, unknown[]> = {};
+        const setDefsByMenuId: Record<string, unknown> = {};
         if (menuIds.length > 0) {
           const { data: links } = await db
             .from("menu_addons")
@@ -88,6 +90,27 @@ export const Route = createFileRoute("/api/public/qr-menu/$tableCode")({
           }
         }
 
+        const setMenus = (menus ?? []).filter((menu: any) => menu.is_set);
+        if (setMenus.length > 0) {
+          const { data: setLinks } = await db.from("menu_set_items")
+            .select("set_menu_id,child_menu_id,quantity,group_key,group_name,min_select,max_select,sort_order")
+            .in("set_menu_id", setMenus.map((menu: any) => menu.id))
+            .order("sort_order");
+          const childIds = [...new Set(((setLinks ?? []) as any[]).map((row) => row.child_menu_id))];
+          const { data: children } = childIds.length > 0
+            ? await db.from("menus").select("id,name_th,name_en,cost").in("id", childIds)
+            : { data: [] };
+          const childById = new Map(((children ?? []) as any[]).map((child) => [child.id, child]));
+          for (const menu of setMenus as any[]) {
+            const rows = ((setLinks ?? []) as any[]).filter((row) => row.set_menu_id === menu.id).flatMap((row) => {
+              const child = childById.get(row.child_menu_id);
+              return child ? [{ ...row, child }] : [];
+            }) as SetItemRow[];
+            const definition = buildSetDef(menu, rows);
+            if (definition) setDefsByMenuId[menu.id] = definition;
+          }
+        }
+
         const usedCategoryIds = new Set((menus ?? []).map((menu) => menu.category_id).filter(Boolean));
         const visibleCategories = (cats ?? []).filter((category) => usedCategoryIds.has(category.id));
 
@@ -98,6 +121,7 @@ export const Route = createFileRoute("/api/public/qr-menu/$tableCode")({
             menus: menus ?? [],
             restaurant_name: settings?.restaurant_name ?? "Restaurant",
             addonsByMenuId,
+            setDefsByMenuId,
           },
           {
             headers: {

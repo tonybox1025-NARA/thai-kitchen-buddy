@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Plus, Minus, Trash2, ChefHat, Receipt, ArrowLeft, AlertTriangle, ArrowLeftRight, X, Printer, Eye, Layers, Bell, QrCode, Check } from "lucide-react";
 import { ManagerPinDialog } from "@/components/ManagerPinDialog";
 import { SetMenuDialog } from "@/components/SetMenuDialog";
-import { SETS, setConfigCost, type SetConfig } from "@/lib/set-menu";
+import { SETS, buildSetDef, setConfigCost, type SetConfig, type SetDef, type SetItemRow } from "@/lib/set-menu";
 import { printCounter, printCounterJobs, printKitchenJobs, type CounterPrintPayload } from "@/lib/counter-printer";
 import { isFrontCounterCategory } from "@/lib/print/routing";
 import { isOffline } from "@/lib/online-status";
@@ -65,7 +65,7 @@ const CATEGORY_PRESENTATION: Record<string, { order: number; en: string }> = {
   "d95561e7-c21b-4413-a81c-6053f1982cfe": { order: 150, en: "Add-ons" },
 };
 
-type Menu = { id: string; category_id: string | null; name_th: string; name_en: string; name_my: string; price: number; cost?: number; available: boolean; image_url: string | null; sort: number };
+type Menu = { id: string; category_id: string | null; name_th: string; name_en: string; name_my: string; price: number; cost?: number; available: boolean; image_url: string | null; sort: number; is_set?: boolean };
 type Category = { id: string; name_th: string; name_en: string; name_my: string; sort: number; kitchen_zone_id?: string | null };
 
 function categoryLabel(category: Category, lang: "th" | "en") {
@@ -135,7 +135,7 @@ function OrderPage() {
   const [closePreset, setClosePreset] = useState("");
   const [moveTableOpen, setMoveTableOpen] = useState(false);
   const [availableTables, setAvailableTables] = useState<{ id: string; code: string }[]>([]);
-  const [selectedSet, setSelectedSet] = useState<typeof SETS[0] | null>(null);
+  const [selectedSet, setSelectedSet] = useState<SetDef | null>(null);
 
   // Bill preview
   const [billOpen, setBillOpen] = useState(false);
@@ -268,6 +268,23 @@ function OrderPage() {
   }, [cats]);
 
   const openMenu = async (m: Menu) => {
+    if (m.is_set) {
+      const db = supabase as any;
+      const { data: links } = await db.from("menu_set_items").select("set_menu_id,child_menu_id,quantity,group_key,group_name,min_select,max_select,sort_order").eq("set_menu_id", m.id).order("sort_order");
+      const childIds = [...new Set(((links ?? []) as any[]).map((row) => row.child_menu_id))];
+      if (childIds.length > 0) {
+        const { data: children } = await db.from("menus").select("id,name_th,name_en,cost").in("id", childIds);
+        const childById = new Map(((children ?? []) as any[]).map((child) => [child.id, child]));
+        const rows = ((links ?? []) as any[]).flatMap((row) => {
+          const child = childById.get(row.child_menu_id);
+          return child ? [{ ...row, child }] : [];
+        }) as SetItemRow[];
+        const published = buildSetDef(m, rows);
+        if (published) { setSelectedSet(published); return; }
+      }
+      toast.error(lang === "th" ? "ยังไม่มีข้อมูล SET จาก Manager" : "No Manager SET configuration published");
+      return;
+    }
     // Detect set-menu items by name (e.g. "Lon Moh - SET A", "Lon Moh - SET B", "Lon Moh - SET C")
     const combined = `${m.name_en} ${m.name_th}`.toLowerCase();
     const setId = combined.includes("set a") ? "A" : combined.includes("set b") ? "B" : combined.includes("set c") ? "C" : null;
@@ -343,7 +360,8 @@ function OrderPage() {
   };
 
   const addSetToOrder = async (config: SetConfig) => {
-    const setDef = SETS.find(s => s.id === config.set_id)!;
+    const setDef = selectedSet ?? SETS.find(s => s.id === config.set_id);
+    if (!setDef) return;
     const riceNote = config.rice === "rice" ? "ข้าวสวย" : "โจ๊ก";
     const kitchenNotes = [
       `หลัก: ${config.main.th}`,
@@ -353,7 +371,7 @@ function OrderPage() {
     ].join("\n");
     const { error } = await (supabase as any).from("order_items").insert({
       order_id: orderId,
-      menu_id: null,
+      menu_id: setDef.menu_id ?? null,
       name_th: setDef.name_th,
       name_en: setDef.name_en,
       name_my: setDef.name_en,

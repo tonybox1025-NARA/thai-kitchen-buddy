@@ -1,22 +1,83 @@
-export type SetItem = { th: string; en: string; cost: number };
+export type SetItem = { id?: string; th: string; en: string; cost: number };
 
 export type SetConfig = {
-  set_id: "A" | "B" | "C";
+  set_id: string;
   main: SetItem;
-  sides: [SetItem, SetItem];   // exactly 2
+  sides: SetItem[];
   drink?: SetItem;              // SET C only
   rice: "rice" | "porridge";
+  rice_cost?: number;
 };
 
 export type SetDef = {
-  id: "A" | "B" | "C";
+  id: string;
+  menu_id?: string;
   price: number;
   name_th: string;
   name_en: string;
   mains: SetItem[];
   sides: SetItem[];
+  sideMin?: number;
+  sideMax?: number;
   hasDrink: boolean;
+  drinks?: SetItem[];
+  riceCosts?: Partial<Record<"rice" | "porridge", number>>;
 };
+
+export type SetItemRow = {
+  set_menu_id: string;
+  child_menu_id: string;
+  quantity: number;
+  group_key: string;
+  group_name: string;
+  min_select: number;
+  max_select: number;
+  sort_order: number;
+  child: { id: string; name_th: string; name_en: string; cost?: number | null };
+};
+
+const cleanSetChildName = (value: string) => value.replace(/^\s*SET\s+/i, "").trim();
+
+/** Build the POS selector directly from Manager-published SET rows. */
+export function buildSetDef(
+  parent: { id: string; name_th: string; name_en: string; price: number },
+  rows: SetItemRow[],
+): SetDef | null {
+  if (rows.length === 0) return null;
+  const group = (key: string) => rows.filter((row) => row.group_key.toLowerCase() === key);
+  const toItem = (row: SetItemRow): SetItem => ({
+    id: row.child.id,
+    th: cleanSetChildName(row.child.name_th),
+    en: cleanSetChildName(row.child.name_en || row.child.name_th),
+    cost: Number(row.child.cost ?? 0) * Math.max(1, Number(row.quantity) || 1),
+  });
+  const mainRows = group("main");
+  const sideRows = group("side");
+  const drinkRows = group("drink");
+  const riceRows = group("rice");
+  if (mainRows.length === 0 || sideRows.length === 0) return null;
+  const setCode = /set\s*([a-z0-9]+)/i.exec(`${parent.name_en} ${parent.name_th}`)?.[1]?.toUpperCase() ?? parent.id;
+  const riceCosts: SetDef["riceCosts"] = {};
+  for (const row of riceRows) {
+    const name = `${row.child.name_th} ${row.child.name_en}`.toLowerCase();
+    if (name.includes("ข้าวสวย") || name.includes("steamed")) riceCosts.rice = toItem(row).cost;
+    if (name.includes("ข้าวต้ม") || name.includes("porridge")) riceCosts.porridge = toItem(row).cost;
+  }
+  return {
+    id: setCode,
+    menu_id: parent.id,
+    price: Number(parent.price),
+    name_th: parent.name_th,
+    name_en: parent.name_en,
+    mains: mainRows.map(toItem),
+    sides: sideRows.map(toItem),
+    sideMin: Number(sideRows[0]?.min_select ?? 1),
+    sideMax: Number(sideRows[0]?.max_select ?? 2),
+    hasDrink: drinkRows.length > 0,
+    drinks: drinkRows.map(toItem),
+    riceCosts,
+  };
+}
 
 // cost = the SET (small-portion) child-menu food cost, in THB (from Manager catalog).
 const GROUP_A_MAINS: SetItem[] = [
@@ -61,19 +122,23 @@ export const SETS: SetDef[] = [
     id: "A", price: 99, name_th: "เซ็ต A", name_en: "SET A",
     mains: GROUP_A_MAINS,
     sides: GROUP_A_SIDES,
+    sideMin: 2, sideMax: 2,
     hasDrink: false,
   },
   {
     id: "B", price: 139, name_th: "เซ็ต B", name_en: "SET B",
     mains: [...GROUP_A_MAINS, ...GROUP_B_MAINS],
     sides: [...GROUP_A_SIDES, ...GROUP_B_SIDES],
+    sideMin: 2, sideMax: 2,
     hasDrink: false,
   },
   {
     id: "C", price: 199, name_th: "เซ็ต C", name_en: "SET C",
     mains: [...GROUP_A_MAINS, ...GROUP_B_MAINS, ...GROUP_C_MAINS],
     sides: [...GROUP_A_SIDES, ...GROUP_B_SIDES, ...GROUP_C_SIDES],
+    sideMin: 2, sideMax: 2,
     hasDrink: true,
+    drinks: SET_C_DRINKS,
   },
 ];
 
@@ -90,7 +155,7 @@ export function setConfigCost(cfg: SetConfig): number {
     (cfg.main?.cost ?? 0) +
     (cfg.sides?.[0]?.cost ?? 0) +
     (cfg.sides?.[1]?.cost ?? 0) +
-    (SET_RICE_COST[cfg.rice] ?? 0) +
+    (cfg.rice_cost ?? SET_RICE_COST[cfg.rice] ?? 0) +
     (cfg.drink?.cost ?? 0);
   return Math.round(sum * 100) / 100;
 }
@@ -111,15 +176,16 @@ const SET_COST_BY_TH: Map<string, number> = new Map(
  * looking each component up by name. Same total as setConfigCost.
  */
 export function setCostFromLabels(sc: {
-  main?: { th?: string | null } | null;
-  sides?: ({ th?: string | null } | null)[] | null;
-  drink?: { th?: string | null } | null;
+  main?: { th?: string | null; cost?: number | null } | null;
+  sides?: ({ th?: string | null; cost?: number | null } | null)[] | null;
+  drink?: { th?: string | null; cost?: number | null } | null;
   rice?: string | null;
+  rice_cost?: number | null;
 }): number {
   let sum = 0;
-  if (sc?.main?.th) sum += SET_COST_BY_TH.get(sc.main.th) ?? 0;
-  for (const side of sc?.sides ?? []) if (side?.th) sum += SET_COST_BY_TH.get(side.th) ?? 0;
-  if (sc?.drink?.th) sum += SET_COST_BY_TH.get(sc.drink.th) ?? 0;
-  if (sc?.rice === "rice" || sc?.rice === "porridge") sum += SET_RICE_COST[sc.rice] ?? 0;
+  if (sc?.main?.th) sum += Number(sc.main.cost ?? SET_COST_BY_TH.get(sc.main.th) ?? 0);
+  for (const side of sc?.sides ?? []) if (side?.th) sum += Number(side.cost ?? SET_COST_BY_TH.get(side.th) ?? 0);
+  if (sc?.drink?.th) sum += Number(sc.drink.cost ?? SET_COST_BY_TH.get(sc.drink.th) ?? 0);
+  if (sc?.rice === "rice" || sc?.rice === "porridge") sum += Number(sc.rice_cost ?? SET_RICE_COST[sc.rice] ?? 0);
   return Math.round(sum * 100) / 100;
 }
