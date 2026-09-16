@@ -380,7 +380,7 @@ function enqueueJob(job) {
       // Some ESC/POS printers drop a second connection opened immediately
       // after the previous ticket. Keep all destinations serialized because
       // counter and kitchen can share one printer during field testing.
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      await new Promise((resolve) => setTimeout(resolve, 750));
     } finally {
       queuedJobIds.delete(job.id);
     }

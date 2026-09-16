@@ -225,14 +225,16 @@ export const Route = createFileRoute("/api/public/qr-order")({
         }
         const foodLines = lines.filter((line) => line.printToKitchen).map(stripZone);
         const frontLines = lines.filter((line) => !line.printToKitchen).map(stripZone);
+        // Keep the two counter papers separate: kitchen-food checklist first,
+        // then the front-prepared drinks/rice/ice/dessert ticket.
         const counterJobs = [
           ...(foodLines.length ? [{
             printer: "counter" as const,
-            payload: { ...ticketPayload, ticket_type: "kitchen_check", route_version: 2, lines: foodLines, language: "my", department: "KITCHEN CHECK", station: "KITCHEN CHECK", footer: "counter" },
+            payload: { ...ticketPayload, ticket_type: "kitchen_check", route_version: 3, lines: foodLines, language: "my", department: "KITCHEN CHECK", station: "KITCHEN CHECK", footer: "counter" },
           }] : []),
           ...(frontLines.length ? [{
             printer: "counter" as const,
-            payload: { ...ticketPayload, ticket_type: "front", route_version: 2, lines: frontLines, language: "th", department: "FRONT", station: "FRONT", footer: "counter" },
+            payload: { ...ticketPayload, ticket_type: "front", route_version: 3, lines: frontLines, language: "th", department: "COUNTER", station: "COUNTER", footer: "counter" },
           }] : []),
         ];
         const kitchenJobs = [...grouped.values()].map((group, index, all) => ({
@@ -262,7 +264,7 @@ export const Route = createFileRoute("/api/public/qr-order")({
           const { error: printErr } = await (supabase as any).from("print_jobs").insert(printJobs[index]);
           if (printErr) return new Response(`Print queue error: ${printErr.message}`, { status: 500 });
           if (index < printJobs.length - 1) {
-            await new Promise((resolve) => setTimeout(resolve, 400));
+            await new Promise((resolve) => setTimeout(resolve, 750));
           }
         }
 

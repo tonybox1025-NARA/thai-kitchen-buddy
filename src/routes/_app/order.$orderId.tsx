@@ -447,14 +447,16 @@ function OrderPage() {
       },
     }));
 
-    // Counter output mirrors MERI: one kitchen-food checklist for the waitress,
-    // plus one consolidated ticket for everything prepared at the front.
+    // Counter output is deliberately two separate paper tickets:
+    // 1) kitchen-food checklist, 2) front-prepared drinks/rice/desserts.
+    // printCounterJobs sends both documents in one native transport write, with
+    // an ESC/POS cut command at the end of each document, so neither is dropped.
     const counterTickets: CounterPrintPayload[] = [];
     const foodLines = lines.filter((line) => line.printToKitchen).map(stripZone);
     if (foodLines.length) counterTickets.push({
       ...baseTicket,
       ticket_type: "kitchen_check",
-      route_version: 2,
+      route_version: 3,
       lines: foodLines,
       language: "my",
       department: "KITCHEN CHECK",
@@ -465,11 +467,11 @@ function OrderPage() {
     if (frontLines.length) counterTickets.push({
       ...baseTicket,
       ticket_type: "front",
-      route_version: 2,
+      route_version: 3,
       lines: frontLines,
       language: "th",
-      department: "FRONT",
-      station: "FRONT",
+      department: "COUNTER",
+      station: "COUNTER",
       footer: "counter",
     });
     // Route through the active transport: direct raster print in the APK, or the
