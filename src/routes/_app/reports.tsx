@@ -316,12 +316,28 @@ function Reports() {
 
   const openTotal = DENOMS.reduce((sum, d) => sum + d * (openCashCount[d] || 0), 0);
 
-  const printOpenSlip = (s: Shift, counts: Record<number, number>) => {
+  const printOpenSlip = async (s: Shift, counts: Record<number, number>) => {
     const total = DENOMS.reduce((sum, d) => sum + d * (counts[d] || 0), 0);
     const denomRows = DENOMS.filter((d) => (counts[d] ?? 0) > 0)
       .map((d) => `<tr><td>${d}฿ × ${counts[d]}</td><td style="text-align:right">${thb(d * counts[d])}</td></tr>`)
       .join("") || `<tr><td colspan="2" style="color:#888">—</td></tr>`;
     const when = new Date(s.opened_at ?? new Date().toISOString()).toLocaleString();
+    if (canPrintDirect()) {
+      const countRows = DENOMS.filter((d) => (counts[d] ?? 0) > 0)
+        .map((d) => ({ label: `${d} THB x ${counts[d]}`, value: thb(d * counts[d]) }));
+      await printDirect("counter", {
+        kind: "report",
+        restaurant: restaurantName || "Restaurant",
+        report_type: "OPEN",
+        business_day: s.business_day,
+        printed_at: s.opened_at ?? new Date().toISOString(),
+        sections: [{
+          title: t("cash_count"),
+          rows: [...countRows, { label: t("starting_cash"), value: thb(total), bold: true }],
+        }],
+      });
+      return;
+    }
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>Open Shift</title>
 <style>body{font-family:ui-sans-serif,system-ui;padding:24px;max-width:360px;margin:auto}h1{font-size:20px;margin:0 0 4px;text-align:center}h2{font-size:14px;margin:12px 0 4px;border-bottom:1px solid #ccc;padding-bottom:2px}.meta{text-align:center;font-size:12px;color:#555;margin-bottom:10px}table{width:100%;border-collapse:collapse;font-size:13px}td{padding:2px 0}.tot td{border-top:1px solid #000;padding-top:6px;font-size:16px;font-weight:700}</style>
 </head><body>
@@ -342,7 +358,11 @@ function Reports() {
       .select("*").single();
     if (error || !newShift) { toast.error(error?.message ?? t("rep_load_failed")); return; }
     setShift(newShift as Shift);
-    printOpenSlip(newShift as Shift, openCashCount);
+    try {
+      await printOpenSlip(newShift as Shift, openCashCount);
+    } catch (printError) {
+      toast.error(printError instanceof Error ? `Shift opened, but printing failed: ${printError.message}` : "Shift opened, but printing failed");
+    }
     setOpenDlg(false); setOpenCashCount({});
     toast.success(t("rep_shift_opened"));
   };

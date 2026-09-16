@@ -120,7 +120,7 @@ export type TableQrPayload = {
 export type ReportPayload = {
   kind: "report";
   restaurant?: string;
-  report_type: "X" | "Z";
+  report_type: "X" | "Z" | "OPEN";
   business_day: string;
   printed_at?: string;
   sections: {
@@ -594,7 +594,8 @@ export async function buildReport(p: ReportPayload): Promise<Uint8Array> {
   const printedAt = p.printed_at ? new Date(p.printed_at) : new Date();
 
   d.text(p.restaurant || "Restaurant", S.big, "center");
-  d.text(`${p.report_type} REPORT`, S.xl, "center");
+  const reportTitle = p.report_type === "OPEN" ? "OPEN SHIFT" : `${p.report_type} REPORT`;
+  d.text(reportTitle, S.xl, "center");
   d.text(`Business day ${p.business_day}`, S.small, "center");
   d.text(`${fmtDate(printedAt)} ${fmtTime(printedAt)}`, S.small, "center");
   d.rule(true);
@@ -607,7 +608,7 @@ export async function buildReport(p: ReportPayload): Promise<Uint8Array> {
     d.rule();
   }
 
-  d.text(`${p.report_type} REPORT`, S.bold, "center");
+  d.text(reportTitle, S.bold, "center");
   return Uint8Array.from([...INIT, ...d.toLegacyRaster(), 0x0a, 0x0a, ...CUT]);
 }
 
