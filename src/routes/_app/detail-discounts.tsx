@@ -16,7 +16,7 @@ export const Route = createFileRoute("/_app/detail-discounts")({
 });
 
 type DiscRow = {
-  type: "percent" | "fixed" | "free_item" | "member";
+  type: "percent" | "fixed" | "free_item" | "coupon" | "member";
   label: string;
   amount: number;
   staffName: string;
@@ -29,6 +29,7 @@ const TYPE_CLS: Record<string, string> = {
   percent:   "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
   fixed:     "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
   free_item: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
+  coupon:    "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",
   member:    "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
 };
 
@@ -45,6 +46,7 @@ function DiscountsDetail() {
     percent:   t("disc_pct"),
     fixed:     t("disc_fixed"),
     free_item: t("disc_free_item"),
+    coupon:    "Coupon",
     member:    t("disc_member"),
   };
 
@@ -104,11 +106,13 @@ function DiscountsDetail() {
 
         for (const d of (discounts as any[] ?? [])) {
           let label = "";
-          if (d.type === "percent")   label = `${d.percent_value}%`;
-          else if (d.type === "fixed") label = thb(d.fixed_value ?? 0);
+          const type = d.type === "fixed" && d.free_item_name === "__coupon__" ? "coupon" : d.type;
+          if (type === "percent")   label = `${d.percent_value}%`;
+          else if (type === "fixed") label = thb(d.fixed_value ?? 0);
+          else if (type === "coupon") label = `Coupon ${thb(d.fixed_value ?? d.amount)}`;
           else label = d.free_item_name ?? t("disc_free_item");
           result.push({
-            type: d.type, label, amount: Number(d.amount),
+            type, label, amount: Number(d.amount),
             staffName: d.applied_by ? (staffMap.get(d.applied_by) ?? "—") : "—",
             tableCode: getTableCode(d.bill_id),
             billId: d.bill_id,
@@ -135,7 +139,7 @@ function DiscountsDetail() {
   }, [bounds, range, custom]);
 
   const totals = useMemo(() => {
-    const tot = { percent: 0, fixed: 0, free_item: 0, member: 0, grand: 0 };
+    const tot = { percent: 0, fixed: 0, free_item: 0, coupon: 0, member: 0, grand: 0 };
     rows.forEach(r => { tot[r.type] += r.amount; tot.grand += r.amount; });
     return tot;
   }, [rows]);
@@ -153,8 +157,8 @@ function DiscountsDetail() {
       {loading ? <p className="text-muted-foreground text-sm text-center py-8">{t("loading")}</p> : (
         <>
           {/* Summary */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {(["percent","fixed","free_item","member"] as const).map(type => (
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            {(["percent","fixed","free_item","coupon","member"] as const).map(type => (
               totals[type] > 0 && (
                 <Card key={type}>
                   <CardContent className="pt-5">

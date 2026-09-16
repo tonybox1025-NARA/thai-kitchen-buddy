@@ -185,7 +185,7 @@ function PaymentPage() {
 
   // Discount dialog
   const [discDlgOpen, setDiscDlgOpen] = useState(false);
-  const [discDlgTab, setDiscDlgTab] = useState<"percent" | "fixed" | "free_item">("percent");
+  const [discDlgTab, setDiscDlgTab] = useState<"percent" | "fixed" | "free_item" | "coupon">("percent");
   const [discPctInput, setDiscPctInput] = useState(0);
   const [discFixedInput, setDiscFixedInput] = useState(0);
   const [discFreeItemId, setDiscFreeItemId] = useState<string>("");
@@ -327,7 +327,7 @@ function PaymentPage() {
   const discPreviewAmt = (() => {
     const maxDiscountAmount = roundMoney(subtotal * (settingsMaxDiscountPercent / 100));
     if (discDlgTab === "percent") return Math.min(roundMoney((subtotal * discPctInput) / 100), maxDiscountAmount);
-    if (discDlgTab === "fixed") return Math.min(discFixedInput, subtotal, maxDiscountAmount);
+    if (discDlgTab === "fixed" || discDlgTab === "coupon") return Math.min(discFixedInput, subtotal, maxDiscountAmount);
     const fi = items.find((i) => i.id === discFreeItemId);
     return fi ? Math.min(fi.qty * Number(fi.unit_price), maxDiscountAmount) : 0;
   })();
@@ -354,7 +354,7 @@ function PaymentPage() {
       }
       amount = roundMoney((subtotal * discPctInput) / 100);
       extras.percent_value = discPctInput;
-    } else if (discDlgTab === "fixed") {
+    } else if (discDlgTab === "fixed" || discDlgTab === "coupon") {
       if (discFixedInput <= 0) { toast.error(lang === "th" ? "ใส่จำนวนเงิน" : "Enter an amount"); return; }
       amount = Math.min(discFixedInput, subtotal, roundMoney(subtotal * (settingsMaxDiscountPercent / 100)));
       extras.fixed_value = discFixedInput;
@@ -373,13 +373,21 @@ function PaymentPage() {
 
     // Delete any existing discount for this bill, then insert new one
     await (supabase as any).from("bill_discounts").delete().eq("bill_id", bill.id);
-    await (supabase as any).from("bill_discounts").insert({
+    const isCoupon = discDlgTab === "coupon";
+    const { error: discountError } = await (supabase as any).from("bill_discounts").insert({
       bill_id: bill.id,
-      type: discDlgTab,
+      // Keep the existing database constraint compatible. The marker lets the
+      // app and reports distinguish coupons from ordinary fixed discounts.
+      type: isCoupon ? "fixed" : discDlgTab,
       amount,
       applied_by: staff.id,
+      ...(isCoupon ? { free_item_name: "__coupon__" } : {}),
       ...extras,
     });
+    if (discountError) {
+      toast.error(lang === "th" ? "บันทึกคูปองไม่สำเร็จ" : "Could not save discount");
+      return;
+    }
 
     // Recompute totals with new discount and persist to bill
     const newAfterDisc = Math.max(0, subtotal - amount - memberDisc - pointsDiscount);
@@ -434,7 +442,7 @@ function PaymentPage() {
   const openDiscountDialog = () => {
     // Pre-fill inputs from existing discount if any
     if (appliedDiscount) {
-      setDiscDlgTab(appliedDiscount.type);
+      setDiscDlgTab(appliedDiscount.free_item_name === "__coupon__" ? "coupon" : appliedDiscount.type);
       setDiscPctInput(appliedDiscount.percent_value ?? 0);
       setDiscFixedInput(appliedDiscount.fixed_value ?? 0);
       setDiscFreeItemId(appliedDiscount.free_item_id ?? "");
@@ -450,6 +458,7 @@ function PaymentPage() {
   // ── Discount label helpers ──────────────────────────────────────────────────
   const discTypeLabel = (d: BillDiscount) => {
     if (d.type === "percent") return `${d.percent_value ?? ""}%`;
+    if (d.free_item_name === "__coupon__") return `Coupon ${thb(d.fixed_value ?? d.amount)}`;
     if (d.type === "fixed")   return thb(d.fixed_value ?? 0);
     return d.free_item_name ?? (lang === "th" ? "แถมฟรี" : "Free item");
   };
@@ -750,7 +759,8 @@ function PaymentPage() {
                     <Tag className="h-3.5 w-3.5 shrink-0" />
                     <span className="font-medium">
                       {appliedDiscount.type === "percent" && `${t("disc_pct")} (${appliedDiscount.percent_value}%)`}
-                      {appliedDiscount.type === "fixed"   && `${t("disc_fixed")} (${thb(appliedDiscount.fixed_value ?? 0)})`}
+                      {appliedDiscount.type === "fixed" && appliedDiscount.free_item_name !== "__coupon__" && `${t("disc_fixed")} (${thb(appliedDiscount.fixed_value ?? 0)})`}
+                      {appliedDiscount.free_item_name === "__coupon__" && `Coupon (${thb(appliedDiscount.fixed_value ?? appliedDiscount.amount)})`}
                       {appliedDiscount.type === "free_item" && `${t("disc_free_item")}: ${appliedDiscount.free_item_name ?? ""}`}
                     </span>
                     {appliedDiscount.applied_by_name && (
@@ -1081,10 +1091,11 @@ function PaymentPage() {
           </p>
 
           <Tabs value={discDlgTab} onValueChange={(v) => setDiscDlgTab(v as typeof discDlgTab)}>
-            <TabsList className="grid grid-cols-3 w-full">
+            <TabsList className="grid grid-cols-4 w-full">
               <TabsTrigger value="percent"><Percent className="h-3.5 w-3.5 mr-1" />{t("disc_pct")}</TabsTrigger>
               <TabsTrigger value="fixed"><DollarSign className="h-3.5 w-3.5 mr-1" />{t("disc_fixed")}</TabsTrigger>
               <TabsTrigger value="free_item"><Gift className="h-3.5 w-3.5 mr-1" />{t("disc_free_item")}</TabsTrigger>
+              <TabsTrigger value="coupon"><Scissors className="h-3.5 w-3.5 mr-1" />Coupon</TabsTrigger>
             </TabsList>
 
             {/* % Off */}
@@ -1114,6 +1125,31 @@ function PaymentPage() {
                 <div className="rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-3 text-center">
                   <p className="text-xs text-muted-foreground">{t("disc_saves")}</p>
                   <p className="text-2xl font-black text-green-600 dark:text-green-400 tabular-nums">- {thb(discPreviewAmt)}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{lang === "th" ? "ยอดที่ต้องชำระ" : "New total"}: {thb(discPreviewTotal)}</p>
+                </div>
+              )}
+            </TabsContent>
+
+            {/* Coupon — manual amount until coupon-code issuance is implemented */}
+            <TabsContent value="coupon" className="pt-3 space-y-3">
+              <div>
+                <Label>{lang === "th" ? "มูลค่าคูปอง (บาท)" : "Coupon amount (฿)"}</Label>
+                <div className="mt-1">
+                  <KeypadInput value={discFixedInput} onChange={setDiscFixedInput} title={lang === "th" ? "มูลค่าคูปอง" : "Coupon amount"} placeholder="0" />
+                </div>
+                <div className="flex gap-1.5 mt-2 flex-wrap">
+                  {[20, 50, 100, 200, 500].map((a) => (
+                    <button key={a} onClick={() => setDiscFixedInput(a)}
+                      className={`px-2.5 py-1 rounded-md border text-sm font-medium transition-colors ${discFixedInput === a ? "bg-primary text-primary-foreground border-primary" : "hover:bg-accent"}`}>
+                      ฿{a}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {discFixedInput > 0 && (
+                <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-3 text-center">
+                  <p className="text-xs text-muted-foreground">Coupon</p>
+                  <p className="text-2xl font-black text-amber-700 dark:text-amber-400 tabular-nums">- {thb(discPreviewAmt)}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">{lang === "th" ? "ยอดที่ต้องชำระ" : "New total"}: {thb(discPreviewTotal)}</p>
                 </div>
               )}

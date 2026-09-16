@@ -250,12 +250,12 @@ function Reports() {
         ? supabase.from("orders").select("id,source").in("id", orderIds)
         : Promise.resolve({ data: [] as { id: string; source: string }[], error: null }),
       billIds.length
-        ? (supabase as any).from("bill_discounts").select("type,amount,applied_by").in("bill_id", billIds)
-        : Promise.resolve({ data: [] as { type: string; amount: number; applied_by: string | null }[], error: null }),
+        ? (supabase as any).from("bill_discounts").select("type,amount,applied_by,free_item_name").in("bill_id", billIds)
+        : Promise.resolve({ data: [] as { type: string; amount: number; applied_by: string | null; free_item_name: string | null }[], error: null }),
     ]);
     const gross = (bills ?? []).reduce((x, b) => x + Number(b.subtotal), 0);
     const net = (bills ?? []).reduce((x, b) => x + Number(b.total), 0);
-    const discount = (bills ?? []).reduce((x, b) => x + Number(b.discount_amount), 0);
+    const totalDiscount = (bills ?? []).reduce((x, b) => x + Number(b.discount_amount), 0);
     const member = (bills ?? []).reduce((x, b) => x + Number(b.member_discount_amount), 0);
     const vatIncluded = (bills ?? []).filter((b) => b.vat_mode === "inclusive").reduce((x, b) => x + Number(b.vat_amount ?? 0), 0);
     const vatAdded = (bills ?? []).filter((b) => b.vat_mode === "exclusive").reduce((x, b) => x + Number(b.vat_amount ?? 0), 0);
@@ -281,6 +281,8 @@ function Reports() {
 
     // Aggregate discount breakdown by type and by staff
     const discRows = (billDiscs as any[] | null) ?? [];
+    const coupon = discRows.filter((d) => d.free_item_name === "__coupon__").reduce((sum, d) => sum + Number(d.amount), 0);
+    const discount = Math.max(0, totalDiscount - coupon);
     const discApplierIds = [...new Set(discRows.map((d) => d.applied_by).filter(Boolean))] as string[];
     const { data: discStaffList } = discApplierIds.length
       ? await supabase.from("staff").select("id,name").in("id", discApplierIds)
@@ -290,6 +292,7 @@ function Reports() {
     const discountByType = { percent: 0, fixed: 0, free_item: 0 };
     const discountByStaffMap = new Map<string, { staffName: string; amount: number; count: number }>();
     for (const d of discRows) {
+      if (d.free_item_name === "__coupon__") continue;
       discountByType[d.type as keyof typeof discountByType] =
         (discountByType[d.type as keyof typeof discountByType] ?? 0) + Number(d.amount);
       const key = d.applied_by ?? "__unknown__";
@@ -302,7 +305,7 @@ function Reports() {
     const discountByStaff = [...discountByStaffMap.values()].sort((a, b) => b.amount - a.amount);
 
     return {
-      gross, net, discount, member, coupon: 0, vatIncluded, vatAdded,
+      gross, net, discount, member, coupon, vatIncluded, vatAdded,
       voids: (voids ?? []).reduce((x, v) => x + Number(v.amount), 0),
       refunds: (refunds ?? []).reduce((x, v) => x + Number(v.amount), 0),
       byMethod, openingFloat: Number(s.opening_float), bills: (bills ?? []).length,
