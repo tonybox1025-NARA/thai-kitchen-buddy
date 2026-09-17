@@ -1784,45 +1784,12 @@ function MenuTab() {
   };
 
   const categoryById = new Map(cats.map((category) => [category.id, category]));
-  const categoryOrder: Record<string, number> = {
-    "d786c70f-e3eb-4b88-a82f-ad6c12028f54": 10,
-    "24fb69e4-1b9d-41ea-b609-26f49fb921e9": 20,
-    "10439056-6450-4276-8393-c91909d6bc42": 30,
-    "747ba159-f4e6-4f25-9c07-10664ca340d6": 40,
-    "306e9fe3-c781-425d-b402-dadcc67f0c8f": 50,
-    "ef231309-e3f6-4574-a07f-43c5767403fe": 60,
-    "59e6e451-994a-4293-a313-e59e8e107d01": 70,
-    "f2b475d5-78f5-4bc0-940f-0b2bcb9df43a": 80,
-    "fdb7fca2-b2c2-44a9-82ac-74448575c9b6": 90,
-    "b177544e-db6a-4ed2-86b4-78674e4e40e2": 100,
-    "7a73b072-789e-49b4-a061-e42a92ae5b3a": 110,
-    "ec4b9304-7672-4d83-8e4a-d8fd6240345e": 120,
-    "59fdba25-1e80-4c80-b1fb-24cd5b9b20e5": 130,
-    "e1c6f3c1-0c1c-4bb0-ad5d-034ca0d0cf98": 140,
-    "d95561e7-c21b-4413-a81c-6053f1982cfe": 150,
-  };
-  const categoryRank = (category: Category | null | undefined) => category ? (categoryOrder[category.id] ?? 900 + (category.sort ?? 0)) : 999;
+  const categoryRank = (category: Category | null | undefined) => category ? (category.sort ?? 0) : Number.MAX_SAFE_INTEGER;
   const categoryLabel = (category: Category | null | undefined) => {
     if (!category) return lang === "th" ? "ไม่มีหมวดหมู่" : "Uncategorized";
-    if (lang === "th") return category.name_th;
-    const labels: Record<string, string> = {
-      "d786c70f-e3eb-4b88-a82f-ad6c12028f54": "📦 Set Menu",
-      "24fb69e4-1b9d-41ea-b609-26f49fb921e9": "🍳 Stir-Fried Dishes",
-      "10439056-6450-4276-8393-c91909d6bc42": "🍚 Fried Rice & Rice Dishes",
-      "747ba159-f4e6-4f25-9c07-10664ca340d6": "🍲 Soups",
-      "306e9fe3-c781-425d-b402-dadcc67f0c8f": "🍖 Fried & Dry-Fried",
-      "ef231309-e3f6-4574-a07f-43c5767403fe": "🥗 Spicy Salads & Som Tam",
-      "59e6e451-994a-4293-a313-e59e8e107d01": "Meat & Seafood",
-      "f2b475d5-78f5-4bc0-940f-0b2bcb9df43a": "🐷 Grilled Mookata",
-      "fdb7fca2-b2c2-44a9-82ac-74448575c9b6": "🍚 Rice & Porridge",
-      "b177544e-db6a-4ed2-86b4-78674e4e40e2": "Snacks",
-      "7a73b072-789e-49b4-a061-e42a92ae5b3a": "🧊 Drinks & Ice Cream",
-      "ec4b9304-7672-4d83-8e4a-d8fd6240345e": "🍺 Alcoholic Drinks",
-      "59fdba25-1e80-4c80-b1fb-24cd5b9b20e5": "🛍️ Promotions & Announcements",
-      "e1c6f3c1-0c1c-4bb0-ad5d-034ca0d0cf98": "General",
-      "d95561e7-c21b-4413-a81c-6053f1982cfe": "Add-ons",
-    };
-    return labels[category.id] ?? category.name_en ?? category.name_th;
+    return lang === "th"
+      ? category.name_th || category.name_en
+      : category.name_en || category.name_th;
   };
 
   const normalizedQuery = query.trim().toLocaleLowerCase();
