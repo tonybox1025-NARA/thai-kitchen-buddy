@@ -49,6 +49,17 @@ type Menu = {
   sort?: number;
 };
 
+type SetCompositionRow = {
+  child_menu_id: string;
+  quantity: number;
+  group_key: string;
+  group_name: string;
+  min_select: number;
+  max_select: number;
+  sort_order: number;
+  child: { id: string; name_th: string; name_en: string; cost: number };
+};
+
 function MarginIndicator({ price, cost }: { price: number; cost: number }) {
   const { t } = useI18n();
   const margin = price > 0 ? ((price - cost) / price) * 100 : 0;
@@ -1619,6 +1630,7 @@ function MenuTab() {
   const [allAddonGroups, setAllAddonGroups] = useState<AddonGroup[]>([]);
   // IDs of addon groups currently linked to the menu item being edited
   const [linkedAddonIds, setLinkedAddonIds] = useState<Set<string>>(new Set());
+  const [setComposition, setSetComposition] = useState<SetCompositionRow[]>([]);
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [availabilityFilter, setAvailabilityFilter] = useState("all");
@@ -1638,6 +1650,7 @@ function MenuTab() {
   // When opening edit for an existing menu item, load its ingredients + linked addons
   const openEdit = async (m: Partial<Menu>) => {
     setEdit(m);
+    setSetComposition([]);
     if (!m.id) { setEditIngRows([]); setLinkedAddonIds(new Set()); return; }
     // Manager-linked menus use Manager's recipe-derived food cost as the only
     // source of truth. Legacy POS recipe rows must never overwrite that value.
@@ -1665,6 +1678,23 @@ function MenuTab() {
       .select("group_id")
       .eq("menu_id", m.id);
     setLinkedAddonIds(new Set((addonData ?? []).map((r: any) => r.group_id)));
+
+    if (m.is_set) {
+      const { data: setLinks } = await db
+        .from("menu_set_items")
+        .select("child_menu_id,quantity,group_key,group_name,min_select,max_select,sort_order")
+        .eq("set_menu_id", m.id)
+        .order("sort_order");
+      const childIds = [...new Set(((setLinks ?? []) as any[]).map((row) => row.child_menu_id))];
+      const { data: children } = childIds.length > 0
+        ? await db.from("menus").select("id,name_th,name_en,cost").in("id", childIds)
+        : { data: [] };
+      const childById = new Map(((children ?? []) as any[]).map((child) => [child.id, child]));
+      setSetComposition(((setLinks ?? []) as any[]).flatMap((row) => {
+        const child = childById.get(row.child_menu_id);
+        return child ? [{ ...row, child }] : [];
+      }));
+    }
   };
 
   // Compute auto-derived cost from visible ingredient rows
@@ -1725,7 +1755,23 @@ function MenuTab() {
     toast.success(t("saved"));
   };
 
-  const closeEdit = () => { setEdit(null); setEditIngRows([]); setLinkedAddonIds(new Set()); };
+  const closeEdit = () => { setEdit(null); setEditIngRows([]); setLinkedAddonIds(new Set()); setSetComposition([]); };
+
+  const setGroups = [...new Map(setComposition.map((row) => [row.group_key, {
+    key: row.group_key,
+    name: row.group_name,
+    min: Number(row.min_select ?? 0),
+    max: Number(row.max_select ?? 1),
+    sort: Number(row.sort_order ?? 0),
+    rows: setComposition.filter((item) => item.group_key === row.group_key),
+  }])).values()].sort((a, b) => a.sort - b.sort);
+  const setCostRange = setGroups.reduce((range, group) => {
+    const costs = group.rows.map((row) => Number(row.child.cost ?? 0) * Math.max(1, Number(row.quantity) || 1)).sort((a, b) => a - b);
+    return {
+      min: range.min + costs.slice(0, group.min).reduce((sum, cost) => sum + cost, 0),
+      max: range.max + costs.slice(-group.max).reduce((sum, cost) => sum + cost, 0),
+    };
+  }, { min: 0, max: 0 });
 
   const toggleAvail = async (m: Menu) => {
     await supabase.from("menus").update({ available: !m.available }).eq("id", m.id);
@@ -1887,8 +1933,8 @@ function MenuTab() {
               <div className="truncate text-sm text-muted-foreground">{categoryLabel(category)}</div>
               <div className="text-right font-semibold">฿{Number(m.price).toFixed(2)}</div>
               <div className="text-right">
-                <div className="font-medium">฿{Number(m.cost ?? 0).toFixed(2)}</div>
-                <div className="text-xs text-muted-foreground">{Number(m.price) > 0 ? `${((Number(m.cost ?? 0) / Number(m.price)) * 100).toFixed(1)}%` : "—"}</div>
+                <div className="font-medium">{m.is_set ? "By selection" : `฿${Number(m.cost ?? 0).toFixed(2)}`}</div>
+                <div className="text-xs text-muted-foreground">{m.is_set ? "Calculated at order" : Number(m.price) > 0 ? `${((Number(m.cost ?? 0) / Number(m.price)) * 100).toFixed(1)}%` : "—"}</div>
               </div>
               <div className="flex justify-center" onClick={(event) => event.stopPropagation()}>
                 <Switch checked={m.available} onCheckedChange={() => toggleAvail(m)} />
@@ -1939,7 +1985,11 @@ function MenuTab() {
                 <div><Label>{t("price")} (฿)</Label><KeypadInput value={edit?.price ?? 0} onChange={(n) => setEdit({ ...edit, price: n })} title={t("price")} decimal /></div>
                 <div>
                   <Label>{t("lbl_cost")} (฿)</Label>
-                  {edit?.manager_menu_id ? (
+                  {edit?.is_set ? (
+                    <div className="flex h-11 w-full items-center justify-end rounded-md border bg-muted/40 px-3 text-sm font-semibold">
+                      Calculated by selection
+                    </div>
+                  ) : edit?.manager_menu_id ? (
                     <div className="flex h-11 w-full items-center justify-end rounded-md border bg-muted/40 px-3 text-lg font-semibold tabular-nums">
                       ฿{Number(edit.cost ?? 0).toFixed(2)}
                     </div>
@@ -1948,7 +1998,7 @@ function MenuTab() {
                   )}
                 </div>
               </div>
-              <MarginIndicator price={Number(edit?.price ?? 0)} cost={Number(edit?.cost ?? 0)} />
+              {!edit?.is_set && <MarginIndicator price={Number(edit?.price ?? 0)} cost={Number(edit?.cost ?? 0)} />}
               <div className="flex items-center justify-between rounded-md border px-3 py-2">
                 <div><div className="text-sm font-medium">Available for sale</div><div className="text-xs text-muted-foreground">Shown on POS and customer ordering menus</div></div>
                 <Switch checked={edit?.available ?? true} onCheckedChange={(v) => setEdit({ ...edit, available: v })} />
@@ -1958,7 +2008,33 @@ function MenuTab() {
           <div className="grid gap-4 lg:grid-cols-2">
             {/* ── Ingredients section ── */}
             <div className="border rounded-md p-4 bg-muted/20">
-              {edit?.manager_menu_id ? (
+              {edit?.is_set ? (
+                <div className="space-y-3">
+                  <div>
+                    <Label className="text-sm font-semibold">SET composition &amp; food cost</Label>
+                    <p className="mt-1 text-sm text-muted-foreground">Food cost is calculated and saved after the customer selects the SET items.</p>
+                  </div>
+                  {setGroups.map((group) => (
+                    <div key={group.key} className="rounded-md border bg-background p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-sm font-semibold">{group.name}</span>
+                        <span className="text-xs text-muted-foreground">Choose {group.min}{group.max !== group.min ? `–${group.max}` : ""}</span>
+                      </div>
+                      <div className="mt-2 space-y-1">
+                        {group.rows.map((row) => (
+                          <div key={row.child_menu_id} className="flex justify-between gap-3 text-sm">
+                            <span>{row.child.name_th}</span>
+                            <span className="shrink-0 tabular-nums text-muted-foreground">฿{(Number(row.child.cost ?? 0) * Math.max(1, Number(row.quantity) || 1)).toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  <div className="rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-800">
+                    Estimated food cost after selection: <strong>฿{setCostRange.min.toFixed(2)}–฿{setCostRange.max.toFixed(2)}</strong>
+                  </div>
+                </div>
+              ) : edit?.manager_menu_id ? (
                 <div className="space-y-2">
                   <Label className="text-sm font-semibold">Ingredients &amp; food cost</Label>
                   <p className="text-sm text-muted-foreground">Managed in Manager. The recipe and food cost are calculated there and published to POS.</p>
@@ -1977,7 +2053,8 @@ function MenuTab() {
 
             {/* ── Add-ons section ── */}
             <div className="border rounded-md p-4 bg-muted/20">
-              <Label className="text-sm font-semibold mb-2 block">{t("linked_addons")}</Label>
+              <Label className="text-sm font-semibold mb-2 block">{edit?.is_set ? "Regular add-on groups" : t("linked_addons")}</Label>
+              {edit?.is_set && <p className="mb-3 text-sm text-muted-foreground">SET choices are shown in the composition panel. This section is only for additional paid options.</p>}
               <AddonsSection
                 allGroups={allAddonGroups}
                 linkedIds={linkedAddonIds}
