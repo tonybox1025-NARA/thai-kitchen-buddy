@@ -19,18 +19,21 @@ export type Database = {
           created_at: string | null
           id: string
           kitchen_name: string | null
+          max_select: number
           name: string
         }
         Insert: {
           created_at?: string | null
           id?: string
           kitchen_name?: string | null
+          max_select?: number
           name: string
         }
         Update: {
           created_at?: string | null
           id?: string
           kitchen_name?: string | null
+          max_select?: number
           name?: string
         }
         Relationships: []
@@ -245,6 +248,27 @@ export type Database = {
           },
         ]
       }
+      catalog_reset_addon_backup: {
+        Row: {
+          backed_up_at: string
+          group_id: string
+          manager_menu_id: string | null
+          menu_name_th: string
+        }
+        Insert: {
+          backed_up_at?: string
+          group_id: string
+          manager_menu_id?: string | null
+          menu_name_th: string
+        }
+        Update: {
+          backed_up_at?: string
+          group_id?: string
+          manager_menu_id?: string | null
+          menu_name_th?: string
+        }
+        Relationships: []
+      }
       categories: {
         Row: {
           created_at: string
@@ -400,8 +424,64 @@ export type Database = {
           },
         ]
       }
+      member_merge_audit: {
+        Row: {
+          approved_by: string | null
+          id: string
+          merged_at: string
+          merged_by: string | null
+          merged_member_before: Json
+          merged_member_id: string
+          survivor_before: Json
+          survivor_member_id: string | null
+        }
+        Insert: {
+          approved_by?: string | null
+          id?: string
+          merged_at?: string
+          merged_by?: string | null
+          merged_member_before: Json
+          merged_member_id: string
+          survivor_before: Json
+          survivor_member_id?: string | null
+        }
+        Update: {
+          approved_by?: string | null
+          id?: string
+          merged_at?: string
+          merged_by?: string | null
+          merged_member_before?: Json
+          merged_member_id?: string
+          survivor_before?: Json
+          survivor_member_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_merge_audit_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_merge_audit_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "staff_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_merge_audit_survivor_member_id_fkey"
+            columns: ["survivor_member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       member_point_ledger: {
         Row: {
+          approved_by: string | null
           balance_after: number
           bill_id: string | null
           created_at: string
@@ -410,9 +490,11 @@ export type Database = {
           id: string
           member_id: string
           points: number
+          refund_id: string | null
           type: string
         }
         Insert: {
+          approved_by?: string | null
           balance_after: number
           bill_id?: string | null
           created_at?: string
@@ -421,9 +503,11 @@ export type Database = {
           id?: string
           member_id: string
           points: number
+          refund_id?: string | null
           type: string
         }
         Update: {
+          approved_by?: string | null
           balance_after?: number
           bill_id?: string | null
           created_at?: string
@@ -432,9 +516,24 @@ export type Database = {
           id?: string
           member_id?: string
           points?: number
+          refund_id?: string | null
           type?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "member_point_ledger_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_point_ledger_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "staff_public"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "member_point_ledger_bill_id_fkey"
             columns: ["bill_id"]
@@ -447,6 +546,13 @@ export type Database = {
             columns: ["member_id"]
             isOneToOne: false
             referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_point_ledger_refund_id_fkey"
+            columns: ["refund_id"]
+            isOneToOne: false
+            referencedRelation: "refunds"
             referencedColumns: ["id"]
           },
         ]
@@ -617,6 +723,63 @@ export type Database = {
           {
             foreignKeyName: "menu_ingredients_menu_id_fkey"
             columns: ["menu_id"]
+            isOneToOne: false
+            referencedRelation: "menus"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      menu_set_items: {
+        Row: {
+          child_menu_id: string
+          created_at: string
+          group_key: string
+          group_name: string
+          id: string
+          manager_set_item_id: string | null
+          max_select: number
+          min_select: number
+          quantity: number
+          set_menu_id: string
+          sort_order: number
+        }
+        Insert: {
+          child_menu_id: string
+          created_at?: string
+          group_key?: string
+          group_name?: string
+          id?: string
+          manager_set_item_id?: string | null
+          max_select?: number
+          min_select?: number
+          quantity?: number
+          set_menu_id: string
+          sort_order?: number
+        }
+        Update: {
+          child_menu_id?: string
+          created_at?: string
+          group_key?: string
+          group_name?: string
+          id?: string
+          manager_set_item_id?: string | null
+          max_select?: number
+          min_select?: number
+          quantity?: number
+          set_menu_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_set_items_child_menu_id_fkey"
+            columns: ["child_menu_id"]
+            isOneToOne: false
+            referencedRelation: "menus"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "menu_set_items_set_menu_id_fkey"
+            columns: ["set_menu_id"]
             isOneToOne: false
             referencedRelation: "menus"
             referencedColumns: ["id"]
@@ -1306,6 +1469,40 @@ export type Database = {
       }
     }
     Functions: {
+      adjust_member_points: {
+        Args: {
+          p_delta: number
+          p_manager_pin: string
+          p_member_id: string
+          p_reason: string
+        }
+        Returns: {
+          approved_by: string
+          balance_after: number
+        }[]
+      }
+      claim_receipt_loyalty_points: {
+        Args: { p_claim_token: string; p_guest_token: string }
+        Returns: {
+          claim_status: string
+          current_points: number
+          member_group_en: string
+          member_id: string
+          member_name: string
+          points_awarded: number
+        }[]
+      }
+      create_or_get_member: {
+        Args: {
+          p_full_name: string
+          p_imported_from: string
+          p_nickname: string
+          p_phone: string
+          p_signup_description: string
+          p_signup_points: number
+        }
+        Returns: Json
+      }
       create_staff: {
         Args: {
           _admin_pin?: string
@@ -1318,6 +1515,13 @@ export type Database = {
       delete_staff: {
         Args: { _admin_pin?: string; _id: string }
         Returns: undefined
+      }
+      expire_due_member_points: {
+        Args: never
+        Returns: {
+          members_expired: number
+          points_expired: number
+        }[]
       }
       has_role: {
         Args: {
@@ -1335,6 +1539,64 @@ export type Database = {
           name: string
           role: Database["public"]["Enums"]["app_role"]
         }[]
+      }
+      merge_duplicate_members: {
+        Args: {
+          p_manager_pin: string
+          p_merged_member_id: string
+          p_survivor_member_id: string
+        }
+        Returns: Json
+      }
+      normalize_member_phone: { Args: { p_phone: string }; Returns: string }
+      process_bill_loyalty: {
+        Args: {
+          p_bill_id: string
+          p_earn_points: number
+          p_member_id: string
+          p_redeem_points: number
+        }
+        Returns: {
+          balance_after: number
+          earned: number
+          redeemed: number
+        }[]
+      }
+      record_manual_member_points: {
+        Args: {
+          p_description: string
+          p_manager_pin: string
+          p_member_id: string
+          p_points: number
+          p_type: string
+        }
+        Returns: {
+          approved_by: string
+          balance_after: number
+        }[]
+      }
+      refund_bill_with_loyalty: {
+        Args: {
+          p_amount: number
+          p_bill_id: string
+          p_reason: string
+          p_refunded_by: string
+        }
+        Returns: {
+          amount: number
+          bill_id: string | null
+          created_at: string
+          id: string
+          reason: string
+          refunded_by: string | null
+          shift_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "refunds"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       set_staff_pin: {
         Args: { _admin_pin?: string; _pin: string; _staff_id: string }
