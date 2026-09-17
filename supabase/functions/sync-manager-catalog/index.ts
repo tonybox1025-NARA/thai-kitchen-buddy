@@ -142,6 +142,9 @@ Deno.serve(async (req) => {
       },
     };
     if (!execute) return Response.json({ mode: "preview", summary }, { headers: corsHeaders });
+    if (summary.sets.unresolved > 0) {
+      throw new Error(`Catalog publish blocked: ${summary.sets.unresolved} SET item link(s) cannot be resolved`);
+    }
     if (summary.costs.zero > 0) {
       throw new Error(`Catalog publish blocked: ${summary.costs.zero} sellable menu(s) would change to zero food cost: ${summary.costs.zeroMenus.join(", ")}`);
     }
@@ -250,21 +253,29 @@ Deno.serve(async (req) => {
       if (error) throw new Error(`set items insert: ${errorMessage(error)}`);
     }
 
-    const synchronizedMenuIds = [...posMenuIdByManagerId.values()];
-    if (synchronizedMenuIds.length > 0) {
-      const { error: deleteError } = await db.from("menu_addons").delete().in("menu_id", synchronizedMenuIds);
-      if (deleteError) throw deleteError;
-    }
-    const linkRowsByKey = new Map<string, { menu_id: string; group_id: string }>();
-    for (const link of catalog.menuAddons ?? []) {
-      const menuId = posMenuIdByManagerId.get(link.menu_id);
-      const groupId = posGroupIdByManagerId.get(link.group_id);
-      if (menuId && groupId) linkRowsByKey.set(`${menuId}:${groupId}`, { menu_id: menuId, group_id: groupId });
-    }
-    const linkRows = [...linkRowsByKey.values()];
-    if (linkRows.length > 0) {
-      const { error } = await db.from("menu_addons").insert(linkRows);
-      if (error) throw error;
+    // An empty Manager add-on catalog means "not managed there yet", not
+    // "erase every POS option". Preserve existing POS links until Manager has
+    // at least one complete add-on definition to publish.
+    const hasAddonCatalog = (catalog.addonGroups ?? []).length > 0
+      || (catalog.addonOptions ?? []).length > 0
+      || (catalog.menuAddons ?? []).length > 0;
+    if (hasAddonCatalog) {
+      const synchronizedMenuIds = [...posMenuIdByManagerId.values()];
+      if (synchronizedMenuIds.length > 0) {
+        const { error: deleteError } = await db.from("menu_addons").delete().in("menu_id", synchronizedMenuIds);
+        if (deleteError) throw deleteError;
+      }
+      const linkRowsByKey = new Map<string, { menu_id: string; group_id: string }>();
+      for (const link of catalog.menuAddons ?? []) {
+        const menuId = posMenuIdByManagerId.get(link.menu_id);
+        const groupId = posGroupIdByManagerId.get(link.group_id);
+        if (menuId && groupId) linkRowsByKey.set(`${menuId}:${groupId}`, { menu_id: menuId, group_id: groupId });
+      }
+      const linkRows = [...linkRowsByKey.values()];
+      if (linkRows.length > 0) {
+        const { error } = await db.from("menu_addons").insert(linkRows);
+        if (error) throw error;
+      }
     }
     return Response.json({ mode: "published", summary, menuMappings }, { headers: corsHeaders });
   } catch (error) {
