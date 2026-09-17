@@ -384,6 +384,14 @@ function CustomerMenu() {
       : allMenusSorted.filter((m) => m.category_id === activeCat);
   }, [allMenusSorted, activeCat, data]);
 
+  const menuSections = useMemo(() => {
+    if (!data || activeCat !== "all") return [];
+    return orderedCategories.map((category) => ({
+      category,
+      menus: allMenusSorted.filter((menu) => menu.category_id === category.id),
+    })).filter((section) => section.menus.length > 0);
+  }, [activeCat, allMenusSorted, data, orderedCategories]);
+
   const cartTotal = useMemo(() => cart.reduce((s, c) => s + c.qty * c.price, 0), [cart]);
   const cartCount = useMemo(() => cart.reduce((s, c) => s + c.qty, 0), [cart]);
 
@@ -516,8 +524,30 @@ function CustomerMenu() {
     });
   };
 
-  const name = (m: { name_th: string; name_en: string }) => (lang === "th" ? m.name_th : m.name_en);
+  const name = (m: { name_th: string; name_en: string }) => {
+    if (lang === "th") return m.name_th || m.name_en;
+    // Protect the customer menu from a legacy Manager row where SET A's
+    // English name was saved as only "SET". The source data is also repaired
+    // during the next Manager publish, but this keeps the label safe meanwhile.
+    if (/^set\s*$/i.test(m.name_en.trim()) && /^set\s+[a-z]$/i.test(m.name_th.trim())) return m.name_th;
+    return m.name_en || m.name_th;
+  };
   const sub  = (m: { name_th: string; name_en: string }) => (lang === "th" ? m.name_en : m.name_th);
+
+  const renderMenuCard = (m: Menu) => (
+    <button
+      key={m.id}
+      onClick={() => openAdd(m)}
+      className="text-left bg-card border rounded-xl p-3 active:scale-[0.98] transition-transform flex gap-3 hover:border-primary/40"
+    >
+      {m.image_url ? <MenuImage src={m.image_url} /> : <PlaceholderImg />}
+      <div className="min-w-0 flex-1">
+        <div className="font-medium leading-tight line-clamp-2">{name(m)}</div>
+        <div className="text-xs text-muted-foreground truncate mt-0.5">{sub(m)}</div>
+        <div className="mt-1.5 font-bold text-primary">฿{Number(m.price).toFixed(0)}</div>
+      </div>
+    </button>
+  );
 
   if (loading) return <MenuSkeleton />;
   if (error || !data) return (
@@ -559,24 +589,28 @@ function CustomerMenu() {
       </header>
 
       {/* ── Menu list — compact rows with a larger thumbnail ── */}
-      <main className="max-w-2xl mx-auto px-4 py-4 pb-28 grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <main className="max-w-2xl mx-auto px-4 py-4 pb-28">
         {filtered.length === 0 && (
-          <p className="col-span-2 text-center text-muted-foreground py-12">{lang === "th" ? "ไม่มีเมนูในหมวดนี้" : "No items in this category"}</p>
+          <p className="text-center text-muted-foreground py-12">{lang === "th" ? "ไม่มีเมนูในหมวดนี้" : "No items in this category"}</p>
         )}
-        {filtered.map((m) => (
-          <button
-            key={m.id}
-            onClick={() => openAdd(m)}
-            className="text-left bg-card border rounded-xl p-3 active:scale-[0.98] transition-transform flex gap-3 hover:border-primary/40"
-          >
-            {m.image_url ? <MenuImage src={m.image_url} /> : <PlaceholderImg />}
-            <div className="min-w-0 flex-1">
-              <div className="font-medium leading-tight line-clamp-2">{name(m)}</div>
-              <div className="text-xs text-muted-foreground truncate mt-0.5">{sub(m)}</div>
-              <div className="mt-1.5 font-bold text-primary">฿{Number(m.price).toFixed(0)}</div>
-            </div>
-          </button>
-        ))}
+        {activeCat === "all" ? (
+          <div className="space-y-7">
+            {menuSections.map(({ category, menus }) => (
+              <section key={category.id}>
+                <h2 className="mb-3 border-b pb-2 text-base font-bold text-foreground">
+                  {categoryLabel(category, lang)}
+                </h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {menus.map(renderMenuCard)}
+                </div>
+              </section>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {filtered.map(renderMenuCard)}
+          </div>
+        )}
       </main>
 
       {/* ── Cart bar ── */}

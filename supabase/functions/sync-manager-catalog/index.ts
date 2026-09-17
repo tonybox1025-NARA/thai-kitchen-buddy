@@ -59,6 +59,10 @@ Deno.serve(async (req) => {
     const posCategories = categoriesResult.data ?? [];
     const categoryByName = new Map(posCategories.map((category) => [normalize(category.name_th), category]));
     const sourceCategoryByName = new Map((catalog.categories ?? []).map((category: any) => [normalize(category.name_th), category]));
+    const maxSourceCategorySort = Math.max(
+      0,
+      ...(catalog.categories ?? []).map((category: any) => Number(category.sort_order) || 0),
+    );
     const categoryNames = uniqueByNormalizedName(
       catalog.menus.map((menu: any) => menu.category || "ทั่วไป") as string[],
       (name) => name,
@@ -166,7 +170,16 @@ Deno.serve(async (req) => {
       const target = categoryByName.get(normalize(name));
       const source: any = sourceCategoryByName.get(normalize(name));
       const id = target?.id ?? crypto.randomUUID();
-      categoryRows.push({ id, name_th: name, name_en: source?.name_en || name, name_my: target?.name_my || "", sort: source?.sort_order ?? index });
+      // Categories missing from the Manager category catalog (for example a
+      // legacy "General" fallback) belong after the configured categories,
+      // never at the top of the customer menu.
+      categoryRows.push({
+        id,
+        name_th: name,
+        name_en: source?.name_en || name,
+        name_my: target?.name_my || "",
+        sort: source?.sort_order ?? maxSourceCategorySort + index + 1,
+      });
       categoryIdByName.set(normalize(name), id);
     }
     if (categoryRows.length > 0) {
