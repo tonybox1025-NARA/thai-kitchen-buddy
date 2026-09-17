@@ -100,6 +100,17 @@ Deno.serve(async (req) => {
         available: item.source.is_active !== false && item.source.available_pos !== false && item.source.is_set_child !== true,
       }));
     const sellableCostChanges = costChanges.filter((item: any) => item.available);
+    // Check the complete incoming catalog, not only rows that already have a
+    // POS target. After a clean reset every menu is new, so a change-only check
+    // would otherwise miss zero-cost recipes entirely. SET parents are excluded
+    // because their cost is calculated from the customer's selected children.
+    const zeroCostSellableMenus = menuPlan
+      .filter((item: any) => item.source.is_active !== false
+        && item.source.available_pos !== false
+        && item.source.is_set_child !== true
+        && item.source.is_set !== true
+        && Number(item.source.food_cost ?? 0) === 0)
+      .map((item: any) => item.source.name_th);
     const managerLinkedTargets = new Map(
       menuPlan.filter((item: any) => item.target).map((item: any) => [item.target.id, item.source.name_th]),
     );
@@ -129,8 +140,8 @@ Deno.serve(async (req) => {
         sellableChanged: sellableCostChanges.length,
         increased: sellableCostChanges.filter((item: any) => item.after > item.before).length,
         decreased: sellableCostChanges.filter((item: any) => item.after < item.before).length,
-        zero: sellableCostChanges.filter((item: any) => item.after === 0).length,
-        zeroMenus: sellableCostChanges.filter((item: any) => item.after === 0).map((item: any) => item.name),
+        zero: zeroCostSellableMenus.length,
+        zeroMenus: zeroCostSellableMenus,
         topDifferences: sellableCostChanges
           .sort((a: any, b: any) => Math.abs(b.after - b.before) - Math.abs(a.after - a.before))
           .slice(0, 10),
