@@ -74,9 +74,9 @@ function QrSetDialog({ setDef, lang, tr, onClose, onConfirm }: {
   const [main, setMain] = useState<SetItem | null>(null);
   const [sides, setSides] = useState<SetItem[]>([]);
   const [drink, setDrink] = useState<SetItem | null>(null);
-  const [rice, setRice] = useState<"rice" | "porridge">("rice");
-  const sideMin = setDef.sideMin ?? 2;
+  const [rice, setRice] = useState<"rice" | "porridge" | null>(null);
   const sideMax = setDef.sideMax ?? 2;
+  const requiredSides = sideMax;
 
   const toggleSide = (item: SetItem) => {
     setSides((prev) => {
@@ -87,11 +87,11 @@ function QrSetDialog({ setDef, lang, tr, onClose, onConfirm }: {
     });
   };
 
-  const isReady = !!main && sides.length >= sideMin && sides.length <= sideMax && (!setDef.hasDrink || !!drink);
+  const isReady = !!main && sides.length === requiredSides && !!rice && (!setDef.hasDrink || !!drink);
 
   const handleConfirm = () => {
     if (!isReady) return;
-    onConfirm({ set_id: setDef.id, main: main!, sides, drink: drink ?? undefined, rice, rice_cost: setDef.riceCosts?.[rice] });
+    onConfirm({ set_id: setDef.id, main: main!, sides, drink: drink ?? undefined, rice: rice!, rice_cost: setDef.riceCosts?.[rice!] });
   };
 
   const pick = (item: SetItem) => lang === "th" ? item.th : item.en;
@@ -140,8 +140,8 @@ function QrSetDialog({ setDef, lang, tr, onClose, onConfirm }: {
           <section>
             <div className="flex items-center justify-between mb-2">
               <h3 className="font-semibold text-sm uppercase tracking-wide">{tr.set_sides}</h3>
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sides.length >= sideMin ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"}`}>
-                {sides.length >= sideMin ? `✓ ${sides.length}/${sideMax}` : `${sides.length}/${sideMax}`}
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sides.length === requiredSides ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"}`}>
+                {sides.length === requiredSides ? `✓ ${sides.length}/${requiredSides}` : `${sides.length}/${requiredSides}`}
               </span>
             </div>
             <div className="grid grid-cols-1 gap-1.5">
@@ -198,7 +198,12 @@ function QrSetDialog({ setDef, lang, tr, onClose, onConfirm }: {
 
           {/* Rice / porridge */}
           <section>
-            <h3 className="font-semibold text-sm uppercase tracking-wide mb-2">{tr.set_rice}</h3>
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="font-semibold text-sm uppercase tracking-wide">{tr.set_rice}</h3>
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${rice ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"}`}>
+                {rice ? "✓ 1/1" : tr.set_select1}
+              </span>
+            </div>
             <div className="flex gap-2">
               {(["rice", "porridge"] as const).map((opt) => (
                 <button
@@ -220,7 +225,7 @@ function QrSetDialog({ setDef, lang, tr, onClose, onConfirm }: {
               {main && <p>🍽️ {main.th}{lang === "en" ? ` (${main.en})` : ""}</p>}
               {sides.map((s) => <p key={s.th}>🥗 {s.th}{lang === "en" ? ` (${s.en})` : ""}</p>)}
               {drink && <p>🥤 {drink.th} <span className="text-amber-600 font-semibold">{tr.set_free}</span></p>}
-              <p>🍚 {rice === "rice" ? tr.set_steamed : tr.set_porridge}</p>
+              {rice && <p>🍚 {rice === "rice" ? tr.set_steamed : tr.set_porridge}</p>}
             </section>
           )}
         </div>

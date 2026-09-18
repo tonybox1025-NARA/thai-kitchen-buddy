@@ -17,11 +17,14 @@ export function SetMenuDialog({ setDef, onClose, onConfirm }: SetMenuDialogProps
   const [main, setMain] = useState<SetItem | null>(null);
   const [sides, setSides] = useState<SetItem[]>([]);
   const [drink, setDrink] = useState<SetItem | null>(null);
-  const [rice, setRice] = useState<"rice" | "porridge">("rice");
+  const [rice, setRice] = useState<"rice" | "porridge" | null>(null);
 
   const isOpen = !!setDef;
-  const sideMin = setDef?.sideMin ?? 2;
   const sideMax = setDef?.sideMax ?? 2;
+  // A set is only complete when the customer has made every advertised choice.
+  // Manager's historic rows sometimes carry min_select=1 for a 2-choice group,
+  // so use the required group size (max_select) as the exact count here.
+  const requiredSides = sideMax;
 
   const toggleSide = (item: SetItem) => {
     setSides((prev) => {
@@ -37,11 +40,12 @@ export function SetMenuDialog({ setDef, onClose, onConfirm }: SetMenuDialogProps
 
   const canConfirm =
     !!main &&
-    sides.length >= sideMin && sides.length <= sideMax &&
+    sides.length === requiredSides &&
+    !!rice &&
     (!setDef?.hasDrink || !!drink);
 
   const handleConfirm = () => {
-    if (!setDef || !main || sides.length < sideMin || sides.length > sideMax) return;
+    if (!setDef || !main || sides.length !== requiredSides || !rice) return;
     if (setDef.hasDrink && !drink) return;
     onConfirm({
       set_id: setDef.id,
@@ -109,8 +113,8 @@ export function SetMenuDialog({ setDef, onClose, onConfirm }: SetMenuDialogProps
           <section>
             <div className="flex items-center justify-between mb-2">
               <h3 className="font-semibold text-sm">{t("set_side_dish")}</h3>
-              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${sidesDoneCount >= sideMin ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" : "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300"}`}>
-                {sidesDoneCount >= sideMin ? `✓ ${sidesDoneCount}/${sideMax}` : `${sidesDoneCount}/${sideMax}`}
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${sidesDoneCount === requiredSides ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" : "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300"}`}>
+                {sidesDoneCount === requiredSides ? `✓ ${sidesDoneCount}/${requiredSides}` : `${sidesDoneCount}/${requiredSides}`}
               </span>
             </div>
             <div className="space-y-2">
@@ -171,7 +175,12 @@ export function SetMenuDialog({ setDef, onClose, onConfirm }: SetMenuDialogProps
 
           {/* Rice selection */}
           <section>
-            <h3 className="font-semibold text-sm mb-2">{t("set_rice")}</h3>
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="font-semibold text-sm">{t("set_rice")}</h3>
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${rice ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" : "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300"}`}>
+                {rice ? "✓ 1/1" : t("set_select_1")}
+              </span>
+            </div>
             <div className="flex gap-2">
               <button
                 onClick={() => setRice("rice")}
@@ -195,7 +204,7 @@ export function SetMenuDialog({ setDef, onClose, onConfirm }: SetMenuDialogProps
               {main && <p>🍽️ {main.th}</p>}
               {sides.map((s, idx) => <p key={idx}>🥗 {s.th}</p>)}
               {drink && <p>🥤 {drink.th} <span className="text-amber-600 font-semibold text-xs">FREE</span></p>}
-              <p>🍚 {rice === "rice" ? (lang === "th" ? "ข้าวสวย" : "Steamed Rice") : (lang === "th" ? "โจ๊ก" : "Porridge")}</p>
+              {rice && <p>🍚 {rice === "rice" ? (lang === "th" ? "ข้าวสวย" : "Steamed Rice") : (lang === "th" ? "โจ๊ก" : "Porridge")}</p>}
             </div>
           )}
         </div>
