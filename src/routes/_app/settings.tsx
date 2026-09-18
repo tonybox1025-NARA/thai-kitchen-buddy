@@ -1931,7 +1931,7 @@ function MenuTab() {
             <DialogTitle>{edit?.id ? "Menu details" : "Add menu"}</DialogTitle>
             {edit?.manager_menu_id && (
               <div className="flex items-center gap-2 text-sm text-sky-700">
-                <Link2 className="h-4 w-4" />Linked to Manager · catalog fields may be refreshed by the next Manager publish
+                <Link2 className="h-4 w-4" />Linked to Manager · edit names, category, price and availability in Manager; POS only saves add-ons here
               </div>
             )}
           </DialogHeader>
@@ -1940,7 +1940,7 @@ function MenuTab() {
               <div className="aspect-square overflow-hidden rounded-md border bg-muted">
                 {edit?.image_url ? <img src={edit.image_url} alt="" className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center"><ImageIcon className="h-12 w-12 text-muted-foreground" /></div>}
               </div>
-              <div><Label>Image URL</Label><Input value={edit?.image_url ?? ""} onChange={(e) => setEdit({ ...edit, image_url: e.target.value })} placeholder="https://…" /></div>
+              <div><Label>Image URL</Label><Input disabled={!!edit?.manager_menu_id} value={edit?.image_url ?? ""} onChange={(e) => setEdit({ ...edit, image_url: e.target.value })} placeholder="https://…" /></div>
               <div className="rounded-md border p-3">
                 <div className="mb-2 flex items-center gap-2 text-sm font-semibold"><ChefHat className="h-4 w-4" />Kitchen display</div>
                 <div className="text-sm font-burmese">{edit?.name_my || "Burmese kitchen name missing"}</div>
@@ -1948,19 +1948,21 @@ function MenuTab() {
             </div>
             <div className="space-y-4">
               <div className="grid gap-3 md:grid-cols-2">
-                <div><Label>{t("name_th")}</Label><Input value={edit?.name_th ?? ""} onChange={(e) => setEdit({ ...edit, name_th: e.target.value })} /></div>
-                <div><Label>{t("name_en")}</Label><Input value={edit?.name_en ?? ""} onChange={(e) => setEdit({ ...edit, name_en: e.target.value })} /></div>
+                <div><Label>{t("name_th")}</Label><Input disabled={!!edit?.manager_menu_id} value={edit?.name_th ?? ""} onChange={(e) => setEdit({ ...edit, name_th: e.target.value })} /></div>
+                <div><Label>{t("name_en")}</Label><Input disabled={!!edit?.manager_menu_id} value={edit?.name_en ?? ""} onChange={(e) => setEdit({ ...edit, name_en: e.target.value })} /></div>
               </div>
-              <div><Label>{t("name_my")} · kitchen</Label><Input className="font-burmese" value={edit?.name_my ?? ""} onChange={(e) => setEdit({ ...edit, name_my: e.target.value })} /></div>
+              <div><Label>{t("name_my")} · kitchen</Label><Input disabled={!!edit?.manager_menu_id} className="font-burmese" value={edit?.name_my ?? ""} onChange={(e) => setEdit({ ...edit, name_my: e.target.value })} /></div>
               <div>
                 <Label>{t("category")}</Label>
-                <Select value={edit?.category_id ?? ""} onValueChange={(v) => setEdit({ ...edit, category_id: v })}>
+                <Select disabled={!!edit?.manager_menu_id} value={edit?.category_id ?? ""} onValueChange={(v) => setEdit({ ...edit, category_id: v })}>
                   <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
                   <SelectContent>{cats.map((c) => <SelectItem key={c.id} value={c.id}>{c.name_th} / {c.name_en}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div><Label>{t("price")} (฿)</Label><KeypadInput value={edit?.price ?? 0} onChange={(n) => setEdit({ ...edit, price: n })} title={t("price")} decimal /></div>
+                <div><Label>{t("price")} (฿)</Label>{edit?.manager_menu_id ? (
+                  <div className="flex h-11 w-full items-center justify-end rounded-md border bg-muted/40 px-3 text-lg font-semibold tabular-nums">฿{Number(edit.price ?? 0).toFixed(2)}</div>
+                ) : <KeypadInput value={edit?.price ?? 0} onChange={(n) => setEdit({ ...edit, price: n })} title={t("price")} decimal />}</div>
                 <div>
                   <Label>{t("lbl_cost")} (฿)</Label>
                   {edit?.is_set ? (
@@ -1979,7 +1981,7 @@ function MenuTab() {
               {!edit?.is_set && <MarginIndicator price={Number(edit?.price ?? 0)} cost={Number(edit?.cost ?? 0)} />}
               <div className="flex items-center justify-between rounded-md border px-3 py-2">
                 <div><div className="text-sm font-medium">Available for sale</div><div className="text-xs text-muted-foreground">Shown on POS and customer ordering menus</div></div>
-                <Switch checked={edit?.available ?? true} onCheckedChange={(v) => setEdit({ ...edit, available: v })} />
+                <Switch disabled={!!edit?.manager_menu_id} checked={edit?.available ?? true} onCheckedChange={(v) => setEdit({ ...edit, available: v })} />
               </div>
             </div>
           </div>
