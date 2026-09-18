@@ -29,6 +29,8 @@ const dict: Dict = {
   live_busy_hours: { th: "ช่วงเวลาที่คนเยอะ", en: "Busy hours" },
   live_top_items: { th: "เมนูขายดีวันนี้", en: "Top items today" },
   live_active_tables: { th: "โต๊ะที่กำลังใช้งาน", en: "Active tables" },
+  live_active_unpaid: { th: "ยอดค้างชำระทั้งหมด", en: "Active unpaid total" },
+  live_table_total: { th: "ยอดรวม", en: "Total" },
   live_bill_requested: { th: "ขอเช็คบิล", en: "bill requested" },
   live_all_free: { th: "ทุกโต๊ะว่างอยู่ตอนนี้ 🍃", en: "All tables free right now 🍃" },
   pm_cash: { th: "เงินสด", en: "Cash" },

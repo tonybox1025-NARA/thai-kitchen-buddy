@@ -14,7 +14,7 @@ type RTable = {
   status: "available" | "occupied" | "bill_requested";
   guests: number;
 };
-type OpenOrder = { table_id: string | null; opened_at: string };
+type OpenOrder = { id: string; table_id: string | null; opened_at: string };
 
 function minutesSince(iso: string): number {
   const t = new Date(iso).getTime();
@@ -30,6 +30,7 @@ function LivePage() {
   const { t, lang } = useI18n();
   const [tables, setTables] = useState<RTable[]>([]);
   const [openedAt, setOpenedAt] = useState<Map<string, string>>(new Map());
+  const [tableTotals, setTableTotals] = useState<Map<string, number>>(new Map());
   const [byMethod, setByMethod] = useState<Record<string, number>>({ cash: 0, qr: 0, gov_qr: 0, card: 0 });
   const [salesNet, setSalesNet] = useState(0);
   const [billCount, setBillCount] = useState(0);
@@ -43,7 +44,7 @@ function LivePage() {
     // Tables + open orders (for how long each table has been seated)
     const [{ data: tbls }, { data: openOrders }, { data: shift }] = await Promise.all([
       supabase.from("restaurant_tables").select("id,code,capacity,status,guests").not("is_test", "is", true).order("code"),
-      supabase.from("orders").select("table_id,opened_at").eq("status", "open").not("table_id", "is", null).not("is_test", "is", true),
+      supabase.from("orders").select("id,table_id,opened_at").eq("status", "open").not("table_id", "is", null).not("is_test", "is", true),
       supabase.from("shifts").select("id").eq("status", "open").maybeSingle(),
     ]);
     setTables((tbls ?? []) as RTable[]);
@@ -52,6 +53,29 @@ function LivePage() {
       if (o.table_id && (!map.has(o.table_id) || o.opened_at < map.get(o.table_id)!)) map.set(o.table_id, o.opened_at);
     }
     setOpenedAt(map);
+
+    // Current unpaid value per active table. Use live, non-voided order items so
+    // this stays separate from the paid-sales headline above.
+    const openOrderRows = (openOrders ?? []) as OpenOrder[];
+    const orderToTable = new Map(
+      openOrderRows
+        .filter((o): o is OpenOrder & { table_id: string } => !!o.table_id)
+        .map((o) => [o.id, o.table_id]),
+    );
+    const totals = new Map<string, number>();
+    if (orderToTable.size > 0) {
+      const { data: openItems } = await (supabase as any)
+        .from("order_items")
+        .select("order_id,qty,unit_price")
+        .in("order_id", [...orderToTable.keys()])
+        .is("voided_at", null);
+      for (const item of (openItems ?? []) as { order_id: string; qty: number; unit_price: number }[]) {
+        const tableId = orderToTable.get(item.order_id);
+        if (!tableId) continue;
+        totals.set(tableId, (totals.get(tableId) ?? 0) + Number(item.qty) * Number(item.unit_price));
+      }
+    }
+    setTableTotals(totals);
 
     // Today's paid sales for the open shift
     setHasShift(!!shift);
@@ -110,6 +134,7 @@ function LivePage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "restaurant_tables" }, () => void load())
       .on("postgres_changes", { event: "*", schema: "public", table: "bills" }, () => void load())
       .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => void load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "order_items" }, () => void load())
       .subscribe();
     const poll = setInterval(() => void load(), 20000); // refresh durations + safety net
     return () => { supabase.removeChannel(ch); clearInterval(poll); };
@@ -118,14 +143,19 @@ function LivePage() {
   const active = useMemo(
     () => tables
       .filter((t) => t.status !== "available")
-      .map((t) => ({ ...t, minutes: openedAt.has(t.id) ? minutesSince(openedAt.get(t.id)!) : 0 }))
+      .map((t) => ({
+        ...t,
+        minutes: openedAt.has(t.id) ? minutesSince(openedAt.get(t.id)!) : 0,
+        unpaidTotal: tableTotals.get(t.id) ?? 0,
+      }))
       .sort((a, b) => (b.status === "bill_requested" ? 1 : 0) - (a.status === "bill_requested" ? 1 : 0) || b.minutes - a.minutes),
-    [tables, openedAt],
+    [tables, openedAt, tableTotals],
   );
   const occupied = active.length;
   const total = tables.length;
   const seatedGuests = active.reduce((s, t) => s + (t.guests || 0), 0);
   const billRequested = active.filter((t) => t.status === "bill_requested").length;
+  const activeTotal = active.reduce((sum, table) => sum + table.unpaidTotal, 0);
   const occPct = total > 0 ? Math.round((occupied / total) * 100) : 0;
   const avgBill = billCount > 0 ? salesNet / billCount : 0;
 
@@ -224,7 +254,13 @@ function LivePage() {
       <div>
         <div className="mb-2 flex items-center justify-between">
           <h2 className="text-sm font-semibold">{t("live_active_tables")}</h2>
-          {billRequested > 0 && <Badge variant="destructive">{billRequested} {t("live_bill_requested")}</Badge>}
+          <div className="flex items-center gap-2">
+            <div className="text-right">
+              <div className="text-[10px] leading-none text-muted-foreground">{t("live_active_unpaid")}</div>
+              <div className="mt-0.5 text-sm font-bold tabular-nums">{thb(activeTotal)}</div>
+            </div>
+            {billRequested > 0 && <Badge variant="destructive">{billRequested} {t("live_bill_requested")}</Badge>}
+          </div>
         </div>
         {active.length === 0 ? (
           <Card><CardContent className="p-6 text-center text-sm text-muted-foreground">{t("live_all_free")}</CardContent></Card>
@@ -243,6 +279,10 @@ function LivePage() {
                       <span className="flex items-center gap-1"><Users className="h-3 w-3" />{tbl.guests || "?"}</span>
                       {tbl.minutes > 0 && <span>· {fmtDuration(tbl.minutes)}</span>}
                     </div>
+                  </div>
+                  <div className="flex-none text-right">
+                    <div className="text-[10px] text-muted-foreground">{t("live_table_total")}</div>
+                    <div className="text-base font-bold tabular-nums">{thb(tbl.unpaidTotal)}</div>
                   </div>
                 </CardContent>
               </Card>
