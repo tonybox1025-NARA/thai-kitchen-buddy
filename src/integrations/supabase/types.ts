@@ -857,6 +857,8 @@ export type Database = {
           notes: string | null
           order_id: string
           qty: number
+          round_number: number | null
+          round_source: string | null
           sent_at: string | null
           set_config: Json | null
           status: Database["public"]["Enums"]["order_item_status"]
@@ -877,6 +879,8 @@ export type Database = {
           notes?: string | null
           order_id: string
           qty: number
+          round_number?: number | null
+          round_source?: string | null
           sent_at?: string | null
           set_config?: Json | null
           status?: Database["public"]["Enums"]["order_item_status"]
@@ -897,6 +901,8 @@ export type Database = {
           notes?: string | null
           order_id?: string
           qty?: number
+          round_number?: number | null
+          round_source?: string | null
           sent_at?: string | null
           set_config?: Json | null
           status?: Database["public"]["Enums"]["order_item_status"]
@@ -948,6 +954,7 @@ export type Database = {
           opened_at: string
           opened_by: string | null
           order_number: string | null
+          next_round: number
           shift_id: string | null
           source: Database["public"]["Enums"]["order_source"]
           status: Database["public"]["Enums"]["order_status"]
@@ -963,6 +970,7 @@ export type Database = {
           opened_at?: string
           opened_by?: string | null
           order_number?: string | null
+          next_round?: number
           shift_id?: string | null
           source?: Database["public"]["Enums"]["order_source"]
           status?: Database["public"]["Enums"]["order_status"]
@@ -978,6 +986,7 @@ export type Database = {
           opened_at?: string
           opened_by?: string | null
           order_number?: string | null
+          next_round?: number
           shift_id?: string | null
           source?: Database["public"]["Enums"]["order_source"]
           status?: Database["public"]["Enums"]["order_status"]

@@ -76,6 +76,9 @@ type Item = {
   id: string; menu_id: string | null; name_th: string; name_en: string; name_my: string;
   qty: number; unit_price: number; notes: string | null; modifiers: unknown;
   status: "pending" | "sent" | "served" | "voided";
+  sent_at?: string | null;
+  round_number?: number | null;
+  round_source?: "pos" | "qr" | null;
   set_config?: any;
 };
 type AddonOption = { id: string; name: string; price: number };
@@ -144,6 +147,7 @@ function OrderPage() {
   const [settingsVatRate, setSettingsVatRate] = useState(7);
   const [restaurantName, setRestaurantName] = useState("");
   const [receiptLogoUrl, setReceiptLogoUrl] = useState<string | null>(null);
+  const [reprintingRound, setReprintingRound] = useState<number | null>(null);
 
   const loadAll = async () => {
     const [{ data: m }, { data: c }, { data: it }, { data: ord }, { data: s }] = await Promise.all([
@@ -403,7 +407,11 @@ function OrderPage() {
     const orderType = items.some((i) => i.status === "sent") ? "added" : "new";
     const ids = pending.map((p) => p.id);
     const sentAt = new Date().toISOString();
-    await supabase.from("order_items").update({ status: "sent", sent_at: sentAt }).in("id", ids);
+    const { data: allocatedRound, error: roundError } = await (supabase as any).rpc("allocate_order_round", { p_order_id: orderId });
+    if (roundError || !allocatedRound) { toast.error(roundError?.message ?? "Round allocation failed"); return; }
+    const roundNumber = Number(allocatedRound);
+    const { error: sendError } = await (supabase as any).from("order_items").update({ status: "sent", sent_at: sentAt, round_number: roundNumber, round_source: "pos" }).in("id", ids);
+    if (sendError) { toast.error(sendError.message); return; }
     // Queue print jobs — kitchen (Burmese) + counter (order copy)
     type Zone = { id: string; name_th: string; name_en: string; sort: number; print_to_kitchen: boolean; counter_group: string };
     const zoneById = new Map<string, Zone>();
@@ -438,7 +446,7 @@ function OrderPage() {
     });
     const displayLabel = orderSource === "takeout" ? `Takeout ${orderNumber ?? ""}` : orderSource === "staff_meal" ? `Staff ${orderNumber ?? ""}` : tableCode;
     const stripZone = ({ zoneId: _z, zoneLabel: _zl, printToKitchen: _pk, ...line }: (typeof lines)[number]) => line;
-    const baseTicket = { kind: "order_ticket" as const, table: displayLabel, order_type: orderType, sent_at: sentAt };
+    const baseTicket = { kind: "order_ticket" as const, table: displayLabel, source: "pos" as const, order_type: orderType, sent_at: sentAt, round_number: roundNumber };
 
     // Kitchen tickets: one per kitchen zone (Main Kitchen / Soup / Salad-Somtum …).
     const grouped = new Map<string, { zoneLabel: string; lines: ReturnType<typeof stripZone>[] }>();
@@ -664,6 +672,81 @@ function OrderPage() {
   const liveItems = items.filter((i) => i.status !== "voided");
   const pendingCount = liveItems.filter((i) => i.status === "pending").length;
   const subtotal = liveItems.reduce((s, i) => s + i.qty * Number(i.unit_price), 0);
+  const sentRounds = useMemo(() => {
+    const grouped = new Map<number, Item[]>();
+    for (const item of items) {
+      if (item.status === "pending" || item.status === "voided" || !item.round_number) continue;
+      const group = grouped.get(item.round_number) ?? [];
+      group.push(item);
+      grouped.set(item.round_number, group);
+    }
+    return [...grouped.entries()].sort(([a], [b]) => a - b).map(([number, roundItems]) => ({ number, items: roundItems }));
+  }, [items]);
+  const nextRoundNumber = Math.max(0, ...sentRounds.map((round) => round.number)) + 1;
+  const displayItems = useMemo(() => [...liveItems].sort((a, b) => {
+    const aRound = a.status === "pending" ? Number.MAX_SAFE_INTEGER : (a.round_number ?? 0);
+    const bRound = b.status === "pending" ? Number.MAX_SAFE_INTEGER : (b.round_number ?? 0);
+    return aRound - bRound || String(a.sent_at ?? a.id).localeCompare(String(b.sent_at ?? b.id));
+  }), [liveItems]);
+
+  const reprintRoundAtCounter = async (roundNumber: number) => {
+    const round = sentRounds.find((entry) => entry.number === roundNumber);
+    if (!round || reprintingRound !== null) return;
+    setReprintingRound(roundNumber);
+    try {
+      const displayLabel = orderSource === "takeout" ? `Takeout ${orderNumber ?? ""}` : orderSource === "staff_meal" ? `Staff ${orderNumber ?? ""}` : tableCode;
+      const lines = round.items.map((item) => ({
+        name_th: item.name_th,
+        name_en: item.name_en,
+        name_my: item.name_my,
+        qty: item.qty,
+        notes: item.notes,
+        modifiers: (item.modifiers as Modifier[] | null) ?? null,
+      }));
+      await printCounter({
+        kind: "order_ticket",
+        table: displayLabel,
+        source: round.items[0]?.round_source ?? "pos",
+        order_type: roundNumber === 1 ? "new" : "added",
+        sent_at: round.items[0]?.sent_at ?? new Date().toISOString(),
+        round_number: roundNumber,
+        reprint: true,
+        ticket_type: "round_reprint",
+        lines,
+        language: "my",
+        department: "COUNTER REPRINT",
+        station: "COUNTER REPRINT",
+        footer: "counter",
+      } as CounterPrintPayload);
+      toast.success(lang === "th" ? `พิมพ์รอบ ${roundNumber} ที่เคาน์เตอร์แล้ว` : `Round ${roundNumber} reprinted at counter`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Reprint failed");
+    } finally {
+      setReprintingRound(null);
+    }
+  };
+
+  const roundHeaderFor = (item: Item, index: number) => {
+    const pending = item.status === "pending";
+    const roundNumber = pending ? nextRoundNumber : item.round_number;
+    const previous = displayItems[index - 1];
+    const previousRound = previous ? (previous.status === "pending" ? nextRoundNumber : previous.round_number) : null;
+    if (previousRound === roundNumber) return null;
+    return (
+      <div className="flex items-center justify-between rounded-lg bg-muted px-3 py-2">
+        <div>
+          <div className="font-bold">{pending ? (lang === "th" ? `รอส่ง · รอบถัดไป ${roundNumber}` : `Pending · Next round ${roundNumber}`) : (lang === "th" ? `รอบ ${roundNumber}` : `Round ${roundNumber}`)}</div>
+          {!pending && item.sent_at && <div className="text-xs text-muted-foreground">{new Date(item.sent_at).toLocaleTimeString(lang === "th" ? "th-TH" : "en-GB", { hour: "2-digit", minute: "2-digit" })} · {(item.round_source ?? "pos").toUpperCase()}</div>}
+        </div>
+        {!pending && roundNumber && (
+          <Button size="sm" variant="outline" onClick={() => reprintRoundAtCounter(roundNumber)} disabled={reprintingRound !== null}>
+            <Printer className="h-3.5 w-3.5 mr-1" />
+            {reprintingRound === roundNumber ? "..." : (lang === "th" ? "พิมพ์ซ้ำเคาน์เตอร์" : "Counter reprint")}
+          </Button>
+        )}
+      </div>
+    );
+  };
 
   // Bill preview totals (mirrors payment screen VAT logic)
   const vatRate = settingsVatRate / 100;
@@ -812,12 +895,15 @@ function OrderPage() {
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 space-y-3">
           {liveItems.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">{t("empty_order")}</p>}
-          {liveItems.map((i) => {
+          {displayItems.map((i, itemIndex) => {
+            const roundHeader = roundHeaderFor(i, itemIndex);
             const sc = i.set_config as SetConfig | undefined | null;
             if (sc) {
               // SET ITEM
               return (
-                <div key={i.id} className="rounded-lg border-2 border-amber-200 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/20 p-3">
+                <div key={i.id} className="space-y-2">
+                  {roundHeader}
+                  <div className="rounded-lg border-2 border-amber-200 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/20 p-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
@@ -858,13 +944,16 @@ function OrderPage() {
                       </Button>
                     </div>
                   )}
+                  </div>
                 </div>
               );
             }
             // --- regular item (original code preserved exactly) ---
             const mods = Array.isArray(i.modifiers) ? (i.modifiers as Modifier[]) : [];
             return (
-              <div key={i.id} className="rounded-lg border p-3">
+              <div key={i.id} className="space-y-2">
+                {roundHeader}
+                <div className="rounded-lg border p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="font-medium truncate">{pickName(i, lang)}</div>
@@ -905,6 +994,7 @@ function OrderPage() {
                     </Button>
                   </div>
                 )}
+                </div>
               </div>
             );
           })}

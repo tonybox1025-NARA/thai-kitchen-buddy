@@ -100,6 +100,8 @@ export type KitchenPayload = {
   waiter?: string;
   order_type?: "added" | "new" | string;
   source?: "qr" | "pos" | string;
+  round_number?: number;
+  reprint?: boolean;
   ticket_type?: "kitchen" | "kitchen_check" | "front" | string;
   route_version?: number;
   department?: string;
@@ -519,6 +521,8 @@ export async function buildKitchen(p: KitchenPayload): Promise<Uint8Array> {
   if (zone) d.text(`โซน : ${zone}`, S.norm);
 
   d.text(`โต๊ะ ${p.table ?? "?"}`, S.big);
+  if (p.round_number) d.text(`ROUND ${p.round_number} · รอบ ${p.round_number}`, S.xl, "center");
+  if (p.reprint) d.text("*** REPRINT · พิมพ์ซ้ำ ***", S.bold, "center");
   if (p.waiter) d.text(`โดย ${p.waiter}`, S.norm);
   d.text(p.order_type === "added" ? "เพิ่มออเดอร์ (ADDED)" : "ออเดอร์ใหม่ (NEW)", S.small);
   if (isQr) d.text("[ QR ORDER ]", S.bold);

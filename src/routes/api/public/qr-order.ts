@@ -135,6 +135,9 @@ export const Route = createFileRoute("/api/public/qr-order")({
 
         // Insert items as already-sent — kitchen gets the ticket automatically, no staff confirmation needed
         const sentAt = new Date().toISOString();
+        const { data: allocatedRound, error: roundError } = await (supabase as any).rpc("allocate_order_round", { p_order_id: order.id });
+        if (roundError || !allocatedRound) return new Response(roundError?.message ?? "Round allocation failed", { status: 500 });
+        const roundNumber = Number(allocatedRound);
         const categoryIds = [...new Set((menus ?? []).map((m: any) => m.category_id).filter(Boolean))] as string[];
         const [{ data: categories }, { data: zones }] = await Promise.all([
           categoryIds.length
@@ -193,6 +196,8 @@ export const Route = createFileRoute("/api/public/qr-order")({
               modifiers: modifiers.length > 0 ? modifiers : null,
               status: "sent" as const,
               sent_at: sentAt,
+              round_number: roundNumber,
+              round_source: "qr",
               set_config: it.set_config ?? null,
             },
           };
@@ -215,7 +220,7 @@ export const Route = createFileRoute("/api/public/qr-order")({
         }));
         const stripZone = ({ zoneId: _zoneId, zoneLabel: _zoneLabel, printToKitchen: _printToKitchen, ...line }: (typeof lines)[number]) => line;
         type TicketLine = ReturnType<typeof stripZone>;
-        const ticketPayload = { kind: "order_ticket", table: table_code, source: "qr", order_type: orderType, sent_at: sentAt };
+        const ticketPayload = { kind: "order_ticket", table: table_code, source: "qr", order_type: orderType, sent_at: sentAt, round_number: roundNumber };
         const grouped = new Map<string, { zoneLabel: string; lines: TicketLine[] }>();
         for (const line of lines) {
           if (!line.printToKitchen) continue;
@@ -285,6 +290,7 @@ export const Route = createFileRoute("/api/public/qr-order")({
           ok: true,
           order_id: order.id,
           count: rows.length,
+          round_number: roundNumber,
           print_routing: { kitchen: foodLines.length, front: frontLines.length },
         });
       },
