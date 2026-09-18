@@ -527,7 +527,9 @@ export async function buildKitchen(p: KitchenPayload): Promise<Uint8Array> {
   if (zone) d.text(`โซน : ${zone}`, S.norm);
 
   d.text(`โต๊ะ ${p.table ?? "?"}`, S.big);
-  if (p.round_number) d.text(`ROUND ${p.round_number} · รอบ ${p.round_number}`, S.xl, "center");
+  // Round numbers are useful in the on-screen order history, but printing them
+  // on a normal ticket makes a fresh order look like a reprint.  Paper tickets
+  // only call out the exceptional case below: an explicit reprint.
   if (p.reprint) d.text("*** REPRINT · พิมพ์ซ้ำ ***", S.bold, "center");
   if (p.waiter) d.text(`โดย ${p.waiter}`, S.norm);
   d.text(p.order_type === "added" ? "เพิ่มออเดอร์ (ADDED)" : "ออเดอร์ใหม่ (NEW)", S.small);
