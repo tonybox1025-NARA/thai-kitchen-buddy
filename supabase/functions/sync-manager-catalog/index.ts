@@ -64,7 +64,12 @@ Deno.serve(async (req) => {
       ...(catalog.categories ?? []).map((category: any) => Number(category.sort_order) || 0),
     );
     const categoryNames = uniqueByNormalizedName(
-      catalog.menus.map((menu: any) => menu.category || "ทั่วไป") as string[],
+      // Do not recreate categories that are used only by retired menus. SET
+      // children stay in the catalog because active SET composition needs
+      // their hidden POS rows.
+      catalog.menus
+        .filter((menu: any) => (menu.is_active !== false && menu.available_pos !== false) || menu.is_set_child === true)
+        .map((menu: any) => menu.category || "ทั่วไป") as string[],
       (name) => name,
     );
     const claimedMenuIds = new Set<string>();
