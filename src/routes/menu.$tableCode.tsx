@@ -686,7 +686,7 @@ function CustomerMenu() {
 
       {/* ── Add item dialog (regular items only) ── */}
       <Dialog open={!!adding} onOpenChange={(o) => !o && setAdding(null)}>
-        <DialogContent className="overflow-hidden">
+        <DialogContent className="max-h-[100dvh] overflow-y-auto overscroll-contain p-4 sm:max-h-[90vh] sm:p-6">
           {adding?.image_url && <PopupHeroImage src={adding.image_url} />}
           <DialogHeader>
             <DialogTitle className="leading-snug">{adding ? name(adding) : ""}</DialogTitle>
@@ -770,7 +770,7 @@ function CustomerMenu() {
               </div>
             );
           })()}
-          <DialogFooter className="gap-2">
+          <DialogFooter className="sticky bottom-0 z-10 -mx-4 -mb-4 gap-2 border-t bg-background p-4 sm:static sm:mx-0 sm:mb-0 sm:border-0 sm:bg-transparent sm:p-0">
             <Button variant="outline" className="flex-1" onClick={() => setAdding(null)}>{tr.cancel}</Button>
             <Button className="flex-1" onClick={addToCart}>
               {tr.add} · ฿{adding ? ((adding.price + Array.from(selectedAddons.values()).reduce((s, a) => s + a.price, 0)) * addQty).toFixed(0) : "0"}
