@@ -647,6 +647,27 @@ export type Database = {
         }
         Relationships: []
       }
+      menu_addon_duplicate_backup_20260919: {
+        Row: {
+          created_at: string | null
+          group_id: string | null
+          id: string
+          menu_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          group_id?: string | null
+          id?: string
+          menu_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          group_id?: string | null
+          id?: string
+          menu_id?: string | null
+        }
+        Relationships: []
+      }
       menu_addons: {
         Row: {
           created_at: string | null
@@ -689,6 +710,81 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      menu_duplicate_backup_20260919: {
+        Row: {
+          available: boolean
+          category_id: string | null
+          cost: number | null
+          created_at: string
+          id: string
+          image_url: string | null
+          is_set: boolean
+          is_set_child: boolean
+          manager_menu_id: string | null
+          name_en: string
+          name_my: string
+          name_th: string
+          price: number
+          sort: number
+        }
+        Insert: {
+          available?: boolean
+          category_id?: string | null
+          cost?: number | null
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          is_set?: boolean
+          is_set_child?: boolean
+          manager_menu_id?: string | null
+          name_en: string
+          name_my: string
+          name_th: string
+          price: number
+          sort?: number
+        }
+        Update: {
+          available?: boolean
+          category_id?: string | null
+          cost?: number | null
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          is_set?: boolean
+          is_set_child?: boolean
+          manager_menu_id?: string | null
+          name_en?: string
+          name_my?: string
+          name_th?: string
+          price?: number
+          sort?: number
+        }
+        Relationships: []
+      }
+      menu_duplicate_cleanup_map_20260919: {
+        Row: {
+          canonical_id: string
+          cleaned_at: string
+          duplicate_id: string
+          name_th: string | null
+          price: number | null
+        }
+        Insert: {
+          canonical_id: string
+          cleaned_at?: string
+          duplicate_id: string
+          name_th?: string | null
+          price?: number | null
+        }
+        Update: {
+          canonical_id?: string
+          cleaned_at?: string
+          duplicate_id?: string
+          name_th?: string | null
+          price?: number | null
+        }
+        Relationships: []
       }
       menu_ingredients: {
         Row: {
@@ -951,10 +1047,10 @@ export type Database = {
           guests: number
           id: string
           is_test: boolean
+          next_round: number
           opened_at: string
           opened_by: string | null
           order_number: string | null
-          next_round: number
           shift_id: string | null
           source: Database["public"]["Enums"]["order_source"]
           status: Database["public"]["Enums"]["order_status"]
@@ -967,10 +1063,10 @@ export type Database = {
           guests?: number
           id?: string
           is_test?: boolean
+          next_round?: number
           opened_at?: string
           opened_by?: string | null
           order_number?: string | null
-          next_round?: number
           shift_id?: string | null
           source?: Database["public"]["Enums"]["order_source"]
           status?: Database["public"]["Enums"]["order_status"]
@@ -983,10 +1079,10 @@ export type Database = {
           guests?: number
           id?: string
           is_test?: boolean
+          next_round?: number
           opened_at?: string
           opened_by?: string | null
           order_number?: string | null
-          next_round?: number
           shift_id?: string | null
           source?: Database["public"]["Enums"]["order_source"]
           status?: Database["public"]["Enums"]["order_status"]
@@ -1490,6 +1586,7 @@ export type Database = {
           balance_after: number
         }[]
       }
+      allocate_order_round: { Args: { p_order_id: string }; Returns: number }
       claim_receipt_loyalty_points: {
         Args: { p_claim_token: string; p_guest_token: string }
         Returns: {
