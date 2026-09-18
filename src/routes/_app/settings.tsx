@@ -167,6 +167,7 @@ function AppUpdateTab() {
   const [release, setRelease] = useState<GithubRelease | null>(null);
   const [checking, setChecking] = useState(false);
   const [installing, setInstalling] = useState(false);
+  const [installingBridge, setInstallingBridge] = useState(false);
   const updateAvailable = !!release && !!current && newerVersion(current, release.tag_name);
 
   const check = async () => {
@@ -185,10 +186,10 @@ function AppUpdateTab() {
 
   useEffect(() => { void check(); }, []);
 
-  const install = async () => {
-    const apk = release?.assets.find((asset) => asset.name.endsWith(".apk"));
+  const installApk = async (assetName: string, setBusy: (value: boolean) => void) => {
+    const apk = release?.assets.find((asset) => asset.name === assetName);
     if (!apk) { toast.error("This release does not contain an APK"); return; }
-    setInstalling(true);
+    setBusy(true);
     try {
       const { allowed } = await AppUpdate.canInstallPackages();
       if (!allowed) {
@@ -201,9 +202,12 @@ function AppUpdateTab() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Update failed");
     } finally {
-      setInstalling(false);
+      setBusy(false);
     }
   };
+
+  const posApk = release?.assets.find((asset) => /^Lonmoh-POS-.*\.apk$/i.test(asset.name));
+  const bridgeApk = release?.assets.find((asset) => /^Lonmoh-Print-Bridge-.*\.apk$/i.test(asset.name));
 
   return (
     <Card className="max-w-2xl">
@@ -219,7 +223,8 @@ function AppUpdateTab() {
         </div>
         <div className="flex gap-3">
           <Button variant="outline" onClick={check} disabled={checking}><RefreshCw className={`mr-2 h-4 w-4 ${checking ? "animate-spin" : ""}`} />Check for updates</Button>
-          {updateAvailable && <Button onClick={install} disabled={installing}><Download className="mr-2 h-4 w-4" />{installing ? "Downloading…" : "Download & Install"}</Button>}
+          {updateAvailable && posApk && <Button onClick={() => void installApk(posApk.name, setInstalling)} disabled={installing}><Download className="mr-2 h-4 w-4" />{installing ? "Downloading…" : "Update POS"}</Button>}
+          {bridgeApk && <Button variant="secondary" onClick={() => void installApk(bridgeApk.name, setInstallingBridge)} disabled={installingBridge}><Download className="mr-2 h-4 w-4" />{installingBridge ? "Downloading…" : "Install Print Bridge"}</Button>}
         </div>
         <p className="text-xs text-muted-foreground">The first update requires Android permission to install apps from LONMOH POS. Existing app data and login are preserved.</p>
       </CardContent>
