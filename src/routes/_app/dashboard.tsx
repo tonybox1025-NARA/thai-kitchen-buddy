@@ -15,7 +15,7 @@ function Dashboard() {
   const { t } = useI18n();
   const [range, setRange] = useState<DashRange>("today");
   const [custom, setCustom] = useState<DateRange | undefined>();
-  const [bills, setBills]     = useState<{ id: string; order_id: string | null; total: number; subtotal: number; discount_amount: number; member_discount_amount: number }[]>([]);
+  const [bills, setBills]     = useState<{ id: string; order_id: string | null; total: number; subtotal: number; discount_amount: number; member_discount_amount: number; vat_amount: number; vat_mode: "inclusive" | "exclusive" }[]>([]);
   const [payments, setPayments] = useState<{ method: string; amount: number; tip_amount: number; bill_id: string }[]>([]);
   const [voidsTotal, setVoidsTotal]   = useState(0);
   const [cancelledCt, setCancelledCt] = useState(0);
@@ -39,7 +39,7 @@ function Dashboard() {
         return;
       }
       const [{ data: b }, { data: voidRows }, { data: cancelledOrds }] = await Promise.all([
-        supabase.from("bills").select("id,order_id,total,subtotal,discount_amount,member_discount_amount")
+        supabase.from("bills").select("id,order_id,total,subtotal,discount_amount,member_discount_amount,vat_amount,vat_mode")
           .eq("status","paid").in("shift_id", shiftIds).not("is_test", "is", true),
         supabase.from("voids").select("amount").in("shift_id", shiftIds),
         supabase.from("orders").select("id").in("shift_id", shiftIds).eq("status","cancelled").not("is_test", "is", true),
@@ -73,10 +73,17 @@ function Dashboard() {
     const byMethod: Record<string,number> = { cash:0, qr:0, gov_qr:0, card:0 };
     payments.forEach(p => { byMethod[p.method] = (byMethod[p.method]??0) + Number(p.amount); });
     const tipTotal = payments.filter(p => p.method==="qr").reduce((s,p) => s+Number(p.tip_amount??0), 0);
+    const vatIncluded = bills
+      .filter(b => b.vat_mode === "inclusive")
+      .reduce((s, b) => s + Number(b.vat_amount ?? 0), 0);
+    const vatAdded = bills
+      .filter(b => b.vat_mode === "exclusive")
+      .reduce((s, b) => s + Number(b.vat_amount ?? 0), 0);
+    const vatTotal = vatIncluded + vatAdded;
     const grossProfit = gross - totalCost;
     const costPct     = gross > 0 ? (totalCost  / gross) * 100 : 0;
     const marginPct   = gross > 0 ? (grossProfit / gross) * 100 : 0;
-    return { gross, net, discounts, byMethod, count: bills.length, tipTotal, qrGross: byMethod.qr + byMethod.gov_qr + tipTotal, grossProfit, costPct, marginPct };
+    return { gross, net, discounts, byMethod, count: bills.length, tipTotal, qrGross: byMethod.qr + byMethod.gov_qr + tipTotal, vatIncluded, vatAdded, vatTotal, grossProfit, costPct, marginPct };
   }, [bills, payments, totalCost]);
 
   // Encode range into query string for detail pages
@@ -102,7 +109,7 @@ function Dashboard() {
       </div>
 
       {/* Cost & Margin */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <StatCard
           title={t("total_cost")}
           value={thb(totalCost)}
@@ -112,6 +119,14 @@ function Dashboard() {
           title={t("gross_profit")}
           value={thb(stats.grossProfit)}
           sub={stats.gross > 0 ? `${stats.marginPct.toFixed(1)}% margin` : undefined}
+        />
+        <StatCard
+          title={t("vat")}
+          value={thb(stats.vatTotal)}
+          sub={[
+            stats.vatIncluded > 0 ? `${t("vat_inclusive")}: ${thb(stats.vatIncluded)}` : "",
+            stats.vatAdded > 0 ? `${t("vat_exclusive")}: ${thb(stats.vatAdded)}` : "",
+          ].filter(Boolean).join(" · ") || undefined}
         />
       </div>
 
