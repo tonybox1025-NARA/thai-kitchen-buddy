@@ -1724,8 +1724,14 @@ function MenuTab() {
       image_url: edit.image_url?.trim() || null,
     };
     let menuId = edit.id;
-    if (menuId && !edit.manager_menu_id) {
-      await db.from("menus").update(payload).eq("id", menuId);
+    if (menuId) {
+      // Manager-linked catalog fields remain owned by Manager, but POS-only
+      // relations such as add-ons must be saved against the existing linked
+      // row. Creating a new row here produced an unlinked duplicate every time
+      // an operator added an add-on to a Manager menu.
+      if (!edit.manager_menu_id) {
+        await db.from("menus").update(payload).eq("id", menuId);
+      }
     } else {
       const { data: inserted } = await db.from("menus").insert(payload).select("id").single();
       menuId = inserted?.id;

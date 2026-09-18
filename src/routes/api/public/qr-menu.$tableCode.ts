@@ -52,7 +52,7 @@ export const Route = createFileRoute("/api/public/qr-menu/$tableCode")({
           supabase.from("categories").select("id,name_th,name_en,sort").order("sort"),
           supabase
             .from("menus")
-            .select("id,category_id,name_th,name_en,price,available,sort,image_url,is_set")
+            .select("id,category_id,name_th,name_en,price,available,sort,image_url,is_set,manager_menu_id")
             .eq("available", true)
             .order("sort"),
           supabase.from("settings").select("restaurant_name").eq("id", 1).maybeSingle(),
@@ -61,10 +61,35 @@ export const Route = createFileRoute("/api/public/qr-menu/$tableCode")({
           return new Response("Failed to load menu", { status: 500 });
         }
 
+        // Older POS builds created an unlinked duplicate when an operator edited
+        // add-ons on a Manager-linked menu. Collapse only exact catalog twins,
+        // preferring the Manager row, and carry the duplicate's add-ons onto it.
+        const originalMenus = (menus ?? []) as any[];
+        const duplicateToCanonical = new Map<string, string>();
+        const menuKey = (menu: any) => [
+          menu.category_id ?? "",
+          String(menu.name_th ?? "").trim().replace(/\s+/g, " ").toLocaleLowerCase(),
+          Number(menu.price ?? 0).toFixed(2),
+        ].join("|");
+        const menusByKey = new Map<string, any[]>();
+        for (const menu of originalMenus) {
+          const key = menuKey(menu);
+          const group = menusByKey.get(key) ?? [];
+          group.push(menu);
+          menusByKey.set(key, group);
+        }
+        const visibleMenus = [...menusByKey.values()].map((group) => {
+          const canonical = group.find((menu) => Boolean(menu.manager_menu_id)) ?? group[0];
+          for (const menu of group) {
+            if (menu.id !== canonical.id) duplicateToCanonical.set(menu.id, canonical.id);
+          }
+          return canonical;
+        });
+
         // Build addon groups per menu item. menu_addons -> addon_groups is not a
         // declared PostgREST FK, so a nested select returns null — fetch in two
         // steps (same as the staff order screen).
-        const menuIds = (menus ?? []).map((m: { id: string }) => m.id);
+        const menuIds = originalMenus.map((m: { id: string }) => m.id);
         const addonsByMenuId: Record<string, unknown[]> = {};
         const setDefsByMenuId: Record<string, unknown> = {};
         if (menuIds.length > 0) {
@@ -85,12 +110,14 @@ export const Route = createFileRoute("/api/public/qr-menu/$tableCode")({
           for (const link of linkRows) {
             const g = groupById.get(link.group_id);
             if (!g) continue;
-            if (!addonsByMenuId[link.menu_id]) addonsByMenuId[link.menu_id] = [];
-            addonsByMenuId[link.menu_id].push(g);
+            const canonicalId = duplicateToCanonical.get(link.menu_id) ?? link.menu_id;
+            if (!addonsByMenuId[canonicalId]) addonsByMenuId[canonicalId] = [];
+            const groups = addonsByMenuId[canonicalId] as { id?: string }[];
+            if (!groups.some((group) => group.id === link.group_id)) groups.push(g);
           }
         }
 
-        const setMenus = (menus ?? []).filter((menu: any) => menu.is_set);
+        const setMenus = visibleMenus.filter((menu: any) => menu.is_set);
         if (setMenus.length > 0) {
           const { data: setLinks } = await db.from("menu_set_items")
             .select("set_menu_id,child_menu_id,quantity,group_key,group_name,min_select,max_select,sort_order")
@@ -111,14 +138,14 @@ export const Route = createFileRoute("/api/public/qr-menu/$tableCode")({
           }
         }
 
-        const usedCategoryIds = new Set((menus ?? []).map((menu) => menu.category_id).filter(Boolean));
+        const usedCategoryIds = new Set(visibleMenus.map((menu) => menu.category_id).filter(Boolean));
         const visibleCategories = (cats ?? []).filter((category) => usedCategoryIds.has(category.id));
 
         return Response.json(
           {
             table,
             categories: visibleCategories,
-            menus: menus ?? [],
+            menus: visibleMenus,
             restaurant_name: settings?.restaurant_name ?? "Restaurant",
             addonsByMenuId,
             setDefsByMenuId,
