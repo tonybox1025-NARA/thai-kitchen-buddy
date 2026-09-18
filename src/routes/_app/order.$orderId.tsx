@@ -733,16 +733,23 @@ function OrderPage() {
     const previousRound = previous ? (previous.status === "pending" ? nextRoundNumber : previous.round_number) : null;
     if (previousRound === roundNumber) return null;
     return (
-      <div className="flex items-center justify-between rounded-lg bg-muted px-3 py-2">
-        <div>
+      <div className="rounded-lg bg-muted px-3 py-2">
+        <div className="flex items-center justify-between gap-3">
           <div className="font-bold">{pending ? (lang === "th" ? `รอส่ง · รอบถัดไป ${roundNumber}` : `Pending · Next round ${roundNumber}`) : (lang === "th" ? `รอบ ${roundNumber}` : `Round ${roundNumber}`)}</div>
-          {!pending && item.sent_at && <div className="text-xs text-muted-foreground">{new Date(item.sent_at).toLocaleTimeString(lang === "th" ? "th-TH" : "en-GB", { hour: "2-digit", minute: "2-digit" })} · {(item.round_source ?? "pos").toUpperCase()}</div>}
+          {!pending && item.sent_at && (
+            <div className="shrink-0 text-right font-semibold tabular-nums">
+              {new Date(item.sent_at).toLocaleTimeString(lang === "th" ? "th-TH" : "en-GB", { hour: "2-digit", minute: "2-digit" })}
+            </div>
+          )}
         </div>
         {!pending && roundNumber && (
-          <Button size="sm" variant="outline" onClick={() => reprintRoundAtCounter(roundNumber)} disabled={reprintingRound !== null}>
-            <Printer className="h-3.5 w-3.5 mr-1" />
-            {reprintingRound === roundNumber ? "..." : (lang === "th" ? "พิมพ์ซ้ำเคาน์เตอร์" : "Counter reprint")}
-          </Button>
+          <div className="mt-1 flex items-center justify-between gap-2">
+            <span className="text-xs text-muted-foreground">{(item.round_source ?? "pos").toUpperCase()}</span>
+            <Button size="sm" variant="outline" onClick={() => reprintRoundAtCounter(roundNumber)} disabled={reprintingRound !== null}>
+              <Printer className="h-3.5 w-3.5 mr-1" />
+              {reprintingRound === roundNumber ? "..." : (lang === "th" ? "พิมพ์ซ้ำเคาน์เตอร์" : "Counter reprint")}
+            </Button>
+          </div>
         )}
       </div>
     );
