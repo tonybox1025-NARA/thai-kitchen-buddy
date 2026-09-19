@@ -585,12 +585,15 @@ export async function buildTableQr(p: TableQrPayload): Promise<Uint8Array> {
   });
 
   const d = new Doc(24);
-  d.text(p.restaurant || "Restaurant", S.big, "center");
-  d.text(`โต๊ะ ${p.table ?? "-"}`, S.xl, "center");
-  if (p.guests && p.guests > 0) d.text(`${p.guests} ท่าน`, S.norm, "center");
+  // Keep the table QR slip ASCII-only. A common 80 mm counter-printer
+  // firmware corrupts large Thai glyphs even when they arrive as a raster,
+  // which can make the heading overlap and become unreadable. Kitchen and
+  // receipt tickets keep their normal multilingual rendering.
+  d.text("LONMOH", S.big, "center");
+  d.text(`TABLE ${p.table ?? "-"}`, S.xl, "center");
+  if (p.guests && p.guests > 0) d.text(`${p.guests} guests`, S.norm, "center");
   d.rule();
-  d.text("สแกนเพื่อสั่งอาหาร", S.bold, "center");
-  d.text("Scan to order", S.small, "center");
+  d.text("Scan to order", S.bold, "center");
   d.feed(8);
   d.logo(qrCanvas, qrCanvas.width, qrCanvas.height);
 
