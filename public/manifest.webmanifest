@@ -3,6 +3,9 @@
   "short_name": "POS LIVE",
   "id": "/live",
   "start_url": "/live",
+  "launch_handler": {
+    "client_mode": "navigate-new"
+  },
   "scope": "/",
   "display": "standalone",
   "orientation": "landscape",
