@@ -51,7 +51,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       String(m?.routeId ?? m?.fullPath ?? m?.pathname ?? "").includes("/wallet"),
     );
     const manifestHref = isWallet ? "/wallet.webmanifest" : "/manifest.webmanifest";
-    const appleTitle = isWallet ? "LONMOH" : "POS";
+    const appleTitle = isWallet ? "LONMOH" : "POS LIVE";
     return {
     meta: [
       { charSet: "utf-8" },

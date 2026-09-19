@@ -1,7 +1,7 @@
 {
-  "name": "LONMOH POS",
-  "short_name": "POS",
-  "start_url": "/",
+  "name": "POS LIVE",
+  "short_name": "POS LIVE",
+  "start_url": "/live",
   "scope": "/",
   "display": "standalone",
   "orientation": "landscape",
