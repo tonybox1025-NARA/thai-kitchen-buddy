@@ -76,9 +76,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     links: [
       { rel: "stylesheet", href: appCss },
       { rel: "manifest", href: manifestHref },
-      { rel: "apple-touch-icon", href: "/icon-192.png" },
-      { rel: "icon", type: "image/png", sizes: "192x192", href: "/icon-192.png" },
-      { rel: "icon", type: "image/png", sizes: "512x512", href: "/icon-512.png" },
+      { rel: "apple-touch-icon", href: "/icon-192.png?v=2" },
+      { rel: "icon", type: "image/png", sizes: "192x192", href: "/icon-192.png?v=2" },
+      { rel: "icon", type: "image/png", sizes: "512x512", href: "/icon-512.png?v=2" },
       // Self-hosted (Inter, Noto Sans Thai, Padauk — same families/weights as the
       // Google Fonts CDN) so the bundled Android build renders Thai and Burmese
       // with no network, and the website drops an external dependency.
