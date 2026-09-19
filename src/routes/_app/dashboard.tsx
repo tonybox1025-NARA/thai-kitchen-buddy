@@ -6,7 +6,7 @@ import { thb } from "@/lib/format";
 import type { DateRange } from "react-day-picker";
 import { DashRangeBar } from "@/components/DashRangeBar";
 import { type DashRange, rangeBounds, shiftIdsFor } from "@/lib/dash-range";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Clock3 } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_app/dashboard")({ component: Dashboard });
@@ -97,7 +97,15 @@ function Dashboard() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold">{t("nav_dashboard")}</h1>
-        <DashRangeBar range={range} onRange={setRange} custom={custom} onCustom={setCustom} />
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          <Link to="/time-analysis">
+            <button className="inline-flex h-9 items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium shadow-sm hover:bg-muted">
+              <Clock3 className="h-4 w-4" />
+              Time analysis
+            </button>
+          </Link>
+          <DashRangeBar range={range} onRange={setRange} custom={custom} onCustom={setCustom} />
+        </div>
       </div>
 
       {/* Top summary boxes */}

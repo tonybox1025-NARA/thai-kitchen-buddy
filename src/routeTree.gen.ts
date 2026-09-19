@@ -26,6 +26,7 @@ import { Route as AppPosRouteImport } from './routes/_app/pos'
 import { Route as AppRegisterRouteImport } from './routes/_app/register'
 import { Route as AppReportsRouteImport } from './routes/_app/reports'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
+import { Route as AppTimeAnalysisRouteImport } from './routes/_app/time-analysis'
 import { Route as MenuTableCodeRouteImport } from './routes/menu.$tableCode'
 import { Route as PrintTestKindRouteImport } from './routes/print-test.$kind'
 import { Route as AppOrderOrderIdRouteImport } from './routes/_app/order.$orderId'
@@ -123,6 +124,11 @@ const AppSettingsRoute = AppSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AppRoute,
 } as any)
+const AppTimeAnalysisRoute = AppTimeAnalysisRouteImport.update({
+  id: '/time-analysis',
+  path: '/time-analysis',
+  getParentRoute: () => AppRoute,
+} as any)
 const MenuTableCodeRoute = MenuTableCodeRouteImport.update({
   id: '/menu/$tableCode',
   path: '/menu/$tableCode',
@@ -204,6 +210,7 @@ export interface FileRoutesByFullPath {
   '/register': typeof AppRegisterRoute
   '/reports': typeof AppReportsRoute
   '/settings': typeof AppSettingsRoute
+  '/time-analysis': typeof AppTimeAnalysisRoute
   '/menu/$tableCode': typeof MenuTableCodeRoute
   '/print-test/$kind': typeof PrintTestKindRoute
   '/order/$orderId': typeof AppOrderOrderIdRoute
@@ -234,6 +241,7 @@ export interface FileRoutesByTo {
   '/register': typeof AppRegisterRoute
   '/reports': typeof AppReportsRoute
   '/settings': typeof AppSettingsRoute
+  '/time-analysis': typeof AppTimeAnalysisRoute
   '/menu/$tableCode': typeof MenuTableCodeRoute
   '/print-test/$kind': typeof PrintTestKindRoute
   '/order/$orderId': typeof AppOrderOrderIdRoute
@@ -266,6 +274,7 @@ export interface FileRoutesById {
   '/_app/register': typeof AppRegisterRoute
   '/_app/reports': typeof AppReportsRoute
   '/_app/settings': typeof AppSettingsRoute
+  '/_app/time-analysis': typeof AppTimeAnalysisRoute
   '/menu/$tableCode': typeof MenuTableCodeRoute
   '/print-test/$kind': typeof PrintTestKindRoute
   '/_app/order/$orderId': typeof AppOrderOrderIdRoute
@@ -298,6 +307,7 @@ export interface FileRouteTypes {
     | '/register'
     | '/reports'
     | '/settings'
+    | '/time-analysis'
     | '/menu/$tableCode'
     | '/print-test/$kind'
     | '/order/$orderId'
@@ -328,6 +338,7 @@ export interface FileRouteTypes {
     | '/register'
     | '/reports'
     | '/settings'
+    | '/time-analysis'
     | '/menu/$tableCode'
     | '/print-test/$kind'
     | '/order/$orderId'
@@ -359,6 +370,7 @@ export interface FileRouteTypes {
     | '/_app/register'
     | '/_app/reports'
     | '/_app/settings'
+    | '/_app/time-analysis'
     | '/menu/$tableCode'
     | '/print-test/$kind'
     | '/_app/order/$orderId'
@@ -511,6 +523,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/time-analysis': {
+      id: '/_app/time-analysis'
+      path: '/time-analysis'
+      fullPath: '/time-analysis'
+      preLoaderRoute: typeof AppTimeAnalysisRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/menu/$tableCode': {
       id: '/menu/$tableCode'
       path: '/menu/$tableCode'
@@ -612,6 +631,7 @@ interface AppRouteChildren {
   AppRegisterRoute: typeof AppRegisterRoute
   AppReportsRoute: typeof AppReportsRoute
   AppSettingsRoute: typeof AppSettingsRoute
+  AppTimeAnalysisRoute: typeof AppTimeAnalysisRoute
   AppOrderOrderIdRoute: typeof AppOrderOrderIdRoute
   AppPaymentBillIdRoute: typeof AppPaymentBillIdRoute
 }
@@ -630,6 +650,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppRegisterRoute: AppRegisterRoute,
   AppReportsRoute: AppReportsRoute,
   AppSettingsRoute: AppSettingsRoute,
+  AppTimeAnalysisRoute: AppTimeAnalysisRoute,
   AppOrderOrderIdRoute: AppOrderOrderIdRoute,
   AppPaymentBillIdRoute: AppPaymentBillIdRoute,
 }
