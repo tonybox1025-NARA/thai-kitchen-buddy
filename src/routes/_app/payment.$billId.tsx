@@ -922,10 +922,6 @@ function PaymentPage() {
               ) : (
                 <p className="text-xs text-muted-foreground">Select a member to earn points on this bill.</p>
               )}
-              <div>
-                <Label className="text-xs">{t("member_discount")}</Label>
-                <KeypadInput value={memberDisc} onChange={setMemberDisc} title={t("member_discount")} placeholder="0" />
-              </div>
               {selectedMember && Number(selectedMember.current_points ?? 0) >= REDEEM_TIERS[0].points && (
                 <div className="space-y-1.5">
                   <Label className="text-xs">

@@ -11,7 +11,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { ShoppingCart, Plus, Minus, Check, Languages, Layers } from "lucide-react";
+import { ShoppingCart, Plus, Minus, Check, Languages, Layers, ReceiptText, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { SETS, SET_C_DRINKS, type SetDef, type SetConfig, type SetItem } from "@/lib/set-menu";
 
@@ -62,6 +62,28 @@ type CartItem = {
   set_config?: SetConfig;
   addons?: SelectedAddon[];
 };
+type CurrentOrderItem = {
+  id: string;
+  name_th: string;
+  name_en: string;
+  qty: number;
+  unit_price: number;
+  notes?: string | null;
+  modifiers?: Array<{
+    group_name?: string;
+    option_name?: string;
+    price?: number;
+    qty?: number;
+  }>;
+  round_number?: number | null;
+  sent_at?: string | null;
+};
+type CurrentOrder = {
+  order_id: string | null;
+  items: CurrentOrderItem[];
+  total: number;
+  count: number;
+};
 type Lang = "th" | "en";
 
 function categoryLabel(category: Category, lang: Lang) {
@@ -103,6 +125,11 @@ const T = {
     required: "จำเป็น",
     required_missing: "กรุณาเลือกตัวเลือกที่จำเป็นก่อนเพิ่มรายการ",
     submit_slow: "การเชื่อมต่อช้า ยังไม่ได้ส่งออเดอร์ ลองอีกครั้งหรือแจ้งพนักงานค่ะ",
+    my_orders: "รายการที่สั่ง",
+    current_order: "รายการสั่งของโต๊ะนี้",
+    ordered_total: "ยอดสั่งรวม",
+    no_orders: "ยังไม่มีรายการที่ส่งแล้ว",
+    refresh: "รีเฟรช",
   },
   en: {
     menu: "Menu",
@@ -136,6 +163,11 @@ const T = {
     required: "Required",
     required_missing: "Please choose all required options before adding this item.",
     submit_slow: "Connection is slow — your order was not sent. Please try again or tell staff.",
+    my_orders: "My orders",
+    current_order: "Current table order",
+    ordered_total: "Order total",
+    no_orders: "No submitted items yet",
+    refresh: "Refresh",
   },
 };
 
@@ -486,11 +518,34 @@ function CustomerMenu() {
   const [selectedAddons, setSelectedAddons] = useState<Map<string, SelectedAddon>>(new Map());
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [orderHistory, setOrderHistory] = useState<CurrentOrder>({
+    order_id: null,
+    items: [],
+    total: 0,
+    count: 0,
+  });
+  const [historyLoading, setHistoryLoading] = useState(false);
   // Set menu state
   const [selectedSetDef, setSelectedSetDef] = useState<SetDef | null>(null);
   const [setMenuOrigin, setSetMenuOrigin] = useState<Menu | null>(null);
   const catBarRef = useRef<HTMLDivElement>(null);
   const tr = T[lang];
+
+  const loadOrderHistory = async () => {
+    setHistoryLoading(true);
+    try {
+      const response = await fetch(
+        `/api/public/qr-order?table_code=${encodeURIComponent(tableCode)}`,
+      );
+      if (!response.ok) throw new Error(await response.text());
+      setOrderHistory(await response.json());
+    } catch (historyError) {
+      console.error("Unable to load current QR order", historyError);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
 
   useEffect(() => {
     const ac = new AbortController();
@@ -510,6 +565,12 @@ function CustomerMenu() {
         }
       });
     return () => ac.abort();
+  }, [tableCode]);
+
+  useEffect(() => {
+    void loadOrderHistory();
+    // The table code is the stable identity for this public order page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tableCode]);
 
   const orderedCategories = useMemo(() => {
@@ -713,6 +774,7 @@ function CustomerMenu() {
         }),
       });
       if (!res.ok) throw new Error(await res.text());
+      await loadOrderHistory();
       setCart([]);
       setSubmitted(true);
     } catch (e) {
@@ -786,6 +848,23 @@ function CustomerMenu() {
               {tr.table} {data.table.code}
             </div>
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setHistoryOpen(true);
+              void loadOrderHistory();
+            }}
+            className="gap-1.5 shrink-0"
+          >
+            <ReceiptText className="h-4 w-4" />
+            <span className="hidden min-[390px]:inline">{tr.my_orders}</span>
+            {orderHistory.count > 0 && (
+              <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold text-primary-foreground">
+                {orderHistory.count}
+              </span>
+            )}
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -962,6 +1041,61 @@ function CustomerMenu() {
               </Button>
             </div>
           )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Submitted items remain visible after the cart is cleared. This shows only
+          the current open order for this table; no member or payment data is exposed. */}
+      <Sheet open={historyOpen} onOpenChange={setHistoryOpen}>
+        <SheetContent side="bottom" className="max-h-[85dvh] overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle className="flex items-center justify-between gap-3 pr-8">
+              <span>{tr.current_order}</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="gap-1"
+                disabled={historyLoading}
+                onClick={() => void loadOrderHistory()}
+              >
+                <RefreshCw className={`h-4 w-4 ${historyLoading ? "animate-spin" : ""}`} />
+                {tr.refresh}
+              </Button>
+            </SheetTitle>
+          </SheetHeader>
+          <div className="mt-4 space-y-2">
+            {!historyLoading && orderHistory.items.length === 0 && (
+              <p className="py-8 text-center text-sm text-muted-foreground">{tr.no_orders}</p>
+            )}
+            {orderHistory.items.map((item) => (
+              <div key={item.id} className="rounded-lg border p-3">
+                <div className="flex items-start gap-3">
+                  <span className="font-bold text-primary">{item.qty}×</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium">{name(item)}</div>
+                    {item.modifiers?.map((modifier, index) => (
+                      <div key={`${item.id}-modifier-${index}`} className="mt-1 text-xs text-muted-foreground">
+                        + {modifier.option_name || modifier.group_name}
+                        {Number(modifier.qty ?? 1) > 1 ? ` ×${modifier.qty}` : ""}
+                      </div>
+                    ))}
+                    {item.notes && <div className="mt-1 text-xs text-muted-foreground">{item.notes}</div>}
+                    {item.round_number ? (
+                      <div className="mt-1 text-[11px] text-muted-foreground">
+                        {lang === "th" ? `รอบ ${item.round_number}` : `Round ${item.round_number}`}
+                      </div>
+                    ) : null}
+                  </div>
+                  <span className="font-semibold">฿{(item.qty * item.unit_price).toFixed(0)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="sticky bottom-0 mt-4 flex items-center justify-between border-t bg-background py-4 text-lg font-bold">
+            <span>{tr.ordered_total}</span>
+            <span>฿{Number(orderHistory.total).toFixed(0)}</span>
+          </div>
         </SheetContent>
       </Sheet>
 
@@ -1142,9 +1276,12 @@ function CustomerMenu() {
             <DialogTitle>{lang === "th" ? "ส่งสำเร็จ!" : "Order sent!"}</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">{tr.thanks}</p>
-          <Button className="w-full mt-2" onClick={() => setSubmitted(false)}>
-            {tr.order_more}
-          </Button>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <Button variant="outline" onClick={() => { setSubmitted(false); setHistoryOpen(true); }}>
+              <ReceiptText className="mr-2 h-4 w-4" />{tr.my_orders}
+            </Button>
+            <Button onClick={() => setSubmitted(false)}>{tr.order_more}</Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

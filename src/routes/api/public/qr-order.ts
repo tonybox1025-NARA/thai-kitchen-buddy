@@ -53,6 +53,61 @@ const Schema = z.object({
 export const Route = createFileRoute("/api/public/qr-order")({
   server: {
     handlers: {
+      GET: async ({ request }) => {
+        const supabase = createPublicServerClient();
+        if (!supabase)
+          return new Response("QR ordering is temporarily unavailable", { status: 503 });
+
+        const tableCode = new URL(request.url).searchParams.get("table_code")?.trim();
+        if (!tableCode || tableCode.length > 20)
+          return new Response("Invalid table code", { status: 400 });
+
+        const { data: table, error: tableError } = await supabase
+          .from("restaurant_tables")
+          .select("id")
+          .eq("code", tableCode)
+          .maybeSingle();
+        if (tableError) return new Response(`DB error: ${tableError.message}`, { status: 500 });
+        if (!table) return new Response("Table not found", { status: 404 });
+
+        const { data: orders, error: orderError } = await supabase
+          .from("orders")
+          .select("id,opened_at")
+          .eq("table_id", table.id)
+          .eq("status", "open")
+          .order("opened_at", { ascending: false })
+          .limit(1);
+        if (orderError) return new Response(`DB error: ${orderError.message}`, { status: 500 });
+        const order = orders?.[0];
+        if (!order) return Response.json({ order_id: null, items: [], total: 0, count: 0 });
+
+        const { data: items, error: itemsError } = await supabase
+          .from("order_items")
+          .select("id,name_th,name_en,qty,unit_price,notes,modifiers,round_number,sent_at,status,voided_at")
+          .eq("order_id", order.id)
+          .neq("status", "voided")
+          .is("voided_at", null)
+          .order("sent_at", { ascending: true });
+        if (itemsError) return new Response(`DB error: ${itemsError.message}`, { status: 500 });
+
+        const safeItems = (items ?? []).map((item) => ({
+          id: item.id,
+          name_th: item.name_th,
+          name_en: item.name_en,
+          qty: Number(item.qty),
+          unit_price: Number(item.unit_price),
+          notes: item.notes,
+          modifiers: Array.isArray(item.modifiers) ? item.modifiers : [],
+          round_number: item.round_number,
+          sent_at: item.sent_at,
+        }));
+        return Response.json({
+          order_id: order.id,
+          items: safeItems,
+          total: safeItems.reduce((sum, item) => sum + item.qty * item.unit_price, 0),
+          count: safeItems.reduce((sum, item) => sum + item.qty, 0),
+        });
+      },
       POST: async ({ request }) => {
         const supabase = createPublicServerClient();
         if (!supabase)
