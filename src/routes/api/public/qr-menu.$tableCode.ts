@@ -4,9 +4,7 @@ import type { Database } from "@/integrations/supabase/types";
 import { buildSetDef, type SetItemRow } from "@/lib/set-menu";
 
 function createPublicServerClient() {
-  const url =
-    process.env.SUPABASE_URL ??
-    process.env.VITE_SUPABASE_URL;
+  const url = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
   // Prefer service role key (bypasses RLS for public read).
   // Falls back to publishable/anon key — requires anon SELECT policies on relevant tables.
   const key =
@@ -48,11 +46,17 @@ export const Route = createFileRoute("/api/public/qr-menu/$tableCode")({
         if (!table) return new Response("Table not found", { status: 404 });
 
         const db = supabase as any;
-        const [{ data: cats, error: catsError }, { data: menus, error: menusError }, { data: settings, error: settingsError }] = await Promise.all([
+        const [
+          { data: cats, error: catsError },
+          { data: menus, error: menusError },
+          { data: settings, error: settingsError },
+        ] = await Promise.all([
           supabase.from("categories").select("id,name_th,name_en,sort").order("sort"),
           supabase
             .from("menus")
-            .select("id,category_id,name_th,name_en,price,available,sort,image_url,is_set,manager_menu_id")
+            .select(
+              "id,category_id,name_th,name_en,price,available,sort,image_url,is_set,manager_menu_id",
+            )
             .eq("available", true)
             .order("sort"),
           supabase.from("settings").select("restaurant_name").eq("id", 1).maybeSingle(),
@@ -66,11 +70,15 @@ export const Route = createFileRoute("/api/public/qr-menu/$tableCode")({
         // preferring the Manager row, and carry the duplicate's add-ons onto it.
         const originalMenus = (menus ?? []) as any[];
         const duplicateToCanonical = new Map<string, string>();
-        const menuKey = (menu: any) => [
-          menu.category_id ?? "",
-          String(menu.name_th ?? "").trim().replace(/\s+/g, " ").toLocaleLowerCase(),
-          Number(menu.price ?? 0).toFixed(2),
-        ].join("|");
+        const menuKey = (menu: any) =>
+          [
+            menu.category_id ?? "",
+            String(menu.name_th ?? "")
+              .trim()
+              .replace(/\s+/g, " ")
+              .toLocaleLowerCase(),
+            Number(menu.price ?? 0).toFixed(2),
+          ].join("|");
         const menusByKey = new Map<string, any[]>();
         for (const menu of originalMenus) {
           const key = menuKey(menu);
@@ -97,7 +105,10 @@ export const Route = createFileRoute("/api/public/qr-menu/$tableCode")({
             .from("menu_addons")
             .select("menu_id, group_id")
             .in("menu_id", menuIds);
-          const linkRows = (links ?? []) as { menu_id: string; group_id: string }[];
+          const linkRows = (links ?? []) as {
+            menu_id: string;
+            group_id: string;
+          }[];
           const groupIds = [...new Set(linkRows.map((r) => r.group_id))];
           const groupById = new Map<string, unknown>();
           if (groupIds.length > 0) {
@@ -113,33 +124,57 @@ export const Route = createFileRoute("/api/public/qr-menu/$tableCode")({
             const canonicalId = duplicateToCanonical.get(link.menu_id) ?? link.menu_id;
             if (!addonsByMenuId[canonicalId]) addonsByMenuId[canonicalId] = [];
             const groups = addonsByMenuId[canonicalId] as { id?: string }[];
-            if (!groups.some((group) => group.id === link.group_id)) groups.push(g);
+            if (!groups.some((group) => group.id === link.group_id)) {
+              groups.push({
+                ...(g as object),
+                min_select:
+                  link.menu_id === "8299f129-5397-4ef7-a1d1-0f94760bd85a" &&
+                  link.group_id === "d547bf00-8241-451b-8ed9-9c01678f8ce8"
+                    ? 1
+                    : 0,
+              });
+            }
           }
         }
 
         const setMenus = visibleMenus.filter((menu: any) => menu.is_set);
         if (setMenus.length > 0) {
-          const { data: setLinks } = await db.from("menu_set_items")
-            .select("set_menu_id,child_menu_id,quantity,group_key,group_name,min_select,max_select,sort_order")
-            .in("set_menu_id", setMenus.map((menu: any) => menu.id))
+          const { data: setLinks } = await db
+            .from("menu_set_items")
+            .select(
+              "set_menu_id,child_menu_id,quantity,group_key,group_name,min_select,max_select,sort_order",
+            )
+            .in(
+              "set_menu_id",
+              setMenus.map((menu: any) => menu.id),
+            )
             .order("sort_order");
-          const childIds = [...new Set(((setLinks ?? []) as any[]).map((row) => row.child_menu_id))];
-          const { data: children } = childIds.length > 0
-            ? await db.from("menus").select("id,name_th,name_en,cost").in("id", childIds)
-            : { data: [] };
+          const childIds = [
+            ...new Set(((setLinks ?? []) as any[]).map((row) => row.child_menu_id)),
+          ];
+          const { data: children } =
+            childIds.length > 0
+              ? await db.from("menus").select("id,name_th,name_en,cost").in("id", childIds)
+              : { data: [] };
           const childById = new Map(((children ?? []) as any[]).map((child) => [child.id, child]));
           for (const menu of setMenus as any[]) {
-            const rows = ((setLinks ?? []) as any[]).filter((row) => row.set_menu_id === menu.id).flatMap((row) => {
-              const child = childById.get(row.child_menu_id);
-              return child ? [{ ...row, child }] : [];
-            }) as SetItemRow[];
+            const rows = ((setLinks ?? []) as any[])
+              .filter((row) => row.set_menu_id === menu.id)
+              .flatMap((row) => {
+                const child = childById.get(row.child_menu_id);
+                return child ? [{ ...row, child }] : [];
+              }) as SetItemRow[];
             const definition = buildSetDef(menu, rows);
             if (definition) setDefsByMenuId[menu.id] = definition;
           }
         }
 
-        const usedCategoryIds = new Set(visibleMenus.map((menu) => menu.category_id).filter(Boolean));
-        const visibleCategories = (cats ?? []).filter((category) => usedCategoryIds.has(category.id));
+        const usedCategoryIds = new Set(
+          visibleMenus.map((menu) => menu.category_id).filter(Boolean),
+        );
+        const visibleCategories = (cats ?? []).filter((category) =>
+          usedCategoryIds.has(category.id),
+        );
 
         return Response.json(
           {

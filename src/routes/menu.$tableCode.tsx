@@ -4,7 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { ShoppingCart, Plus, Minus, Check, Languages, Layers } from "lucide-react";
 import { toast } from "sonner";
 import { SETS, SET_C_DRINKS, type SetDef, type SetConfig, type SetItem } from "@/lib/set-menu";
@@ -19,12 +25,43 @@ export const Route = createFileRoute("/menu/$tableCode")({
   }),
 });
 
-type Menu = { id: string; category_id: string | null; name_th: string; name_en: string; price: number; image_url: string | null; sort: number; is_set?: boolean };
+type Menu = {
+  id: string;
+  category_id: string | null;
+  name_th: string;
+  name_en: string;
+  price: number;
+  image_url: string | null;
+  sort: number;
+  is_set?: boolean;
+};
 type Category = { id: string; name_th: string; name_en: string; sort: number };
 type AddonOption = { id: string; name: string; price: number };
-type AddonGroup = { id: string; name: string; kitchen_name: string | null; max_select: number; addon_options: AddonOption[] };
-type SelectedAddon = { group_id: string; group_name: string; option_id: string; option_name: string; price: number };
-type CartItem = { menu_id: string; name_th: string; name_en: string; price: number; qty: number; notes?: string; set_config?: SetConfig; addons?: SelectedAddon[] };
+type AddonGroup = {
+  id: string;
+  name: string;
+  kitchen_name: string | null;
+  max_select: number;
+  min_select: number;
+  addon_options: AddonOption[];
+};
+type SelectedAddon = {
+  group_id: string;
+  group_name: string;
+  option_id: string;
+  option_name: string;
+  price: number;
+};
+type CartItem = {
+  menu_id: string;
+  name_th: string;
+  name_en: string;
+  price: number;
+  qty: number;
+  notes?: string;
+  set_config?: SetConfig;
+  addons?: SelectedAddon[];
+};
 type Lang = "th" | "en";
 
 function categoryLabel(category: Category, lang: Lang) {
@@ -35,40 +72,85 @@ function categoryLabel(category: Category, lang: Lang) {
 
 const T = {
   th: {
-    menu: "เมนู", table: "โต๊ะ", cart: "ตะกร้า", add: "เพิ่ม", submit: "ส่งออเดอร์",
-    qty: "จำนวน", notes: "หมายเหตุ", empty: "ยังไม่มีรายการ", total: "รวม",
-    confirm: "ยืนยันสั่ง", cancel: "ยกเลิก",
+    menu: "เมนู",
+    table: "โต๊ะ",
+    cart: "ตะกร้า",
+    add: "เพิ่ม",
+    submit: "ส่งออเดอร์",
+    qty: "จำนวน",
+    notes: "หมายเหตุ",
+    empty: "ยังไม่มีรายการ",
+    total: "รวม",
+    confirm: "ยืนยันสั่ง",
+    cancel: "ยกเลิก",
     thanks: "ขอบคุณค่ะ! ส่งออเดอร์ไปที่ครัวแล้ว กำลังเตรียมอาหารให้ค่ะ",
-    order_more: "สั่งเพิ่ม", all: "ทั้งหมด",
+    order_more: "สั่งเพิ่ม",
+    all: "ทั้งหมด",
     // set menu
-    set_main: "อาหารหลัก", set_sides: "เครื่องเคียง", set_free_drink: "เครื่องดื่มฟรี 🥤",
-    set_rice: "ข้าว", set_steamed: "ข้าวสวย 🍚", set_porridge: "โจ๊ก 🥣",
-    set_summary: "สรุปรายการ", set_includes: "รวมข้าวสวยหรือโจ๊ก",
-    set_select1: "เลือก 1", set_select2: "เลือก 2", set_free: "ฟรี",
+    set_main: "อาหารหลัก",
+    set_sides: "เครื่องเคียง",
+    set_free_drink: "เครื่องดื่มฟรี 🥤",
+    set_rice: "ข้าว",
+    set_steamed: "ข้าวสวย 🍚",
+    set_porridge: "โจ๊ก 🥣",
+    set_summary: "สรุปรายการ",
+    set_includes: "รวมข้าวสวยหรือโจ๊ก",
+    set_select1: "เลือก 1",
+    set_select2: "เลือก 2",
+    set_free: "ฟรี",
     // add-ons
     add_ons: "ท็อปปิ้ง / เพิ่มเติม",
+    required: "จำเป็น",
+    required_missing: "กรุณาเลือกตัวเลือกที่จำเป็นก่อนเพิ่มรายการ",
     submit_slow: "การเชื่อมต่อช้า ยังไม่ได้ส่งออเดอร์ ลองอีกครั้งหรือแจ้งพนักงานค่ะ",
   },
   en: {
-    menu: "Menu", table: "Table", cart: "Cart", add: "Add", submit: "Submit order",
-    qty: "Qty", notes: "Notes", empty: "Cart is empty", total: "Total",
-    confirm: "Place order", cancel: "Cancel",
+    menu: "Menu",
+    table: "Table",
+    cart: "Cart",
+    add: "Add",
+    submit: "Submit order",
+    qty: "Qty",
+    notes: "Notes",
+    empty: "Cart is empty",
+    total: "Total",
+    confirm: "Place order",
+    cancel: "Cancel",
     thanks: "Thank you! Your order has been sent to the kitchen.",
-    order_more: "Order more", all: "All",
+    order_more: "Order more",
+    all: "All",
     // set menu
-    set_main: "Main Dish", set_sides: "Side Dishes", set_free_drink: "Free Drink 🥤",
-    set_rice: "Rice", set_steamed: "Steamed Rice 🍚", set_porridge: "Porridge 🥣",
-    set_summary: "Summary", set_includes: "Includes rice or porridge",
-    set_select1: "Select 1", set_select2: "Select 2", set_free: "FREE",
+    set_main: "Main Dish",
+    set_sides: "Side Dishes",
+    set_free_drink: "Free Drink 🥤",
+    set_rice: "Rice",
+    set_steamed: "Steamed Rice 🍚",
+    set_porridge: "Porridge 🥣",
+    set_summary: "Summary",
+    set_includes: "Includes rice or porridge",
+    set_select1: "Select 1",
+    set_select2: "Select 2",
+    set_free: "FREE",
     // add-ons
     add_ons: "Add-ons",
+    required: "Required",
+    required_missing: "Please choose all required options before adding this item.",
     submit_slow: "Connection is slow — your order was not sent. Please try again or tell staff.",
   },
 };
 
 // ── Inline set-menu dialog (no useI18n — QR page has no I18nProvider) ─────────
-function QrSetDialog({ setDef, lang, tr, onClose, onConfirm }: {
-  setDef: SetDef; lang: Lang; tr: typeof T["th"]; onClose: () => void;
+function QrSetDialog({
+  setDef,
+  lang,
+  tr,
+  onClose,
+  onConfirm,
+}: {
+  setDef: SetDef;
+  lang: Lang;
+  tr: (typeof T)["th"];
+  onClose: () => void;
   onConfirm: (config: SetConfig) => void;
 }) {
   const [main, setMain] = useState<SetItem | null>(null);
@@ -87,19 +169,27 @@ function QrSetDialog({ setDef, lang, tr, onClose, onConfirm }: {
     });
   };
 
-  const isReady = !!main && sides.length === requiredSides && !!rice && (!setDef.hasDrink || !!drink);
+  const isReady =
+    !!main && sides.length === requiredSides && !!rice && (!setDef.hasDrink || !!drink);
 
   const handleConfirm = () => {
     if (!isReady) return;
-    onConfirm({ set_id: setDef.id, main: main!, sides, drink: drink ?? undefined, rice: rice!, rice_cost: setDef.riceCosts?.[rice!] });
+    onConfirm({
+      set_id: setDef.id,
+      main: main!,
+      sides,
+      drink: drink ?? undefined,
+      rice: rice!,
+      rice_cost: setDef.riceCosts?.[rice!],
+    });
   };
 
-  const pick = (item: SetItem) => lang === "th" ? item.th : item.en;
+  const pick = (item: SetItem) => (lang === "th" ? item.th : item.en);
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="max-w-lg h-[90dvh] max-h-[90dvh] p-0 overflow-hidden flex flex-col">
+        <DialogHeader className="px-5 pt-5 pb-3 shrink-0">
           <DialogTitle className="text-xl flex items-center gap-2">
             <Layers className="h-5 w-5 text-amber-600" />
             {lang === "th" ? setDef.name_th : setDef.name_en}
@@ -108,12 +198,14 @@ function QrSetDialog({ setDef, lang, tr, onClose, onConfirm }: {
           <p className="text-sm text-muted-foreground">{tr.set_includes}</p>
         </DialogHeader>
 
-        <div className="space-y-5">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain touch-pan-y px-5 pb-4 space-y-5 [-webkit-overflow-scrolling:touch]">
           {/* Main dish — radio */}
           <section>
             <div className="flex items-center justify-between mb-2">
               <h3 className="font-semibold text-sm uppercase tracking-wide">{tr.set_main}</h3>
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${main ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"}`}>
+              <span
+                className={`text-xs px-2 py-0.5 rounded-full font-medium ${main ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"}`}
+              >
                 {main ? `✓ 1/1` : tr.set_select1}
               </span>
             </div>
@@ -125,12 +217,20 @@ function QrSetDialog({ setDef, lang, tr, onClose, onConfirm }: {
                   className={`flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-sm text-left transition-colors
                     ${main?.th === item.th ? "border-primary bg-primary/10 font-medium" : "hover:bg-muted/50"}`}
                 >
-                  <span className={`h-4 w-4 rounded-full border-2 shrink-0 flex items-center justify-center
-                    ${main?.th === item.th ? "border-primary bg-primary" : "border-muted-foreground"}`}>
+                  <span
+                    className={`h-4 w-4 rounded-full border-2 shrink-0 flex items-center justify-center
+                    ${main?.th === item.th ? "border-primary bg-primary" : "border-muted-foreground"}`}
+                  >
                     {main?.th === item.th && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
                   </span>
-                  <span className="flex-1">{item.th}</span>
-                  {lang === "en" && <span className="text-muted-foreground text-xs">{item.en}</span>}
+                  <span className="min-w-0 flex-1">
+                    <span className="block break-words">{item.th}</span>
+                    {lang === "en" && (
+                      <span className="block break-words text-muted-foreground text-xs">
+                        {item.en}
+                      </span>
+                    )}
+                  </span>
                 </button>
               ))}
             </div>
@@ -140,8 +240,12 @@ function QrSetDialog({ setDef, lang, tr, onClose, onConfirm }: {
           <section>
             <div className="flex items-center justify-between mb-2">
               <h3 className="font-semibold text-sm uppercase tracking-wide">{tr.set_sides}</h3>
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sides.length === requiredSides ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"}`}>
-                {sides.length === requiredSides ? `✓ ${sides.length}/${requiredSides}` : `${sides.length}/${requiredSides}`}
+              <span
+                className={`text-xs px-2 py-0.5 rounded-full font-medium ${sides.length === requiredSides ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"}`}
+              >
+                {sides.length === requiredSides
+                  ? `✓ ${sides.length}/${requiredSides}`
+                  : `${sides.length}/${requiredSides}`}
               </span>
             </div>
             <div className="grid grid-cols-1 gap-1.5">
@@ -156,12 +260,20 @@ function QrSetDialog({ setDef, lang, tr, onClose, onConfirm }: {
                     className={`flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-sm text-left transition-colors
                       ${selected ? "border-primary bg-primary/10 font-medium" : disabled ? "opacity-40 cursor-not-allowed" : "hover:bg-muted/50"}`}
                   >
-                    <span className={`h-4 w-4 rounded border-2 shrink-0 flex items-center justify-center
-                      ${selected ? "border-primary bg-primary" : "border-muted-foreground"}`}>
+                    <span
+                      className={`h-4 w-4 rounded border-2 shrink-0 flex items-center justify-center
+                      ${selected ? "border-primary bg-primary" : "border-muted-foreground"}`}
+                    >
                       {selected && <Check className="h-2.5 w-2.5 text-white" />}
                     </span>
-                    <span className="flex-1">{item.th}</span>
-                    {lang === "en" && <span className="text-muted-foreground text-xs">{item.en}</span>}
+                    <span className="min-w-0 flex-1">
+                      <span className="block break-words">{item.th}</span>
+                      {lang === "en" && (
+                        <span className="block break-words text-muted-foreground text-xs">
+                          {item.en}
+                        </span>
+                      )}
+                    </span>
                   </button>
                 );
               })}
@@ -172,8 +284,12 @@ function QrSetDialog({ setDef, lang, tr, onClose, onConfirm }: {
           {setDef.hasDrink && (
             <section>
               <div className="flex items-center justify-between mb-2">
-                <h3 className="font-semibold text-sm uppercase tracking-wide text-amber-600 dark:text-amber-400">{tr.set_free_drink}</h3>
-                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${drink ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"}`}>
+                <h3 className="font-semibold text-sm uppercase tracking-wide text-amber-600 dark:text-amber-400">
+                  {tr.set_free_drink}
+                </h3>
+                <span
+                  className={`text-xs px-2 py-0.5 rounded-full font-medium ${drink ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"}`}
+                >
                   {drink ? `✓ 1/1` : tr.set_select1}
                 </span>
               </div>
@@ -185,11 +301,15 @@ function QrSetDialog({ setDef, lang, tr, onClose, onConfirm }: {
                     className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm text-left transition-colors
                       ${drink?.th === item.th ? "border-amber-500 bg-amber-50 dark:bg-amber-950/30 font-medium" : "hover:bg-muted/50"}`}
                   >
-                    <span className={`h-4 w-4 rounded-full border-2 shrink-0 flex items-center justify-center
-                      ${drink?.th === item.th ? "border-amber-500 bg-amber-500" : "border-muted-foreground"}`}>
-                      {drink?.th === item.th && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+                    <span
+                      className={`h-4 w-4 rounded-full border-2 shrink-0 flex items-center justify-center
+                      ${drink?.th === item.th ? "border-amber-500 bg-amber-500" : "border-muted-foreground"}`}
+                    >
+                      {drink?.th === item.th && (
+                        <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                      )}
                     </span>
-                    <span>{pick(item)}</span>
+                    <span className="min-w-0 flex-1 break-words">{pick(item)}</span>
                   </button>
                 ))}
               </div>
@@ -200,7 +320,9 @@ function QrSetDialog({ setDef, lang, tr, onClose, onConfirm }: {
           <section>
             <div className="mb-2 flex items-center justify-between">
               <h3 className="font-semibold text-sm uppercase tracking-wide">{tr.set_rice}</h3>
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${rice ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"}`}>
+              <span
+                className={`text-xs px-2 py-0.5 rounded-full font-medium ${rice ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"}`}
+              >
                 {rice ? "✓ 1/1" : tr.set_select1}
               </span>
             </div>
@@ -221,17 +343,35 @@ function QrSetDialog({ setDef, lang, tr, onClose, onConfirm }: {
           {/* Live summary */}
           {(main || sides.length > 0) && (
             <section className="bg-muted/30 rounded-lg p-3 text-sm space-y-1">
-              <p className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-1">{tr.set_summary}</p>
-              {main && <p>🍽️ {main.th}{lang === "en" ? ` (${main.en})` : ""}</p>}
-              {sides.map((s) => <p key={s.th}>🥗 {s.th}{lang === "en" ? ` (${s.en})` : ""}</p>)}
-              {drink && <p>🥤 {drink.th} <span className="text-amber-600 font-semibold">{tr.set_free}</span></p>}
+              <p className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-1">
+                {tr.set_summary}
+              </p>
+              {main && (
+                <p>
+                  🍽️ {main.th}
+                  {lang === "en" ? ` (${main.en})` : ""}
+                </p>
+              )}
+              {sides.map((s) => (
+                <p key={s.th}>
+                  🥗 {s.th}
+                  {lang === "en" ? ` (${s.en})` : ""}
+                </p>
+              ))}
+              {drink && (
+                <p>
+                  🥤 {drink.th} <span className="text-amber-600 font-semibold">{tr.set_free}</span>
+                </p>
+              )}
               {rice && <p>🍚 {rice === "rice" ? tr.set_steamed : tr.set_porridge}</p>}
             </section>
           )}
         </div>
 
         <DialogFooter className="gap-2">
-          <Button variant="outline" className="flex-1" onClick={onClose}>{tr.cancel}</Button>
+          <Button variant="outline" className="flex-1" onClick={onClose}>
+            {tr.cancel}
+          </Button>
           <Button className="flex-1" onClick={handleConfirm} disabled={!isReady}>
             {tr.add} · ฿{setDef.price}
           </Button>
@@ -294,7 +434,10 @@ function MenuImage({ src }: { src: string }) {
 }
 function PlaceholderImg() {
   return (
-    <div className="h-24 w-24 rounded-lg bg-muted shrink-0 grid place-items-center text-3xl select-none" aria-hidden>
+    <div
+      className="h-24 w-24 rounded-lg bg-muted shrink-0 grid place-items-center text-3xl select-none"
+      aria-hidden
+    >
       🍽️
     </div>
   );
@@ -304,7 +447,10 @@ function PopupHeroImage({ src }: { src: string }) {
   const [failed, setFailed] = useState(false);
   if (failed) return null;
   return (
-    <div className="-mx-6 -mt-6 mb-2 bg-white flex items-center justify-center rounded-t-lg" style={{ minHeight: 300 }}>
+    <div
+      className="-mx-6 -mt-6 mb-2 bg-white flex items-center justify-center rounded-t-lg"
+      style={{ minHeight: 300 }}
+    >
       <img
         src={src}
         alt=""
@@ -321,7 +467,14 @@ function PopupHeroImage({ src }: { src: string }) {
 function CustomerMenu() {
   const { tableCode } = Route.useParams();
   const [lang, setLang] = useState<Lang>("th");
-  const [data, setData] = useState<{ table: { id: string; code: string }; categories: Category[]; menus: Menu[]; restaurant_name: string; addonsByMenuId: Record<string, AddonGroup[]>; setDefsByMenuId?: Record<string, SetDef> } | null>(null);
+  const [data, setData] = useState<{
+    table: { id: string; code: string };
+    categories: Category[];
+    menus: Menu[];
+    restaurant_name: string;
+    addonsByMenuId: Record<string, AddonGroup[]>;
+    setDefsByMenuId?: Record<string, SetDef>;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeCat, setActiveCat] = useState<string | "all">("all");
@@ -346,8 +499,16 @@ function CustomerMenu() {
         if (!r.ok) throw new Error(await r.text());
         return r.json();
       })
-      .then((d) => { setData(d); setLoading(false); })
-      .catch((e) => { if (e.name !== "AbortError") { setError(String(e.message ?? e)); setLoading(false); } });
+      .then((d) => {
+        setData(d);
+        setLoading(false);
+      })
+      .catch((e) => {
+        if (e.name !== "AbortError") {
+          setError(String(e.message ?? e));
+          setLoading(false);
+        }
+      });
     return () => ac.abort();
   }, [tableCode]);
 
@@ -391,10 +552,12 @@ function CustomerMenu() {
 
   const menuSections = useMemo(() => {
     if (!data || activeCat !== "all") return [];
-    return orderedCategories.map((category) => ({
-      category,
-      menus: allMenusSorted.filter((menu) => menu.category_id === category.id),
-    })).filter((section) => section.menus.length > 0);
+    return orderedCategories
+      .map((category) => ({
+        category,
+        menus: allMenusSorted.filter((menu) => menu.category_id === category.id),
+      }))
+      .filter((section) => section.menus.length > 0);
   }, [activeCat, allMenusSorted, data, orderedCategories]);
 
   const cartTotal = useMemo(() => cart.reduce((s, c) => s + c.qty * c.price, 0), [cart]);
@@ -403,18 +566,37 @@ function CustomerMenu() {
   const openAdd = (m: Menu) => {
     if (m.is_set) {
       const published = data?.setDefsByMenuId?.[m.id];
-      if (published) { setSelectedSetDef(published); setSetMenuOrigin(m); return; }
-      toast.error(lang === "th" ? "ยังไม่มีข้อมูล SET จาก Manager" : "No Manager SET configuration published");
+      if (published) {
+        setSelectedSetDef(published);
+        setSetMenuOrigin(m);
+        return;
+      }
+      toast.error(
+        lang === "th" ? "ยังไม่มีข้อมูล SET จาก Manager" : "No Manager SET configuration published",
+      );
       return;
     }
     // Detect set-menu items by name (e.g. "Lon Moh - SET A", "SET B", etc.)
     const combined = `${m.name_en} ${m.name_th}`.toLowerCase();
-    const setId = combined.includes("set a") ? "A" : combined.includes("set b") ? "B" : combined.includes("set c") ? "C" : null;
+    const setId = combined.includes("set a")
+      ? "A"
+      : combined.includes("set b")
+        ? "B"
+        : combined.includes("set c")
+          ? "C"
+          : null;
     if (setId) {
       const setDef = SETS.find((s) => s.id === setId);
-      if (setDef) { setSelectedSetDef(setDef); setSetMenuOrigin(m); return; }
+      if (setDef) {
+        setSelectedSetDef(setDef);
+        setSetMenuOrigin(m);
+        return;
+      }
     }
-    setAdding(m); setAddQty(1); setAddNotes(""); setSelectedAddons(new Map());
+    setAdding(m);
+    setAddQty(1);
+    setAddNotes("");
+    setSelectedAddons(new Map());
   };
 
   // Toggle an add-on option like a checkbox, enforcing the group's max_select.
@@ -422,7 +604,10 @@ function CustomerMenu() {
   const toggleAddon = (group: AddonGroup, opt: AddonOption) => {
     setSelectedAddons((prev) => {
       const next = new Map(prev);
-      if (next.has(opt.id)) { next.delete(opt.id); return next; }
+      if (next.has(opt.id)) {
+        next.delete(opt.id);
+        return next;
+      }
       const inGroup = Array.from(next.values()).filter((a) => a.group_id === group.id);
       const max = group.max_select ?? 1;
       if (max <= 1) {
@@ -443,17 +628,31 @@ function CustomerMenu() {
 
   const addToCart = () => {
     if (!adding) return;
+    const addonGroups = data?.addonsByMenuId?.[adding.id] ?? [];
+    const missingRequired = addonGroups.some((group) => {
+      const selected = Array.from(selectedAddons.values()).filter(
+        (addon) => addon.group_id === group.id,
+      ).length;
+      return selected < Math.max(0, group.min_select ?? 0);
+    });
+    if (missingRequired) {
+      toast.error(tr.required_missing);
+      return;
+    }
     const addonsArr = Array.from(selectedAddons.values());
     const addonPrice = addonsArr.reduce((s, a) => s + a.price, 0);
-    setCart((prev) => [...prev, {
-      menu_id: adding.id,
-      name_th: adding.name_th,
-      name_en: adding.name_en,
-      price: adding.price + addonPrice,
-      qty: addQty,
-      notes: addNotes || undefined,
-      addons: addonsArr.length > 0 ? addonsArr : undefined,
-    }]);
+    setCart((prev) => [
+      ...prev,
+      {
+        menu_id: adding.id,
+        name_th: adding.name_th,
+        name_en: adding.name_en,
+        price: adding.price + addonPrice,
+        qty: addQty,
+        notes: addNotes || undefined,
+        addons: addonsArr.length > 0 ? addonsArr : undefined,
+      },
+    ]);
     setAdding(null);
   };
 
@@ -463,25 +662,30 @@ function CustomerMenu() {
     const drinkStr = config.drink ? ` | ${config.drink.th}` : "";
     const riceStr = config.rice === "rice" ? "ข้าวสวย" : "โจ๊ก";
     const kitchenNotes = `หลัก: ${config.main.th} | ${sideStr}${drinkStr} | ${riceStr}`;
-    setCart((prev) => [...prev, {
-      menu_id: setMenuOrigin.id,
-      name_th: setMenuOrigin.name_th,
-      name_en: setMenuOrigin.name_en,
-      price: setMenuOrigin.price,
-      qty: 1,
-      notes: kitchenNotes,
-      set_config: config,
-    }]);
+    setCart((prev) => [
+      ...prev,
+      {
+        menu_id: setMenuOrigin.id,
+        name_th: setMenuOrigin.name_th,
+        name_en: setMenuOrigin.name_en,
+        price: setMenuOrigin.price,
+        qty: 1,
+        notes: kitchenNotes,
+        set_config: config,
+      },
+    ]);
     setSelectedSetDef(null);
     setSetMenuOrigin(null);
   };
 
   const updateQty = (idx: number, delta: number) => {
-    setCart((prev) => prev.flatMap((c, i) => {
-      if (i !== idx) return [c];
-      const q = c.qty + delta;
-      return q <= 0 ? [] : [{ ...c, qty: q }];
-    }));
+    setCart((prev) =>
+      prev.flatMap((c, i) => {
+        if (i !== idx) return [c];
+        const q = c.qty + delta;
+        return q <= 0 ? [] : [{ ...c, qty: q }];
+      }),
+    );
   };
 
   const submit = async () => {
@@ -525,7 +729,9 @@ function CustomerMenu() {
   const switchCat = (id: string | "all") => {
     setActiveCat(id);
     requestAnimationFrame(() => {
-      catBarRef.current?.querySelector(`[data-cat="${id}"]`)?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+      catBarRef.current
+        ?.querySelector(`[data-cat="${id}"]`)
+        ?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
     });
   };
 
@@ -534,10 +740,11 @@ function CustomerMenu() {
     // Protect the customer menu from a legacy Manager row where SET A's
     // English name was saved as only "SET". The source data is also repaired
     // during the next Manager publish, but this keeps the label safe meanwhile.
-    if (/^set\s*$/i.test(m.name_en.trim()) && /^set\s+[a-z]$/i.test(m.name_th.trim())) return m.name_th;
+    if (/^set\s*$/i.test(m.name_en.trim()) && /^set\s+[a-z]$/i.test(m.name_th.trim()))
+      return m.name_th;
     return m.name_en || m.name_th;
   };
-  const sub  = (m: { name_th: string; name_en: string }) => (lang === "th" ? m.name_en : m.name_th);
+  const sub = (m: { name_th: string; name_en: string }) => (lang === "th" ? m.name_en : m.name_th);
 
   const renderMenuCard = (m: Menu) => (
     <button
@@ -555,15 +762,18 @@ function CustomerMenu() {
   );
 
   if (loading) return <MenuSkeleton />;
-  if (error || !data) return (
-    <div className="min-h-screen grid place-items-center p-6 text-center">
-      <div>
-        <div className="text-4xl mb-3">😕</div>
-        <p className="text-destructive font-medium">{error ?? "Not found"}</p>
-        <button onClick={() => location.reload()} className="mt-4 text-sm text-primary underline">Try again</button>
+  if (error || !data)
+    return (
+      <div className="min-h-screen grid place-items-center p-6 text-center">
+        <div>
+          <div className="text-4xl mb-3">😕</div>
+          <p className="text-destructive font-medium">{error ?? "Not found"}</p>
+          <button onClick={() => location.reload()} className="mt-4 text-sm text-primary underline">
+            Try again
+          </button>
+        </div>
       </div>
-    </div>
-  );
+    );
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -572,20 +782,39 @@ function CustomerMenu() {
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
           <div className="flex-1 min-w-0">
             <div className="text-xs text-muted-foreground">{data.restaurant_name}</div>
-            <div className="font-semibold truncate">{tr.table} {data.table.code}</div>
+            <div className="font-semibold truncate">
+              {tr.table} {data.table.code}
+            </div>
           </div>
-          <Button variant="outline" size="sm" onClick={() => setLang(lang === "th" ? "en" : "th")} className="gap-1 shrink-0">
-            <Languages className="h-4 w-4" />{lang === "th" ? "EN" : "TH"}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setLang(lang === "th" ? "en" : "th")}
+            className="gap-1 shrink-0"
+          >
+            <Languages className="h-4 w-4" />
+            {lang === "th" ? "EN" : "TH"}
           </Button>
         </div>
         {/* Category tabs — scrollable, active tab snaps to center */}
         <div ref={catBarRef} className="max-w-2xl mx-auto px-2 pb-2 overflow-x-auto scrollbar-none">
           <div className="flex gap-2 px-2 w-max">
-            <Button data-cat="all" variant={activeCat === "all" ? "default" : "outline"} onClick={() => switchCat("all")} className="h-10 rounded-full px-4 text-sm font-semibold">
+            <Button
+              data-cat="all"
+              variant={activeCat === "all" ? "default" : "outline"}
+              onClick={() => switchCat("all")}
+              className="h-10 rounded-full px-4 text-sm font-semibold"
+            >
               {tr.all}
             </Button>
             {orderedCategories.map((c) => (
-              <Button data-cat={c.id} key={c.id} variant={activeCat === c.id ? "default" : "outline"} onClick={() => switchCat(c.id)} className="h-10 whitespace-nowrap rounded-full px-4 text-sm font-semibold">
+              <Button
+                data-cat={c.id}
+                key={c.id}
+                variant={activeCat === c.id ? "default" : "outline"}
+                onClick={() => switchCat(c.id)}
+                className="h-10 whitespace-nowrap rounded-full px-4 text-sm font-semibold"
+              >
                 {categoryLabel(c, lang)}
               </Button>
             ))}
@@ -596,7 +825,9 @@ function CustomerMenu() {
       {/* ── Menu list — compact rows with a larger thumbnail ── */}
       <main className="max-w-2xl mx-auto px-4 py-4 pb-28">
         {filtered.length === 0 && (
-          <p className="text-center text-muted-foreground py-12">{lang === "th" ? "ไม่มีเมนูในหมวดนี้" : "No items in this category"}</p>
+          <p className="text-center text-muted-foreground py-12">
+            {lang === "th" ? "ไม่มีเมนูในหมวดนี้" : "No items in this category"}
+          </p>
         )}
         {activeCat === "all" ? (
           <div className="space-y-7">
@@ -633,44 +864,87 @@ function CustomerMenu() {
           </button>
         </SheetTrigger>
         <SheetContent side="bottom" className="max-h-[85vh] overflow-auto">
-          <SheetHeader><SheetTitle>{tr.cart}</SheetTitle></SheetHeader>
+          <SheetHeader>
+            <SheetTitle>{tr.cart}</SheetTitle>
+          </SheetHeader>
           <div className="space-y-2 mt-3">
-            {cart.length === 0 && <p className="text-sm text-muted-foreground text-center py-6">{tr.empty}</p>}
+            {cart.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-6">{tr.empty}</p>
+            )}
             {cart.map((c, i) => {
               const sc = c.set_config;
               return (
-                <div key={i} className={`flex items-start gap-2 border rounded-lg p-3 ${sc ? "border-amber-200 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/20" : ""}`}>
+                <div
+                  key={i}
+                  className={`flex items-start gap-2 border rounded-lg p-3 ${sc ? "border-amber-200 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/20" : ""}`}
+                >
                   <div className="flex-1 min-w-0">
                     {sc ? (
                       <>
                         <div className="font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
-                          <Layers className="h-3.5 w-3.5 shrink-0" />{name(c)}
+                          <Layers className="h-3.5 w-3.5 shrink-0" />
+                          {name(c)}
                         </div>
                         <div className="text-xs text-muted-foreground mt-1 space-y-0.5 pl-5">
                           <div>🍽️ {sc.main.th}</div>
-                          {sc.sides.map((s, si) => <div key={si}>🥗 {s.th}</div>)}
-                          {sc.drink && <div>🥤 {sc.drink.th} <span className="text-amber-600 font-semibold">{tr.set_free}</span></div>}
+                          {sc.sides.map((s, si) => (
+                            <div key={si}>🥗 {s.th}</div>
+                          ))}
+                          {sc.drink && (
+                            <div>
+                              🥤 {sc.drink.th}{" "}
+                              <span className="text-amber-600 font-semibold">{tr.set_free}</span>
+                            </div>
+                          )}
                           <div>🍚 {sc.rice === "rice" ? tr.set_steamed : tr.set_porridge}</div>
                         </div>
-                        <div className="text-xs text-muted-foreground mt-0.5 pl-5">฿{c.price.toFixed(0)}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5 pl-5">
+                          ฿{c.price.toFixed(0)}
+                        </div>
                       </>
                     ) : (
                       <>
                         <div className="font-medium">{name(c)}</div>
                         {c.addons && c.addons.length > 0 && (
                           <div className="text-xs text-muted-foreground mt-0.5">
-                            {c.addons.map((a) => `+ ${a.option_name}${a.price > 0 ? ` (+฿${a.price})` : ""}`).join(" · ")}
+                            {c.addons
+                              .map(
+                                (a) => `+ ${a.option_name}${a.price > 0 ? ` (+฿${a.price})` : ""}`,
+                              )
+                              .join(" · ")}
                           </div>
                         )}
-                        {c.notes && <div className="text-xs text-muted-foreground">📝 {c.notes}</div>}
-                        <div className="text-xs text-muted-foreground mt-0.5">฿{c.price.toFixed(0)} × {c.qty}</div>
+                        {c.notes && (
+                          <div className="text-xs text-muted-foreground">📝 {c.notes}</div>
+                        )}
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          ฿{c.price.toFixed(0)} × {c.qty}
+                        </div>
                       </>
                     )}
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
-                    <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => updateQty(i, -1)}><Minus className="h-3.5 w-3.5" /></Button>
-                    {!sc && <span className="w-6 text-center font-medium tabular-nums">{c.qty}</span>}
-                    {!sc && <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => updateQty(i, 1)}><Plus className="h-3.5 w-3.5" /></Button>}
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      className="h-8 w-8"
+                      onClick={() => updateQty(i, -1)}
+                    >
+                      <Minus className="h-3.5 w-3.5" />
+                    </Button>
+                    {!sc && (
+                      <span className="w-6 text-center font-medium tabular-nums">{c.qty}</span>
+                    )}
+                    {!sc && (
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        className="h-8 w-8"
+                        onClick={() => updateQty(i, 1)}
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
                   </div>
                 </div>
               );
@@ -679,10 +953,12 @@ function CustomerMenu() {
           {cart.length > 0 && (
             <div className="mt-4 space-y-3 sticky bottom-0 bg-background pt-3 border-t">
               <div className="flex justify-between font-bold text-lg">
-                <span>{tr.total}</span><span>฿{cartTotal.toFixed(0)}</span>
+                <span>{tr.total}</span>
+                <span>฿{cartTotal.toFixed(0)}</span>
               </div>
               <Button className="w-full" size="lg" onClick={submit} disabled={submitting}>
-                <Check className="h-4 w-4 mr-1" />{submitting ? "…" : tr.submit}
+                <Check className="h-4 w-4 mr-1" />
+                {submitting ? "…" : tr.submit}
               </Button>
             </div>
           )}
@@ -697,88 +973,147 @@ function CustomerMenu() {
             <DialogTitle className="leading-snug">{adding ? name(adding) : ""}</DialogTitle>
             {adding && <p className="text-sm text-muted-foreground mt-0.5">{sub(adding)}</p>}
           </DialogHeader>
-          {adding && (() => {
-            const addonGroups: AddonGroup[] = data?.addonsByMenuId?.[adding.id] ?? [];
-            const addonTotal = Array.from(selectedAddons.values()).reduce((s, a) => s + a.price, 0);
-            const totalPrice = (adding.price + addonTotal) * addQty;
-            return (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-2xl font-bold text-primary">฿{totalPrice.toFixed(0)}</span>
-                  <div className="flex items-center gap-3">
-                    <Button variant="outline" size="icon" className="h-10 w-10 rounded-full" onClick={() => setAddQty(Math.max(1, addQty - 1))}>
-                      <Minus className="h-4 w-4" />
-                    </Button>
-                    <span className="text-xl font-bold tabular-nums w-6 text-center">{addQty}</span>
-                    <Button variant="outline" size="icon" className="h-10 w-10 rounded-full" onClick={() => setAddQty(addQty + 1)}>
-                      <Plus className="h-4 w-4" />
-                    </Button>
+          {adding &&
+            (() => {
+              const addonGroups: AddonGroup[] = data?.addonsByMenuId?.[adding.id] ?? [];
+              const addonTotal = Array.from(selectedAddons.values()).reduce(
+                (s, a) => s + a.price,
+                0,
+              );
+              const totalPrice = (adding.price + addonTotal) * addQty;
+              return (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-2xl font-bold text-primary">
+                      ฿{totalPrice.toFixed(0)}
+                    </span>
+                    <div className="flex items-center gap-3">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-10 w-10 rounded-full"
+                        onClick={() => setAddQty(Math.max(1, addQty - 1))}
+                      >
+                        <Minus className="h-4 w-4" />
+                      </Button>
+                      <span className="text-xl font-bold tabular-nums w-6 text-center">
+                        {addQty}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-10 w-10 rounded-full"
+                        onClick={() => setAddQty(addQty + 1)}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
-                </div>
 
-                {/* ── Add-on groups ── */}
-                {addonGroups.length > 0 && (
-                  <div className="space-y-3">
-                    <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">{tr.add_ons}</p>
-                    {addonGroups.map((group) => {
-                      const max = group.max_select ?? 1;
-                      const inGroup = Array.from(selectedAddons.values()).filter((a) => a.group_id === group.id).length;
-                      return (
-                        <div key={group.id}>
-                          <div className="flex items-center justify-between mb-1.5">
-                            <p className="text-sm font-medium">{group.name}</p>
-                            {max > 1 && (
-                              <span className="text-xs text-muted-foreground">
-                                {lang === "th" ? `เลือกได้ถึง ${max}` : `up to ${max}`}{inGroup > 0 ? ` · ${inGroup}/${max}` : ""}
-                              </span>
-                            )}
-                          </div>
-                          <div className="space-y-1.5">
-                            {group.addon_options.map((opt) => {
-                              const selected = selectedAddons.has(opt.id);
-                              const disabled = !selected && max > 1 && inGroup >= max;
-                              return (
-                                <button
-                                  key={opt.id}
-                                  type="button"
-                                  onClick={() => toggleAddon(group, opt)}
-                                  disabled={disabled}
-                                  className={`w-full flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left text-sm transition-colors
-                                    ${selected ? "border-primary bg-primary/5 font-medium" : disabled ? "opacity-40 cursor-not-allowed" : "hover:bg-muted/50"}`}
+                  {/* ── Add-on groups ── */}
+                  {addonGroups.length > 0 && (
+                    <div className="space-y-3">
+                      <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                        {tr.add_ons}
+                      </p>
+                      {addonGroups.map((group) => {
+                        const max = group.max_select ?? 1;
+                        const min = Math.max(0, group.min_select ?? 0);
+                        const inGroup = Array.from(selectedAddons.values()).filter(
+                          (a) => a.group_id === group.id,
+                        ).length;
+                        return (
+                          <div key={group.id}>
+                            <div className="flex items-center justify-between mb-1.5">
+                              <p className="text-sm font-medium">{group.name}</p>
+                              {min > 0 ? (
+                                <span
+                                  className={`text-xs font-semibold ${inGroup >= min ? "text-green-600" : "text-orange-600"}`}
                                 >
-                                  <span className={`h-5 w-5 rounded-md border-2 shrink-0 flex items-center justify-center
-                                    ${selected ? "border-primary bg-primary" : "border-muted-foreground/50"}`}>
-                                    {selected && <Check className="h-3 w-3 text-white" />}
-                                  </span>
-                                  <span className="flex-1">{opt.name}</span>
-                                  {opt.price > 0 && <span className="text-muted-foreground shrink-0">+฿{opt.price}</span>}
-                                </button>
-                              );
-                            })}
+                                  {inGroup >= min
+                                    ? `✓ ${inGroup}/${min}`
+                                    : `${tr.required} · ${inGroup}/${min}`}
+                                </span>
+                              ) : max > 1 ? (
+                                <span className="text-xs text-muted-foreground">
+                                  {lang === "th" ? `เลือกได้ถึง ${max}` : `up to ${max}`}
+                                  {inGroup > 0 ? ` · ${inGroup}/${max}` : ""}
+                                </span>
+                              ) : null}
+                            </div>
+                            <div className="space-y-1.5">
+                              {group.addon_options.map((opt) => {
+                                const selected = selectedAddons.has(opt.id);
+                                const disabled = !selected && max > 1 && inGroup >= max;
+                                return (
+                                  <button
+                                    key={opt.id}
+                                    type="button"
+                                    onClick={() => toggleAddon(group, opt)}
+                                    disabled={disabled}
+                                    className={`w-full flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left text-sm transition-colors
+                                    ${selected ? "border-primary bg-primary/5 font-medium" : disabled ? "opacity-40 cursor-not-allowed" : "hover:bg-muted/50"}`}
+                                  >
+                                    <span
+                                      className={`h-5 w-5 rounded-md border-2 shrink-0 flex items-center justify-center
+                                    ${selected ? "border-primary bg-primary" : "border-muted-foreground/50"}`}
+                                    >
+                                      {selected && <Check className="h-3 w-3 text-white" />}
+                                    </span>
+                                    <span className="flex-1">{opt.name}</span>
+                                    {opt.price > 0 && (
+                                      <span className="text-muted-foreground shrink-0">
+                                        +฿{opt.price}
+                                      </span>
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                        );
+                      })}
+                    </div>
+                  )}
 
-                <div>
-                  <Label className="text-sm text-muted-foreground">{tr.notes}</Label>
-                  <Textarea
-                    value={addNotes}
-                    onChange={(e) => setAddNotes(e.target.value)}
-                    placeholder={lang === "th" ? "ไม่เผ็ด, ไม่ใส่ผัก…" : "no spicy, no veg…"}
-                    rows={2}
-                    className="mt-1 resize-none"
-                  />
+                  <div>
+                    <Label className="text-sm text-muted-foreground">{tr.notes}</Label>
+                    <Textarea
+                      value={addNotes}
+                      onChange={(e) => setAddNotes(e.target.value)}
+                      placeholder={lang === "th" ? "ไม่เผ็ด, ไม่ใส่ผัก…" : "no spicy, no veg…"}
+                      rows={2}
+                      className="mt-1 resize-none"
+                    />
+                  </div>
                 </div>
-              </div>
-            );
-          })()}
+              );
+            })()}
           <DialogFooter className="sticky bottom-0 z-10 -mx-4 -mb-4 gap-2 border-t bg-background p-4 sm:static sm:mx-0 sm:mb-0 sm:border-0 sm:bg-transparent sm:p-0">
-            <Button variant="outline" className="flex-1" onClick={() => setAdding(null)}>{tr.cancel}</Button>
-            <Button className="flex-1" onClick={addToCart}>
-              {tr.add} · ฿{adding ? ((adding.price + Array.from(selectedAddons.values()).reduce((s, a) => s + a.price, 0)) * addQty).toFixed(0) : "0"}
+            <Button variant="outline" className="flex-1" onClick={() => setAdding(null)}>
+              {tr.cancel}
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={addToCart}
+              disabled={
+                !!adding &&
+                (data?.addonsByMenuId?.[adding.id] ?? []).some((group) => {
+                  const selected = Array.from(selectedAddons.values()).filter(
+                    (addon) => addon.group_id === group.id,
+                  ).length;
+                  return selected < Math.max(0, group.min_select ?? 0);
+                })
+              }
+            >
+              {tr.add} · ฿
+              {adding
+                ? (
+                    (adding.price +
+                      Array.from(selectedAddons.values()).reduce((s, a) => s + a.price, 0)) *
+                    addQty
+                  ).toFixed(0)
+                : "0"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -791,7 +1126,10 @@ function CustomerMenu() {
           setDef={selectedSetDef}
           lang={lang}
           tr={tr}
-          onClose={() => { setSelectedSetDef(null); setSetMenuOrigin(null); }}
+          onClose={() => {
+            setSelectedSetDef(null);
+            setSetMenuOrigin(null);
+          }}
           onConfirm={addSetToCart}
         />
       )}
@@ -800,9 +1138,13 @@ function CustomerMenu() {
       <Dialog open={submitted} onOpenChange={setSubmitted}>
         <DialogContent className="text-center">
           <div className="text-5xl py-2">✅</div>
-          <DialogHeader><DialogTitle>{lang === "th" ? "ส่งสำเร็จ!" : "Order sent!"}</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>{lang === "th" ? "ส่งสำเร็จ!" : "Order sent!"}</DialogTitle>
+          </DialogHeader>
           <p className="text-sm text-muted-foreground">{tr.thanks}</p>
-          <Button className="w-full mt-2" onClick={() => setSubmitted(false)}>{tr.order_more}</Button>
+          <Button className="w-full mt-2" onClick={() => setSubmitted(false)}>
+            {tr.order_more}
+          </Button>
         </DialogContent>
       </Dialog>
     </div>

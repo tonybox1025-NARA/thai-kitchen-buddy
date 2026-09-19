@@ -1,6 +1,12 @@
 import { useState } from "react";
 import { Check } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import { thb } from "@/lib/format";
@@ -39,10 +45,7 @@ export function SetMenuDialog({ setDef, onClose, onConfirm }: SetMenuDialogProps
   const isSideDisabled = (item: SetItem) => sides.length >= sideMax && !isSideSelected(item);
 
   const canConfirm =
-    !!main &&
-    sides.length === requiredSides &&
-    !!rice &&
-    (!setDef?.hasDrink || !!drink);
+    !!main && sides.length === requiredSides && !!rice && (!setDef?.hasDrink || !!drink);
 
   const handleConfirm = () => {
     if (!setDef || !main || sides.length !== requiredSides || !rice) return;
@@ -57,33 +60,35 @@ export function SetMenuDialog({ setDef, onClose, onConfirm }: SetMenuDialogProps
     });
   };
 
-  const primary = (item: SetItem) => lang === "th" ? item.th : item.en;
-  const secondary = (item: SetItem) => lang === "th" ? item.en : item.th;
+  const primary = (item: SetItem) => (lang === "th" ? item.th : item.en);
+  const secondary = (item: SetItem) => (lang === "th" ? item.en : item.th);
 
   const mainDoneCount = main ? 1 : 0;
   const sidesDoneCount = sides.length;
 
   return (
     <Dialog key={setDef?.id} open={isOpen} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md p-0 overflow-hidden flex flex-col max-h-[90vh]">
+      <DialogContent className="max-w-md h-[90dvh] max-h-[90dvh] p-0 overflow-hidden flex flex-col">
         <DialogHeader className="px-5 pt-5 pb-3 shrink-0">
           <DialogTitle className="flex items-baseline gap-2">
             <span className="text-xl font-black text-amber-700 dark:text-amber-300">
               {setDef ? (lang === "th" ? setDef.name_th : setDef.name_en) : ""}
             </span>
-            <span className="text-lg font-bold text-primary">{setDef ? thb(setDef.price) : ""}</span>
+            <span className="text-lg font-bold text-primary">
+              {setDef ? thb(setDef.price) : ""}
+            </span>
           </DialogTitle>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {t("set_includes")}
-          </p>
+          <p className="text-sm text-muted-foreground mt-0.5">{t("set_includes")}</p>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto px-5 pb-4 space-y-5">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain touch-pan-y px-5 pb-4 space-y-5 [-webkit-overflow-scrolling:touch]">
           {/* Main Dish */}
           <section>
             <div className="flex items-center justify-between mb-2">
               <h3 className="font-semibold text-sm">{t("set_main_dish")}</h3>
-              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${mainDoneCount === 1 ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" : "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300"}`}>
+              <span
+                className={`text-xs font-bold px-2 py-0.5 rounded-full ${mainDoneCount === 1 ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" : "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300"}`}
+              >
                 {mainDoneCount === 1 ? `✓ 1/1` : t("set_select_1")}
               </span>
             </div>
@@ -96,12 +101,16 @@ export function SetMenuDialog({ setDef, onClose, onConfirm }: SetMenuDialogProps
                     onClick={() => setMain(item)}
                     className={`w-full flex items-center gap-3 rounded-lg border-2 px-3 py-2.5 text-left transition-all ${selected ? "border-primary bg-primary/5 dark:bg-primary/10" : "border-border hover:border-primary/50"}`}
                   >
-                    <span className={`flex-shrink-0 w-4 h-4 rounded-full border-2 flex items-center justify-center ${selected ? "border-primary bg-primary" : "border-muted-foreground"}`}>
+                    <span
+                      className={`flex-shrink-0 w-4 h-4 rounded-full border-2 flex items-center justify-center ${selected ? "border-primary bg-primary" : "border-muted-foreground"}`}
+                    >
                       {selected && <span className="w-2 h-2 rounded-full bg-white" />}
                     </span>
-                    <span>
-                      <span className="font-medium text-sm">{primary(item)}</span>
-                      <span className="text-xs text-muted-foreground ml-1.5">{secondary(item)}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block break-words font-medium text-sm">{primary(item)}</span>
+                      <span className="block break-words text-xs text-muted-foreground">
+                        {secondary(item)}
+                      </span>
                     </span>
                   </button>
                 );
@@ -113,8 +122,12 @@ export function SetMenuDialog({ setDef, onClose, onConfirm }: SetMenuDialogProps
           <section>
             <div className="flex items-center justify-between mb-2">
               <h3 className="font-semibold text-sm">{t("set_side_dish")}</h3>
-              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${sidesDoneCount === requiredSides ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" : "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300"}`}>
-                {sidesDoneCount === requiredSides ? `✓ ${sidesDoneCount}/${requiredSides}` : `${sidesDoneCount}/${requiredSides}`}
+              <span
+                className={`text-xs font-bold px-2 py-0.5 rounded-full ${sidesDoneCount === requiredSides ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" : "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300"}`}
+              >
+                {sidesDoneCount === requiredSides
+                  ? `✓ ${sidesDoneCount}/${requiredSides}`
+                  : `${sidesDoneCount}/${requiredSides}`}
               </span>
             </div>
             <div className="space-y-2">
@@ -128,12 +141,16 @@ export function SetMenuDialog({ setDef, onClose, onConfirm }: SetMenuDialogProps
                     disabled={disabled}
                     className={`w-full flex items-center gap-3 rounded-lg border-2 px-3 py-2.5 text-left transition-all ${selected ? "border-primary bg-primary/5 dark:bg-primary/10" : "border-border hover:border-primary/50"} ${disabled ? "opacity-40 cursor-not-allowed" : ""}`}
                   >
-                    <span className={`flex-shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center ${selected ? "border-primary bg-primary" : "border-muted-foreground"}`}>
+                    <span
+                      className={`flex-shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center ${selected ? "border-primary bg-primary" : "border-muted-foreground"}`}
+                    >
                       {selected && <Check className="w-3 h-3 text-white" />}
                     </span>
-                    <span>
-                      <span className="font-medium text-sm">{primary(item)}</span>
-                      <span className="text-xs text-muted-foreground ml-1.5">{secondary(item)}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block break-words font-medium text-sm">{primary(item)}</span>
+                      <span className="block break-words text-xs text-muted-foreground">
+                        {secondary(item)}
+                      </span>
                     </span>
                   </button>
                 );
@@ -146,7 +163,9 @@ export function SetMenuDialog({ setDef, onClose, onConfirm }: SetMenuDialogProps
             <section>
               <div className="flex items-center justify-between mb-2">
                 <h3 className="font-semibold text-sm">{t("set_free_drink")}</h3>
-                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${drink ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" : "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"}`}>
+                <span
+                  className={`text-xs font-bold px-2 py-0.5 rounded-full ${drink ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" : "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"}`}
+                >
                   {drink ? "✓ 1/1" : t("set_select_1")}
                 </span>
               </div>
@@ -159,12 +178,20 @@ export function SetMenuDialog({ setDef, onClose, onConfirm }: SetMenuDialogProps
                       onClick={() => setDrink(item)}
                       className={`flex items-center gap-2 rounded-lg border-2 px-3 py-2.5 text-left transition-all ${selected ? "border-amber-500 bg-amber-50 dark:bg-amber-900/20" : "border-border hover:border-amber-400"}`}
                     >
-                      <span className={`flex-shrink-0 w-4 h-4 rounded-full border-2 flex items-center justify-center ${selected ? "border-amber-500 bg-amber-500" : "border-muted-foreground"}`}>
+                      <span
+                        className={`flex-shrink-0 w-4 h-4 rounded-full border-2 flex items-center justify-center ${selected ? "border-amber-500 bg-amber-500" : "border-muted-foreground"}`}
+                      >
                         {selected && <span className="w-2 h-2 rounded-full bg-white" />}
                       </span>
-                      <span>
-                        <span className={`font-medium text-xs ${selected ? "text-amber-700 dark:text-amber-300" : ""}`}>{primary(item)}</span>
-                        <span className="block text-xs text-muted-foreground">{secondary(item)}</span>
+                      <span className="min-w-0 flex-1">
+                        <span
+                          className={`block break-words font-medium text-xs ${selected ? "text-amber-700 dark:text-amber-300" : ""}`}
+                        >
+                          {primary(item)}
+                        </span>
+                        <span className="block break-words text-xs text-muted-foreground">
+                          {secondary(item)}
+                        </span>
                       </span>
                     </button>
                   );
@@ -177,7 +204,9 @@ export function SetMenuDialog({ setDef, onClose, onConfirm }: SetMenuDialogProps
           <section>
             <div className="mb-2 flex items-center justify-between">
               <h3 className="font-semibold text-sm">{t("set_rice")}</h3>
-              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${rice ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" : "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300"}`}>
+              <span
+                className={`text-xs font-bold px-2 py-0.5 rounded-full ${rice ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" : "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300"}`}
+              >
                 {rice ? "✓ 1/1" : t("set_select_1")}
               </span>
             </div>
@@ -200,17 +229,38 @@ export function SetMenuDialog({ setDef, onClose, onConfirm }: SetMenuDialogProps
           {/* Summary box */}
           {(main || sides.length > 0) && (
             <div className="bg-muted/30 rounded-lg p-3 space-y-1 text-sm">
-              <p className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-1.5">{t("set_summary")}</p>
+              <p className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-1.5">
+                {t("set_summary")}
+              </p>
               {main && <p>🍽️ {main.th}</p>}
-              {sides.map((s, idx) => <p key={idx}>🥗 {s.th}</p>)}
-              {drink && <p>🥤 {drink.th} <span className="text-amber-600 font-semibold text-xs">FREE</span></p>}
-              {rice && <p>🍚 {rice === "rice" ? (lang === "th" ? "ข้าวสวย" : "Steamed Rice") : (lang === "th" ? "โจ๊ก" : "Porridge")}</p>}
+              {sides.map((s, idx) => (
+                <p key={idx}>🥗 {s.th}</p>
+              ))}
+              {drink && (
+                <p>
+                  🥤 {drink.th} <span className="text-amber-600 font-semibold text-xs">FREE</span>
+                </p>
+              )}
+              {rice && (
+                <p>
+                  🍚{" "}
+                  {rice === "rice"
+                    ? lang === "th"
+                      ? "ข้าวสวย"
+                      : "Steamed Rice"
+                    : lang === "th"
+                      ? "โจ๊ก"
+                      : "Porridge"}
+                </p>
+              )}
             </div>
           )}
         </div>
 
         <DialogFooter className="px-5 py-4 border-t shrink-0 flex gap-2">
-          <Button variant="outline" onClick={onClose} className="flex-1">{t("cancel")}</Button>
+          <Button variant="outline" onClick={onClose} className="flex-1">
+            {t("cancel")}
+          </Button>
           <Button
             onClick={handleConfirm}
             disabled={!canConfirm}
