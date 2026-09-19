@@ -52,6 +52,12 @@ type MemberLookup = {
   member_group_en: string | null;
 };
 
+function normalizePhone(value: string | null | undefined) {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  if (digits.startsWith("66") && digits.length >= 10) return `0${digits.slice(2)}`;
+  return digits;
+}
+
 type BillDiscount = {
   id: string;
   bill_id: string;
@@ -152,6 +158,7 @@ function PaymentPage() {
   const [memberSearchOpen, setMemberSearchOpen] = useState(false);
   const [memberQuery, setMemberQuery] = useState("");
   const [memberResults, setMemberResults] = useState<MemberLookup[]>([]);
+  const [memberSearching, setMemberSearching] = useState(false);
 
   // QR payment state
   const [qrAmt, setQrAmt] = useState(0);
@@ -491,17 +498,61 @@ function PaymentPage() {
 
   const searchMembers = async () => {
     const term = memberQuery.trim().replace(/[%,()]/g, "");
-    let query = supabase
-      .from("members")
-      .select("id,full_name,nickname,phone,current_points,member_group_en")
-      .order("current_points", { ascending: false })
-      .limit(50);
-    if (term) {
-      query = query.or(`full_name.ilike.%${term}%,nickname.ilike.%${term}%,phone.ilike.%${term}%`);
+    setMemberSearching(true);
+    try {
+      let query = supabase
+        .from("members")
+        .select("id,full_name,nickname,phone,current_points,member_group_en")
+        .order("current_points", { ascending: false })
+        .limit(50);
+      if (term) {
+        query = query.or(`full_name.ilike.%${term}%,nickname.ilike.%${term}%,phone.ilike.%${term}%`);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+
+      const directMatches = (data ?? []) as MemberLookup[];
+      const phoneTerm = normalizePhone(term);
+      if (!phoneTerm || phoneTerm.length < 4) {
+        setMemberResults(directMatches);
+        return;
+      }
+
+      // Imported Dotdash numbers may contain spaces, dashes or +66 while staff
+      // usually type plain Thai digits. PostgREST cannot normalize punctuation in
+      // an ilike filter, so scan only members that have a phone and compare a
+      // canonical local-number form in the client.
+      const phoneRows: MemberLookup[] = [];
+      const pageSize = 1000;
+      for (let from = 0; ; from += pageSize) {
+        const { data: page, error: pageError } = await supabase
+          .from("members")
+          .select("id,full_name,nickname,phone,current_points,member_group_en")
+          .not("phone", "is", null)
+          .range(from, from + pageSize - 1);
+        if (pageError) throw pageError;
+        const rows = (page ?? []) as MemberLookup[];
+        phoneRows.push(...rows);
+        if (rows.length < pageSize) break;
+      }
+
+      const normalizedMatches = phoneRows.filter((member) =>
+        normalizePhone(member.phone).includes(phoneTerm),
+      );
+      const mergedMatches = new Map<string, MemberLookup>();
+      for (const member of [...directMatches, ...normalizedMatches]) {
+        mergedMatches.set(member.id, member);
+      }
+      setMemberResults(
+        [...mergedMatches.values()]
+          .sort((a, b) => Number(b.current_points ?? 0) - Number(a.current_points ?? 0))
+          .slice(0, 50),
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not search members");
+    } finally {
+      setMemberSearching(false);
     }
-    const { data, error } = await query;
-    if (error) { toast.error(error.message); return; }
-    setMemberResults((data ?? []) as MemberLookup[]);
   };
 
   const selectMember = async (member: MemberLookup) => {
@@ -1262,7 +1313,9 @@ function PaymentPage() {
                     onKeyDown={(e) => { if (e.key === "Enter") void searchMembers(); }}
                   />
                 </div>
-                <Button onClick={searchMembers}>{t("search")}</Button>
+                <Button onClick={searchMembers} disabled={memberSearching}>
+                  {memberSearching ? "Searching…" : t("search")}
+                </Button>
               </div>
               <div className="max-h-80 overflow-y-auto space-y-2">
                 {memberResults.map((m) => (
