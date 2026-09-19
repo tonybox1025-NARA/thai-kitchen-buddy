@@ -183,6 +183,10 @@ async function fetchAllMembers() {
       .from("members")
       .select("id,full_name,nickname,phone,member_group_en,member_level,current_points,legacy_visit_count,legacy_total_spend,legacy_last_visit_at,status,guest_token,line_user_id,imported_from,created_at")
       .order("current_points", { ascending: false })
+      // current_points is not unique. A stable tiebreaker is required when
+      // paging, otherwise equal-point members can move between pages and be
+      // counted twice (while other members disappear from the result).
+      .order("id", { ascending: true })
       .range(from, to);
     if (error) throw error;
     const page = (data ?? []) as Member[];
