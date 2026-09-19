@@ -148,12 +148,13 @@ function PosPage() {
     const seats = guests;
     const id = await openTableOrder();
     if (!id || !code) return;
-    const { data: cfg } = await supabase.from("settings").select("restaurant_name").eq("id", 1).maybeSingle();
     await printCounter({
       kind: "table_qr",
       table: tableLabel(code),
       url: `${publicBaseUrl()}/menu/${encodeURIComponent(code)}`,
-      restaurant: (cfg as { restaurant_name?: string } | null)?.restaurant_name ?? "Restaurant",
+      // The queue bridge prints this as native ESC/POS text. Keep it ASCII:
+      // this counter printer's firmware corrupts Thai text in that mode.
+      restaurant: "LONMOH",
       guests: seats,
     });
     toast.success(`QR printed · ${t("table")} ${tableLabel(code)}`);

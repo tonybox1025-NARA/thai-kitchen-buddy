@@ -264,7 +264,9 @@ function qrData(text) {
 function buildQrSlip(p) {
   const parts = [
     CMD.INIT, CMD.ALIGN_CENTER,
-    CMD.BOLD_ON, CMD.DSIZE_ON, p.restaurant || "Restaurant", lf(), CMD.DSIZE_OFF,
+    // Keep the QR heading ASCII-only. This printer corrupts Thai glyphs when
+    // they are sent as native ESC/POS text by the queue bridge.
+    CMD.BOLD_ON, CMD.DSIZE_ON, "LONMOH", lf(), CMD.DSIZE_OFF,
     lf(),
     `TABLE ${p.table ?? "?"}`, lf(),
     CMD.BOLD_OFF,

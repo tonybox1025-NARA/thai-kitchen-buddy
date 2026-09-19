@@ -565,15 +565,18 @@ function OrderPage() {
   const reprintTableQr = async () => {
     if (isOffline()) { toast.error(t("err_offline")); return; }
     if (!tableRawCode) return;
-    const [{ data: cfg }, { data: tbl }] = await Promise.all([
-      supabase.from("settings").select("restaurant_name").eq("id", 1).maybeSingle(),
-      supabase.from("restaurant_tables").select("guests").eq("id", tableId).maybeSingle(),
-    ]);
+    const { data: tbl } = await supabase
+      .from("restaurant_tables")
+      .select("guests")
+      .eq("id", tableId)
+      .maybeSingle();
     await printCounter({
       kind: "table_qr",
       table: tableCode,
       url: `${publicBaseUrl()}/menu/${encodeURIComponent(tableRawCode)}`,
-      restaurant: (cfg as { restaurant_name?: string } | null)?.restaurant_name ?? "Restaurant",
+      // The queue bridge prints this as native ESC/POS text. Keep it ASCII:
+      // this counter printer's firmware corrupts Thai text in that mode.
+      restaurant: "LONMOH",
       guests: Number((tbl as { guests?: number } | null)?.guests ?? 0),
     });
     toast.success(`QR printed · ${t("table")} ${tableCode}`);
