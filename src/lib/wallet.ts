@@ -7,6 +7,7 @@ const KEY = "lonmoh_guest_wallet_token";
 // LINE Login channel (LIFF) for the membership wallet. Both values are public.
 export const LINE_LIFF_ID = "2011108366-NkaYgFKB";
 export const LINE_CHANNEL_ID = "2011108366";
+export const LINE_OA_ADD_FRIEND_URL = "https://line.me/R/ti/p/@778jyhgc";
 
 export function walletToken(): string {
   if (typeof window === "undefined" || !window.localStorage) return "";

@@ -5,8 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Heart, Loader2, Gift, Cake, Home, MessageCircle, Check } from "lucide-react";
-import { walletToken, LINE_LIFF_ID } from "@/lib/wallet";
+import { Heart, Loader2, Gift, Cake, Home, MessageCircle, Check, UserPlus } from "lucide-react";
+import { walletToken, LINE_LIFF_ID, LINE_OA_ADD_FRIEND_URL } from "@/lib/wallet";
 
 export const Route = createFileRoute("/wallet")({
   component: WalletPage,
@@ -51,6 +51,7 @@ const STR = {
     lineTitle: "เชื่อมต่อ LINE", lineHint: "เก็บแต้มข้ามเครื่องและรับข่าวสารโปรโมชัน", lineBtn: "เชื่อมต่อ",
     lineConnected: "เชื่อมต่อ LINE แล้ว", lineConnecting: "กำลังเชื่อมต่อ…", lineFail: "เชื่อมต่อ LINE ไม่สำเร็จ",
     existing: "มีสมาชิกอยู่แล้ว?", phone: "เบอร์โทรสมาชิก", linkPhone: "เชื่อมสมาชิก",
+    addFriend: "เพิ่มเพื่อน LONMOH", addFriendHint: "รับข่าวสาร โปรโมชัน และเปิดบัตรสมาชิกผ่าน LINE ได้ง่ายๆ", addFriendBtn: "เพิ่มเพื่อน",
     home: "เพิ่มหน้านี้ไปที่หน้าจอหลักเพื่อเปิดบัตรสมาชิกได้ง่ายๆ", loading: "กำลังโหลด…", loadFail: "โหลดไม่สำเร็จ",
     locale: "th-TH",
   },
@@ -64,6 +65,7 @@ const STR = {
     lineTitle: "Connect LINE", lineHint: "Keep your points across devices and get promo news", lineBtn: "Connect",
     lineConnected: "LINE connected", lineConnecting: "Connecting…", lineFail: "Couldn’t connect LINE",
     existing: "Already a member?", phone: "Membership phone number", linkPhone: "Link membership",
+    addFriend: "Add LONMOH on LINE", addFriendHint: "Get news and promotions, and open your membership card easily from LINE", addFriendBtn: "Add friend",
     home: "Add this page to your home screen for quick access", loading: "Loading…", loadFail: "Couldn’t load",
     locale: "en-GB",
   },
@@ -356,6 +358,21 @@ function WalletPage() {
               <Input inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={s.phone} />
               <Button onClick={linkExistingMember} disabled={phoneBusy || !phone.trim()}>
                 {phoneBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : s.linkPhone}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {member?.line_user_id && (
+          <Card className="border-green-300 bg-green-50/70">
+            <CardContent className="p-4 flex items-center gap-3">
+              <UserPlus className="h-5 w-5 text-green-600 flex-none" />
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium">{s.addFriend}</div>
+                <div className="text-xs text-muted-foreground">{s.addFriendHint}</div>
+              </div>
+              <Button size="sm" asChild>
+                <a href={LINE_OA_ADD_FRIEND_URL}>{s.addFriendBtn}</a>
               </Button>
             </CardContent>
           </Card>
