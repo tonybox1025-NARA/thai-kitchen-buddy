@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -112,6 +113,8 @@ type CheckoutState = {
     full_name: string;
     nickname: string | null;
     current_points: number;
+    phone?: string | null;
+    imported_from?: string | null;
   } | null;
   rewards: { points: number; baht: number }[];
 };
@@ -576,6 +579,7 @@ function CustomerMenu() {
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [checkout, setCheckout] = useState<CheckoutState | null>(null);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
+  const [memberPhone, setMemberPhone] = useState("");
   // Set menu state
   const [selectedSetDef, setSelectedSetDef] = useState<SetDef | null>(null);
   const [setMenuOrigin, setSetMenuOrigin] = useState<Menu | null>(null);
@@ -650,6 +654,31 @@ function CustomerMenu() {
       );
     } catch (rewardError) {
       toast.error(rewardError instanceof Error ? rewardError.message : "Unable to select reward");
+    } finally {
+      setCheckoutBusy(false);
+    }
+  };
+
+  const linkMemberPhone = async () => {
+    if (!memberPhone.trim()) return;
+    setCheckoutBusy(true);
+    try {
+      const response = await fetch(`/api/public/checkout/${encodeURIComponent(tableCode)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "link_member_phone",
+          guest_token: walletToken(),
+          phone: memberPhone,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Unable to connect member");
+      await loadCheckout();
+      setMemberPhone("");
+      toast.success(lang === "th" ? "เชื่อมต่อสมาชิกแล้ว" : "Member connected");
+    } catch (linkError) {
+      toast.error(linkError instanceof Error ? linkError.message : "Unable to connect member");
     } finally {
       setCheckoutBusy(false);
     }
@@ -1276,7 +1305,7 @@ function CustomerMenu() {
                 </div>
               </div>
 
-              {checkout.member ? (
+              {checkout.member && checkout.member.imported_from !== "guest_wallet" ? (
                 <div className="rounded-xl border p-4">
                   <div className="text-sm text-muted-foreground">{tr.member_points}</div>
                   <div className="flex items-end justify-between gap-4">
@@ -1289,15 +1318,39 @@ function CustomerMenu() {
                   </div>
                 </div>
               ) : (
-                <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
-                  {tr.no_wallet}{" "}
-                  <a className="font-semibold text-primary underline" href="/wallet">
-                    Member Wallet
-                  </a>
+                <div className="space-y-3 rounded-xl border p-4">
+                  <div>
+                    <div className="font-semibold">
+                      {lang === "th" ? "สมาชิกเดิม" : "Existing member"}
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {lang === "th"
+                        ? "กรอกเบอร์โทรที่สมัครสมาชิก ครั้งต่อไปเครื่องนี้จะจำให้"
+                        : "Enter the membership phone once. This phone will be remembered next time."}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      type="tel"
+                      inputMode="tel"
+                      autoComplete="tel"
+                      placeholder="0xx-xxx-xxxx"
+                      value={memberPhone}
+                      onChange={(event) => setMemberPhone(event.target.value)}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={checkoutBusy || memberPhone.replace(/\D/g, "").length < 9}
+                      onClick={() => void linkMemberPhone()}
+                    >
+                      {lang === "th" ? "เชื่อมต่อ" : "Connect"}
+                    </Button>
+                  </div>
                 </div>
               )}
 
-              {checkout.member && (
+              {checkout.member && checkout.member.imported_from !== "guest_wallet" && (
                 <div className="space-y-2">
                   <div className="font-semibold">{tr.use_reward}</div>
                   <div className="grid grid-cols-2 gap-2">

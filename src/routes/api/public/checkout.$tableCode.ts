@@ -28,11 +28,23 @@ function client() {
 const Body = z.discriminatedUnion("action", [
   z.object({ action: z.literal("request_bill") }),
   z.object({
+    action: z.literal("link_member_phone"),
+    guest_token: z.string().min(20).max(120),
+    phone: z.string().trim().min(8).max(24),
+  }),
+  z.object({
     action: z.literal("reserve_reward"),
     guest_token: z.string().min(20).max(120),
     points: z.number().int().min(0),
   }),
 ]);
+
+function normalizePhone(value: string | null | undefined) {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.startsWith("66") && digits.length >= 11) return `0${digits.slice(2)}`;
+  return digits;
+}
 
 async function tableOrder(sb: ReturnType<typeof client>, tableCode: string) {
   if (!sb) return null;
@@ -114,7 +126,7 @@ export const Route = createFileRoute("/api/public/checkout/$tableCode")({
         if (guestToken && guestToken.length >= 20) {
           const result = await (sb as any)
             .from("members")
-            .select("id,full_name,nickname,current_points")
+            .select("id,full_name,nickname,current_points,phone,imported_from")
             .eq("guest_token", guestToken)
             .eq("status", "active")
             .maybeSingle();
@@ -165,6 +177,63 @@ export const Route = createFileRoute("/api/public/checkout/$tableCode")({
             .update({ status: "bill_requested" })
             .eq("id", found.table.id);
           return Response.json({ ok: true, bill_id: bill.id, requested_at: now });
+        }
+
+        if (parsed.data.action === "link_member_phone") {
+          const wantedPhone = normalizePhone(parsed.data.phone);
+          if (wantedPhone.length < 9) {
+            return Response.json({ error: "Please enter a valid phone number" }, { status: 400 });
+          }
+
+          const { data: candidates, error: memberError } = await (sb as any)
+            .from("members")
+            .select("id,full_name,nickname,current_points,phone,guest_token,status,imported_from")
+            .eq("status", "active")
+            .not("phone", "is", null);
+          if (memberError) return Response.json({ error: memberError.message }, { status: 500 });
+          const matches = (candidates ?? []).filter(
+            (member: { phone?: string | null }) => normalizePhone(member.phone) === wantedPhone,
+          );
+          if (matches.length !== 1) {
+            return Response.json(
+              { error: matches.length === 0 ? "Member not found" : "Duplicate phone records need staff review" },
+              { status: matches.length === 0 ? 404 : 409 },
+            );
+          }
+
+          const target = matches[0];
+          const { data: current } = await (sb as any)
+            .from("members")
+            .select("id,current_points,guest_token,imported_from")
+            .eq("guest_token", parsed.data.guest_token)
+            .maybeSingle();
+
+          if (current && current.id !== target.id) {
+            const { count: ledgerCount } = await (sb as any)
+              .from("member_point_ledger")
+              .select("id", { count: "exact", head: true })
+              .eq("member_id", current.id);
+            if (Number(current.current_points ?? 0) !== 0 || Number(ledgerCount ?? 0) !== 0) {
+              return Response.json(
+                { error: "This phone already has wallet activity. Ask staff to merge it safely." },
+                { status: 409 },
+              );
+            }
+            const { error: deleteError } = await (sb as any)
+              .from("members")
+              .delete()
+              .eq("id", current.id);
+            if (deleteError) return Response.json({ error: deleteError.message }, { status: 500 });
+          }
+
+          const { data: linked, error: linkError } = await (sb as any)
+            .from("members")
+            .update({ guest_token: parsed.data.guest_token, updated_at: new Date().toISOString() })
+            .eq("id", target.id)
+            .select("id,full_name,nickname,current_points,phone,imported_from")
+            .single();
+          if (linkError) return Response.json({ error: linkError.message }, { status: 500 });
+          return Response.json({ ok: true, member: linked });
         }
 
         const { data, error } = await (sb as any).rpc("reserve_customer_bill_loyalty", {
