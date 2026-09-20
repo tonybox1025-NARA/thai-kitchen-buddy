@@ -29,7 +29,14 @@ const TRANSPORT_KEY = "pos.printTransport";
 
 export function getPrintTransport(): PrintTransport {
   if (typeof localStorage === "undefined") return "queue";
-  return localStorage.getItem(TRANSPORT_KEY) === "direct" ? "direct" : "queue";
+  const saved = localStorage.getItem(TRANSPORT_KEY);
+  if (saved === "direct" || saved === "queue") return saved;
+
+  // Native POS builds have their own LAN/USB/SUNMI printer transport and do
+  // not need the database queue. Defaulting an APK to the queue makes a
+  // successful insert look like a successful print, and also couples printing
+  // to a separately running bridge. Browsers still use the queue by default.
+  return isNativeApp() ? "direct" : "queue";
 }
 
 export function setPrintTransport(transport: PrintTransport) {
