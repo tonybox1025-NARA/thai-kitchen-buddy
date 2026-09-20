@@ -1,4 +1,4 @@
-import { createFileRoute, Outlet, useNavigate, Link, useRouterState } from "@tanstack/react-router";
+import { createFileRoute, Outlet, Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
@@ -21,7 +21,6 @@ export const Route = createFileRoute("/_app")({ component: AppLayout });
 function AppLayout() {
   const { loading, session, staff, setStaff, signOut, verifyPin } = useAuth();
   const { t, lang } = useI18n();
-  const nav = useNavigate();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const [pinErr, setPinErr] = useState<string | null>(null);
   const qrAlertCount = useQrAlertCount(Boolean(session && staff));
@@ -32,9 +31,10 @@ function AppLayout() {
   useEffect(() => {
     if (!loading && !session) {
       setStaff(null);
-      nav({ to: "/login", replace: true });
+      const next = path.startsWith("/crew") ? "/crew" : "/pos";
+      window.location.replace(`/login?next=${encodeURIComponent(next)}`);
     }
-  }, [loading, session, nav, setStaff]);
+  }, [loading, session, path, setStaff]);
 
   // While the saved session is being restored, show a neutral spinner — NOT the
   // login screen — so a logged-in device (the shop's daily case) goes straight
@@ -48,7 +48,14 @@ function AppLayout() {
   }
 
   if (!session) {
-    return <LoginFallback onLogin={() => nav({ to: "/login", replace: true })} />;
+    return (
+      <LoginFallback
+        onLogin={() => {
+          const next = path.startsWith("/crew") ? "/crew" : "/pos";
+          window.location.assign(`/login?next=${encodeURIComponent(next)}`);
+        }}
+      />
+    );
   }
 
   // Staff PIN gate

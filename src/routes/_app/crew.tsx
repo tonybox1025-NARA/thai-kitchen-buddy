@@ -129,7 +129,13 @@ function CrewPage() {
         {tables.map((table) => (
           <div
             key={table.id}
-            className={`rounded-2xl border-2 p-4 shadow-sm ${table.status === "bill_requested" ? "border-orange-400 bg-orange-50" : "bg-card"}`}
+            role="button"
+            tabIndex={0}
+            onClick={() => setSelected(table)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") setSelected(table);
+            }}
+            className={`cursor-pointer rounded-2xl border-2 p-4 shadow-sm transition-shadow hover:shadow-md ${table.status === "bill_requested" ? "border-orange-400 bg-orange-50" : "bg-card"}`}
           >
             <div className="flex items-start justify-between gap-3">
               <div className="text-3xl font-black">{tableLabel(table.code)}</div>
@@ -159,14 +165,15 @@ function CrewPage() {
             <div className="mt-4 grid grid-cols-2 gap-2">
               <Button
                 variant="outline"
-                onClick={() => {
+                onClick={(event) => {
+                  event.stopPropagation();
                   window.location.href = `/menu/${encodeURIComponent(table.code)}?crew=1`;
                 }}
               >
                 <ShoppingCart className="mr-2 h-4 w-4" />
                 Order
               </Button>
-              <Button onClick={() => setSelected(table)}>
+              <Button onClick={(event) => { event.stopPropagation(); setSelected(table); }}>
                 <ReceiptText className="mr-2 h-4 w-4" />
                 Details
               </Button>

@@ -48,11 +48,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     // /wallet would install an icon that opens the POS. Serve a wallet-specific
     // manifest when the wallet route is active. (TanStack passes the full active
     // match branch to the root head, so we can detect it here.)
-    const isWallet = (ctx?.matches ?? []).some((m: any) =>
-      String(m?.routeId ?? m?.fullPath ?? m?.pathname ?? "").includes("/wallet"),
+    const activePaths = (ctx?.matches ?? []).map((m: any) =>
+      String(m?.routeId ?? m?.fullPath ?? m?.pathname ?? ""),
     );
-    const manifestHref = isWallet ? "/wallet.webmanifest" : "/manifest.webmanifest";
-    const appleTitle = isWallet ? "LONMOH" : "POS LIVE";
+    const isWallet = activePaths.some((path: string) => path.includes("/wallet"));
+    const isCrew = activePaths.some((path: string) => path.includes("/crew"));
+    const manifestHref = isWallet
+      ? "/wallet.webmanifest"
+      : isCrew
+        ? "/crew.webmanifest"
+        : "/manifest.webmanifest";
+    const appleTitle = isWallet ? "LONMOH" : isCrew ? "LONMOH Crew" : "POS LIVE";
     return {
     meta: [
       { charSet: "utf-8" },
