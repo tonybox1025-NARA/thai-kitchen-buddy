@@ -314,8 +314,8 @@ function PaymentPage() {
 
   // Persist member discount + VAT + total to bill (discount_amount owned by applyDiscount/removeDiscount)
   const persistBill = async () => {
-    if (!bill) return;
-    await (supabase as any).from("bills").update({
+    if (!bill) return null;
+    return (supabase as any).from("bills").update({
       subtotal,
       member_discount_amount: memberDisc,
       points_redeemed: pointsRedeemed,
@@ -485,6 +485,13 @@ function PaymentPage() {
   const addPayment = async (method: Payment["method"], amount: number, extras: Record<string, unknown> = {}) => {
     if (!bill || amount <= 0) return;
     if (isOffline()) { toast.error(t("err_offline")); return; }
+    // Persist the exact total shown to the cashier before recording money. The
+    // atomic finalizer validates payment coverage against this database value.
+    const syncedBill = await persistBill();
+    if (syncedBill?.error) {
+      toast.error(syncedBill.error.message || "Could not sync the bill total");
+      return;
+    }
     const { data: inserted, error } = await supabase.from("payments")
       .insert({ bill_id: bill.id, method, amount, ...extras })
       .select("id,method,amount,cash_received,change_due,tip_amount,reference")
