@@ -186,13 +186,21 @@ function buildReceipt(p) {
     if (pay.change_due)    parts.push(twoCol("  Change",   thb(pay.change_due)),    lf());
   }
 
+  parts.push(line(), lf(2), CMD.ALIGN_CENTER);
+
+  if (p.loyaltyClaimUrl) {
+    parts.push(
+      CMD.BOLD_ON, "SCAN TO COLLECT POINTS", lf(), CMD.BOLD_OFF,
+      p.loyaltyEarnPoints > 0 ? `+${Math.floor(Number(p.loyaltyEarnPoints))} POINTS` : "LOYALTY POINTS",
+      lf(),
+      "Valid for 30 days", lf(2),
+      qrData(p.loyaltyClaimUrl), lf(2),
+    );
+  }
+
   parts.push(
-    line(), lf(2),
-    CMD.ALIGN_CENTER,
-    CMD.BOLD_ON, "Thank you!", lf(),
-    CMD.BOLD_OFF,
-    lf(3),
-    CMD.CUT,
+    CMD.BOLD_ON, "Thank you!", lf(), CMD.BOLD_OFF,
+    lf(3), CMD.CUT,
   );
 
   return buf(...parts);
