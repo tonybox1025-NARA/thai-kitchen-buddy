@@ -845,7 +845,7 @@ function OrderPage() {
               <div key={pageIndex} className="grid min-w-full grid-cols-4 grid-rows-2 gap-3 snap-start">
                 {page.map((option, optionIndex) => {
                   const selectedCategory = activeCat === option.id;
-                  const label = option.id === "all" ? t("ord_all") : categoryLabel(option.category, lang);
+                  const label = "category" in option ? categoryLabel(option.category, lang) : t("ord_all");
                   return (
                     <button
                       key={option.id}

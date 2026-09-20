@@ -123,7 +123,7 @@ export const Route = createFileRoute("/api/public/qr-menu/$tableCode")({
             if (!g) continue;
             const canonicalId = duplicateToCanonical.get(link.menu_id) ?? link.menu_id;
             if (!addonsByMenuId[canonicalId]) addonsByMenuId[canonicalId] = [];
-            const groups = addonsByMenuId[canonicalId] as { id?: string }[];
+            const groups = addonsByMenuId[canonicalId] as { id?: string; min_select?: number }[];
             if (!groups.some((group) => group.id === link.group_id)) {
               groups.push({
                 ...(g as object),
