@@ -625,21 +625,6 @@ function PaymentPage() {
     }
   };
 
-  const processBillLoyalty = async () => {
-    if (!bill || !selectedMember) return;
-    const { data, error } = await (supabase as any).rpc("process_bill_loyalty", {
-      p_bill_id: bill.id,
-      p_member_id: selectedMember.id,
-      p_redeem_points: pointsRedeemed,
-      p_earn_points: loyaltyEnabled ? earnPoints : 0,
-    });
-    if (error) throw error;
-    const result = Array.isArray(data) ? data[0] : data;
-    if (result) {
-      setSelectedMember({ ...selectedMember, current_points: Number(result.balance_after) });
-    }
-  };
-
   const ensureLoyaltyClaim = async () => {
     if (!bill || !loyaltyEnabled) return null;
 
@@ -680,18 +665,20 @@ function PaymentPage() {
     if (!bill) return false;
     if (isOffline()) { toast.error(t("err_offline")); return false; }
     const isTestBill = (bill as any).is_test === true;
-    try {
-      if (!isTestBill) await processBillLoyalty();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not process member points");
+    const { data: finalized, error: finalizeError } = await (supabase as any).rpc("finalize_bill_payment", {
+      p_bill_id: bill.id,
+      p_member_id: !isTestBill ? selectedMember?.id ?? null : null,
+      p_redeem_points: !isTestBill && selectedMember ? pointsRedeemed : 0,
+      p_earn_points: !isTestBill && selectedMember && loyaltyEnabled ? earnPoints : 0,
+      p_cashier_id: staff?.id ?? null,
+    });
+    if (finalizeError) {
+      toast.error(finalizeError.message || "Could not finalize payment");
       return false;
     }
-    const { error: paidError } = await supabase.from("bills").update({ status: "paid", paid_at: new Date().toISOString(), cashier_id: staff?.id }).eq("id", bill.id);
-    if (paidError) { toast.error(paidError.message); return false; }
-    await supabase.from("orders").update({ status: "closed", closed_at: new Date().toISOString() }).eq("id", bill.order_id);
-    const { data: ord } = await supabase.from("orders").select("table_id").eq("id", bill.order_id).single();
-    if (ord?.table_id) {
-      await supabase.from("restaurant_tables").update({ status: "available", guests: 0, has_qr_alert: false }).eq("id", ord.table_id);
+    const finalizedRow = Array.isArray(finalized) ? finalized[0] : finalized;
+    if (selectedMember && finalizedRow?.balance_after != null) {
+      setSelectedMember({ ...selectedMember, current_points: Number(finalizedRow.balance_after) });
     }
     // Test tables must not touch real member points or issue loyalty claims.
     const loyaltyClaim = isTestBill ? null : await ensureLoyaltyClaim();
