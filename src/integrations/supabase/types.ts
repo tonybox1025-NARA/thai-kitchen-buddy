@@ -1641,6 +1641,19 @@ export type Database = {
           points_expired: number
         }[]
       }
+      finalize_bill_payment: {
+        Args: {
+          p_bill_id: string
+          p_cashier_id?: string
+          p_earn_points?: number
+          p_member_id?: string
+          p_redeem_points?: number
+        }
+        Returns: {
+          balance_after: number
+          bill_status: Database["public"]["Enums"]["bill_status"]
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
