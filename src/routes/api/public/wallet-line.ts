@@ -7,7 +7,9 @@ import { z } from "zod";
 // The client sends a LIFF ID token; we verify it with LINE (no secret needed —
 // client_id is the public channel id) so a caller can't spoof someone else's
 // LINE user id. Then we either claim this guest wallet with the LINE identity,
-// or merge this device into the member that already owns that LINE id.
+// or move an EMPTY device wallet onto the member that already owns that LINE
+// id. Wallet balances are never auto-merged here: a non-empty duplicate needs
+// staff review so points cannot be duplicated by reconnecting devices.
 const LINE_CHANNEL_ID = "2011108366";
 const MEMBER_COLS = "id,full_name,nickname,current_points,member_level,member_group_en,birthday,phone,created_at,line_user_id";
 
@@ -73,14 +75,23 @@ export const Route = createFileRoute("/api/public/wallet-line")({
 
         let member = current;
         if (existing && existing.id !== current.id) {
-          // Merge this device into the existing LINE-linked member: move points +
-          // ledger, point this device's token at it, remove the duplicate guest.
-          await sb.from("member_point_ledger").update({ member_id: existing.id }).eq("member_id", current.id);
-          const mergedPoints = Number(existing.current_points ?? 0) + Number(current.current_points ?? 0);
-          const { data: upd } = await sb.from("members")
-            .update({ current_points: mergedPoints, guest_token, updated_at: new Date().toISOString() })
+          const { count: ledgerCount } = await sb.from("member_point_ledger")
+            .select("id", { count: "exact", head: true }).eq("member_id", current.id);
+          if (Number(current.current_points ?? 0) !== 0 || Number(ledgerCount ?? 0) !== 0) {
+            return Response.json(
+              { error: "This device wallet has activity. Ask staff to merge it safely." },
+              { status: 409 },
+            );
+          }
+
+          // The token is unique, so remove only the verified empty duplicate
+          // before moving this browser/device onto the established LINE member.
+          const { error: deleteError } = await sb.from("members").delete().eq("id", current.id);
+          if (deleteError) return Response.json({ error: deleteError.message }, { status: 500 });
+          const { data: upd, error: updateError } = await sb.from("members")
+            .update({ guest_token, updated_at: new Date().toISOString() })
             .eq("id", existing.id).select(MEMBER_COLS).single();
-          await sb.from("members").delete().eq("id", current.id);
+          if (updateError) return Response.json({ error: updateError.message }, { status: 500 });
           member = upd ?? existing;
         } else {
           // First link: claim this guest wallet with the LINE identity.
