@@ -85,6 +85,29 @@ type AddonOption = { id: string; name: string; price: number };
 type AddonGroup = { id: string; name: string; kitchen_name: string | null; max_select: number; addon_options: AddonOption[] };
 type SelectedAddon = { group_id: string; group_name: string; option_id: string; option_name: string; price: number };
 type Modifier = { option_id: string; group_name: string; option_name: string; price: number; qty: number };
+type RoundingMode = "none" | "nearest_whole" | "up_whole" | "down_whole";
+
+const roundMoney = (value: number) => Math.round(value * 100) / 100;
+function previewTotals(
+  afterDiscount: number,
+  vatEnabled: boolean,
+  vatMode: "inclusive" | "exclusive",
+  vatRatePercent: number,
+  serviceFeeRatePercent: number,
+  roundingMode: RoundingMode,
+) {
+  const serviceFeeAmount = roundMoney(afterDiscount * serviceFeeRatePercent / 100);
+  const taxable = afterDiscount + serviceFeeAmount;
+  const vatAmount = !vatEnabled ? 0 : vatMode === "exclusive"
+    ? roundMoney(taxable * vatRatePercent / 100)
+    : roundMoney(taxable - taxable / (1 + vatRatePercent / 100));
+  const beforeRounding = vatMode === "exclusive" ? taxable + vatAmount : taxable;
+  const rounded = roundingMode === "nearest_whole" ? Math.round(beforeRounding)
+    : roundingMode === "up_whole" ? Math.ceil(beforeRounding)
+    : roundingMode === "down_whole" ? Math.floor(beforeRounding)
+    : roundMoney(beforeRounding);
+  return { serviceFeeAmount, vatAmount, roundingAdjustment: roundMoney(rounded - beforeRounding), total: rounded };
+}
 
 function MenuCardImage({ src, alt }: { src: string | null; alt: string }) {
   const [failed, setFailed] = useState(false);
@@ -145,17 +168,23 @@ function OrderPage() {
   const [customerViewOpen, setCustomerViewOpen] = useState(false);
   const [settingsVatMode, setSettingsVatMode] = useState<"inclusive" | "exclusive">("inclusive");
   const [settingsVatRate, setSettingsVatRate] = useState(7);
+  const [settingsVatEnabled, setSettingsVatEnabled] = useState(true);
+  const [settingsServiceFeeRate, setSettingsServiceFeeRate] = useState(0);
+  const [settingsRoundingMode, setSettingsRoundingMode] = useState<RoundingMode>("none");
+  const [reservedPoints, setReservedPoints] = useState(0);
+  const [reservedPointsDiscount, setReservedPointsDiscount] = useState(0);
   const [restaurantName, setRestaurantName] = useState("");
   const [receiptLogoUrl, setReceiptLogoUrl] = useState<string | null>(null);
   const [reprintingRound, setReprintingRound] = useState<number | null>(null);
 
   const loadAll = async () => {
-    const [{ data: m }, { data: c }, { data: it }, { data: ord }, { data: s }] = await Promise.all([
+    const [{ data: m }, { data: c }, { data: it }, { data: ord }, { data: s }, { data: reservedBill }] = await Promise.all([
       supabase.from("menus").select("*").eq("available", true).order("sort"),
       supabase.from("categories").select("*").order("sort"),
       supabase.from("order_items").select("*").eq("order_id", orderId).order("sent_at", { ascending: true, nullsFirst: true }),
       supabase.from("orders").select("table_id,source,order_number").eq("id", orderId).single(),
-      supabase.from("settings").select("vat_mode,vat_rate,restaurant_name,receipt_logo_url").eq("id", 1).single(),
+      supabase.from("settings").select("vat_enabled,vat_mode,vat_rate,service_fee_rate,rounding_mode,restaurant_name,receipt_logo_url").eq("id", 1).single(),
+      (supabase as any).from("bills").select("points_redeemed,loyalty_discount_amount").eq("order_id", orderId).maybeSingle(),
     ]);
     if (m) setMenus(m as Menu[]);
     if (c) {
@@ -172,7 +201,17 @@ function OrderPage() {
       );
     }
     if (it) setItems(it as Item[]);
-    if (s) { setSettingsVatMode((s.vat_mode as "inclusive" | "exclusive") || "inclusive"); setSettingsVatRate(Number(s.vat_rate) || 7); setRestaurantName(s.restaurant_name); setReceiptLogoUrl((s as any).receipt_logo_url ?? null); }
+    if (s) {
+      setSettingsVatEnabled((s as any).vat_enabled ?? true);
+      setSettingsVatMode((s.vat_mode as "inclusive" | "exclusive") || "inclusive");
+      setSettingsVatRate(Number(s.vat_rate) || 7);
+      setSettingsServiceFeeRate(Number((s as any).service_fee_rate ?? 0));
+      setSettingsRoundingMode(((s as any).rounding_mode as RoundingMode) || "none");
+      setRestaurantName(s.restaurant_name);
+      setReceiptLogoUrl((s as any).receipt_logo_url ?? null);
+    }
+    setReservedPoints(Math.max(0, Math.floor(Number((reservedBill as any)?.points_redeemed ?? 0))));
+    setReservedPointsDiscount(Math.max(0, Number((reservedBill as any)?.loyalty_discount_amount ?? 0)));
     if (ord) {
       setOrderSource((ord as any).source ?? "pos");
       setOrderNumber((ord as any).order_number ?? null);
@@ -758,12 +797,14 @@ function OrderPage() {
     );
   };
 
-  // Bill preview totals (mirrors payment screen VAT logic)
-  const vatRate = settingsVatRate / 100;
-  const billVatAmount = settingsVatMode === "exclusive"
-    ? subtotal * vatRate
-    : subtotal - subtotal / (1 + vatRate);
-  const billTotal = settingsVatMode === "exclusive" ? subtotal + billVatAmount : subtotal;
+  // Bill preview must include a reward reserved from the customer QR before the
+  // cashier enters the payment screen. This mirrors payment-screen totals so
+  // the first paper bill brought to the table is already correct.
+  const billAfterDiscount = Math.max(0, subtotal - reservedPointsDiscount);
+  const { serviceFeeAmount: billServiceFeeAmount, vatAmount: billVatAmount, roundingAdjustment: billRoundingAdjustment, total: billTotal } = previewTotals(
+    billAfterDiscount, settingsVatEnabled, settingsVatMode, settingsVatRate,
+    settingsServiceFeeRate, settingsRoundingMode,
+  );
 
   const printBillPreview = async () => {
     if (liveItems.length === 0) { toast.error(t("empty_order")); return; }
@@ -771,7 +812,10 @@ function OrderPage() {
       kind: "receipt", table: tableCode, restaurant: restaurantName,
       logoUrl: receiptLogoUrl || undefined,
       items: liveItems, total: billTotal,
-      vatAmount: settingsVatMode === "exclusive" ? billVatAmount : 0,
+      pointsDiscountAmount: reservedPointsDiscount,
+      serviceFeeAmount: billServiceFeeAmount,
+      roundingAdjustment: billRoundingAdjustment,
+      vatAmount: settingsVatEnabled && settingsVatMode === "exclusive" ? billVatAmount : 0,
       vatRate: settingsVatRate,
       vat_mode: settingsVatMode, payments: [], language: lang,
     });
@@ -1287,7 +1331,17 @@ function OrderPage() {
             <div className="flex justify-between text-muted-foreground">
               <span>{t("subtotal")}</span><span className="tabular-nums">{thb(subtotal)}</span>
             </div>
-            {settingsVatMode === "exclusive" && billVatAmount > 0 && (
+            {reservedPointsDiscount > 0 && (
+              <div className="flex justify-between text-green-700 font-medium">
+                <span>{reservedPoints.toLocaleString()} points</span><span className="tabular-nums">−{thb(reservedPointsDiscount)}</span>
+              </div>
+            )}
+            {billServiceFeeAmount > 0 && (
+              <div className="flex justify-between text-muted-foreground">
+                <span>Service {settingsServiceFeeRate}%</span><span className="tabular-nums">{thb(billServiceFeeAmount)}</span>
+              </div>
+            )}
+            {settingsVatEnabled && settingsVatMode === "exclusive" && billVatAmount > 0 && (
               <div className="flex justify-between text-muted-foreground">
                 <span>VAT {settingsVatRate}%</span><span className="tabular-nums">{thb(billVatAmount)}</span>
               </div>
@@ -1325,7 +1379,10 @@ function OrderPage() {
               </div>
             ))}
           </div>
-          {settingsVatMode === "exclusive" && billVatAmount > 0 && (
+          {reservedPointsDiscount > 0 && (
+            <p className="text-green-700 text-lg mb-1">{reservedPoints.toLocaleString()} points: −{thb(reservedPointsDiscount)}</p>
+          )}
+          {settingsVatEnabled && settingsVatMode === "exclusive" && billVatAmount > 0 && (
             <p className="text-muted-foreground text-lg mb-1">VAT {settingsVatRate}%: {thb(billVatAmount)}</p>
           )}
           <div className="border-t w-full max-w-xs pt-6 text-center">
