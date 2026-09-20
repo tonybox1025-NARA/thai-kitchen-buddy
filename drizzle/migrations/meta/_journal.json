@@ -36,6 +36,13 @@
       "when": 1789922634409,
       "tag": "0004_finish_security_hardening",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1789929588666,
+      "tag": "0005_fix_customer_loyalty_member_id_ambiguity",
+      "breakpoints": true
     }
   ]
 }
