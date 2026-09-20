@@ -50,6 +50,7 @@ const STR = {
     history: "ประวัติแต้ม", noHistory: "ยังไม่มีประวัติแต้ม",
     lineTitle: "เชื่อมต่อ LINE", lineHint: "เก็บแต้มข้ามเครื่องและรับข่าวสารโปรโมชัน", lineBtn: "เชื่อมต่อ",
     lineConnected: "เชื่อมต่อ LINE แล้ว", lineConnecting: "กำลังเชื่อมต่อ…", lineFail: "เชื่อมต่อ LINE ไม่สำเร็จ",
+    existing: "มีสมาชิกอยู่แล้ว?", phone: "เบอร์โทรสมาชิก", linkPhone: "เชื่อมสมาชิก",
     home: "เพิ่มหน้านี้ไปที่หน้าจอหลักเพื่อเปิดบัตรสมาชิกได้ง่ายๆ", loading: "กำลังโหลด…", loadFail: "โหลดไม่สำเร็จ",
     locale: "th-TH",
   },
@@ -62,6 +63,7 @@ const STR = {
     history: "Point history", noHistory: "No point history yet",
     lineTitle: "Connect LINE", lineHint: "Keep your points across devices and get promo news", lineBtn: "Connect",
     lineConnected: "LINE connected", lineConnecting: "Connecting…", lineFail: "Couldn’t connect LINE",
+    existing: "Already a member?", phone: "Membership phone number", linkPhone: "Link membership",
     home: "Add this page to your home screen for quick access", loading: "Loading…", loadFail: "Couldn’t load",
     locale: "en-GB",
   },
@@ -111,6 +113,8 @@ function WalletPage() {
   const [birthday, setBirthday] = useState("");
   const [saving, setSaving] = useState(false);
   const [lineBusy, setLineBusy] = useState(false);
+  const [phone, setPhone] = useState("");
+  const [phoneBusy, setPhoneBusy] = useState(false);
 
   useEffect(() => {
     const saved = typeof window !== "undefined" ? (localStorage.getItem("lonmoh_wallet_lang") as Lang | null) : null;
@@ -209,6 +213,21 @@ function WalletPage() {
     if (birthday) profile.birthday = birthday;
     await load(profile);
     setSaving(false); setEditOpen(false); setName(""); setBirthday("");
+  };
+
+  const linkExistingMember = async () => {
+    if (!phone.trim()) return;
+    setPhoneBusy(true); setError(null);
+    try {
+      const res = await fetch("/api/public/wallet-phone", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ guest_token: walletToken(), phone }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? s.loadFail);
+      setMember(data.member as Member); setHistory((data.history ?? []) as LedgerRow[]); setPhone("");
+    } catch (e: any) { setError(e?.message ?? s.loadFail); }
+    finally { setPhoneBusy(false); }
   };
 
   const LangToggle = () => (
@@ -329,6 +348,18 @@ function WalletPage() {
               : <Button size="sm" onClick={connectLine} disabled={lineBusy}>{lineBusy ? s.lineConnecting : s.lineBtn}</Button>}
           </CardContent>
         </Card>
+
+        {member?.line_user_id && !member?.phone && (
+          <Card className="border-dashed">
+            <CardHeader className="pb-2"><CardTitle className="text-base">{s.existing}</CardTitle></CardHeader>
+            <CardContent className="flex gap-2">
+              <Input inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={s.phone} />
+              <Button onClick={linkExistingMember} disabled={phoneBusy || !phone.trim()}>
+                {phoneBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : s.linkPhone}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         <p className="flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground">
           <Home className="h-3.5 w-3.5" /> {s.home}

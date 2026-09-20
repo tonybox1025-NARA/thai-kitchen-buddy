@@ -35,6 +35,7 @@ import { Route as AppPaymentBillIdRouteImport } from './routes/_app/payment.$bil
 import { Route as ApiPublicQrOrderRouteImport } from './routes/api/public/qr-order'
 import { Route as ApiPublicWalletRouteImport } from './routes/api/public/wallet'
 import { Route as ApiPublicWalletLineRouteImport } from './routes/api/public/wallet-line'
+import { Route as ApiPublicWalletPhoneRouteImport } from './routes/api/public/wallet-phone'
 import { Route as LoyaltyClaimTokenRouteImport } from './routes/loyalty/claim.$token'
 import { Route as ApiPublicCheckoutTableCodeRouteImport } from './routes/api/public/checkout.$tableCode'
 import { Route as ApiPublicDailySummaryDateRouteImport } from './routes/api/public/daily-summary.$date'
@@ -171,6 +172,11 @@ const ApiPublicWalletLineRoute = ApiPublicWalletLineRouteImport.update({
   path: '/api/public/wallet-line',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicWalletPhoneRoute = ApiPublicWalletPhoneRouteImport.update({
+  id: '/api/public/wallet-phone',
+  path: '/api/public/wallet-phone',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoyaltyClaimTokenRoute = LoyaltyClaimTokenRouteImport.update({
   id: '/loyalty/claim/$token',
   path: '/loyalty/claim/$token',
@@ -232,6 +238,7 @@ export interface FileRoutesByFullPath {
   '/api/public/qr-order': typeof ApiPublicQrOrderRoute
   '/api/public/wallet': typeof ApiPublicWalletRoute
   '/api/public/wallet-line': typeof ApiPublicWalletLineRoute
+  '/api/public/wallet-phone': typeof ApiPublicWalletPhoneRoute
   '/loyalty/claim/$token': typeof LoyaltyClaimTokenRoute
   '/api/public/checkout/$tableCode': typeof ApiPublicCheckoutTableCodeRoute
   '/api/public/daily-summary/$date': typeof ApiPublicDailySummaryDateRoute
@@ -265,6 +272,7 @@ export interface FileRoutesByTo {
   '/api/public/qr-order': typeof ApiPublicQrOrderRoute
   '/api/public/wallet': typeof ApiPublicWalletRoute
   '/api/public/wallet-line': typeof ApiPublicWalletLineRoute
+  '/api/public/wallet-phone': typeof ApiPublicWalletPhoneRoute
   '/loyalty/claim/$token': typeof LoyaltyClaimTokenRoute
   '/api/public/checkout/$tableCode': typeof ApiPublicCheckoutTableCodeRoute
   '/api/public/daily-summary/$date': typeof ApiPublicDailySummaryDateRoute
@@ -300,6 +308,7 @@ export interface FileRoutesById {
   '/api/public/qr-order': typeof ApiPublicQrOrderRoute
   '/api/public/wallet': typeof ApiPublicWalletRoute
   '/api/public/wallet-line': typeof ApiPublicWalletLineRoute
+  '/api/public/wallet-phone': typeof ApiPublicWalletPhoneRoute
   '/loyalty/claim/$token': typeof LoyaltyClaimTokenRoute
   '/api/public/checkout/$tableCode': typeof ApiPublicCheckoutTableCodeRoute
   '/api/public/daily-summary/$date': typeof ApiPublicDailySummaryDateRoute
@@ -335,6 +344,7 @@ export interface FileRouteTypes {
     | '/api/public/qr-order'
     | '/api/public/wallet'
     | '/api/public/wallet-line'
+    | '/api/public/wallet-phone'
     | '/loyalty/claim/$token'
     | '/api/public/checkout/$tableCode'
     | '/api/public/daily-summary/$date'
@@ -368,6 +378,7 @@ export interface FileRouteTypes {
     | '/api/public/qr-order'
     | '/api/public/wallet'
     | '/api/public/wallet-line'
+    | '/api/public/wallet-phone'
     | '/loyalty/claim/$token'
     | '/api/public/checkout/$tableCode'
     | '/api/public/daily-summary/$date'
@@ -402,6 +413,7 @@ export interface FileRouteTypes {
     | '/api/public/qr-order'
     | '/api/public/wallet'
     | '/api/public/wallet-line'
+    | '/api/public/wallet-phone'
     | '/loyalty/claim/$token'
     | '/api/public/checkout/$tableCode'
     | '/api/public/daily-summary/$date'
@@ -420,6 +432,7 @@ export interface RootRouteChildren {
   ApiPublicQrOrderRoute: typeof ApiPublicQrOrderRoute
   ApiPublicWalletRoute: typeof ApiPublicWalletRoute
   ApiPublicWalletLineRoute: typeof ApiPublicWalletLineRoute
+  ApiPublicWalletPhoneRoute: typeof ApiPublicWalletPhoneRoute
   LoyaltyClaimTokenRoute: typeof LoyaltyClaimTokenRoute
   ApiPublicCheckoutTableCodeRoute: typeof ApiPublicCheckoutTableCodeRoute
   ApiPublicDailySummaryDateRoute: typeof ApiPublicDailySummaryDateRoute
@@ -612,6 +625,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicWalletLineRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/wallet-phone': {
+      id: '/api/public/wallet-phone'
+      path: '/api/public/wallet-phone'
+      fullPath: '/api/public/wallet-phone'
+      preLoaderRoute: typeof ApiPublicWalletPhoneRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/loyalty/claim/$token': {
       id: '/loyalty/claim/$token'
       path: '/loyalty/claim/$token'
@@ -709,6 +729,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicQrOrderRoute: ApiPublicQrOrderRoute,
   ApiPublicWalletRoute: ApiPublicWalletRoute,
   ApiPublicWalletLineRoute: ApiPublicWalletLineRoute,
+  ApiPublicWalletPhoneRoute: ApiPublicWalletPhoneRoute,
   LoyaltyClaimTokenRoute: LoyaltyClaimTokenRoute,
   ApiPublicCheckoutTableCodeRoute: ApiPublicCheckoutTableCodeRoute,
   ApiPublicDailySummaryDateRoute: ApiPublicDailySummaryDateRoute,
