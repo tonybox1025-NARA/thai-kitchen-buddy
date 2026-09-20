@@ -145,6 +145,9 @@ export type Database = {
           discount_note: string | null
           id: string
           is_test: boolean
+          loyalty_discount_amount: number
+          loyalty_reservation_source: string | null
+          loyalty_reserved_at: string | null
           member_discount_amount: number
           member_id: string | null
           order_id: string
@@ -169,6 +172,9 @@ export type Database = {
           discount_note?: string | null
           id?: string
           is_test?: boolean
+          loyalty_discount_amount?: number
+          loyalty_reservation_source?: string | null
+          loyalty_reserved_at?: string | null
           member_discount_amount?: number
           member_id?: string | null
           order_id: string
@@ -193,6 +199,9 @@ export type Database = {
           discount_note?: string | null
           id?: string
           is_test?: boolean
+          loyalty_discount_amount?: number
+          loyalty_reservation_source?: string | null
+          loyalty_reserved_at?: string | null
           member_discount_amount?: number
           member_id?: string | null
           order_id?: string
@@ -1042,6 +1051,7 @@ export type Database = {
       orders: {
         Row: {
           cancel_reason: string | null
+          checkout_requested_at: string | null
           closed_at: string | null
           closed_by: string | null
           guests: number
@@ -1058,6 +1068,7 @@ export type Database = {
         }
         Insert: {
           cancel_reason?: string | null
+          checkout_requested_at?: string | null
           closed_at?: string | null
           closed_by?: string | null
           guests?: number
@@ -1074,6 +1085,7 @@ export type Database = {
         }
         Update: {
           cancel_reason?: string | null
+          checkout_requested_at?: string | null
           closed_at?: string | null
           closed_by?: string | null
           guests?: number
@@ -1703,6 +1715,21 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      reserve_customer_bill_loyalty: {
+        Args: {
+          p_bill_id: string
+          p_guest_token: string
+          p_redeem_points: number
+        }
+        Returns: {
+          available_points: number
+          current_points: number
+          discount_amount: number
+          member_id: string
+          member_name: string
+          reserved_points: number
+        }[]
       }
       set_staff_pin: {
         Args: { _admin_pin?: string; _pin: string; _staff_id: string }
