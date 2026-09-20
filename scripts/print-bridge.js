@@ -160,11 +160,20 @@ function buildReceipt(p) {
   if (p.memberDiscountAmount > 0) {
     parts.push(twoCol("Member discount", "-" + thb(p.memberDiscountAmount)), lf());
   }
+  if (p.pointsDiscountAmount > 0) {
+    parts.push(twoCol("Points reward", "-" + thb(p.pointsDiscountAmount)), lf());
+  }
+  if (p.serviceFeeAmount > 0) {
+    parts.push(twoCol("Service fee", thb(p.serviceFeeAmount)), lf());
+  }
   if (p.vatAmount > 0) {
     const vatLabel = p.vat_mode === "exclusive"
       ? `VAT ${p.vatRate ?? 7}%`
       : `VAT incl. ${p.vatRate ?? 7}%`;
     parts.push(twoCol(vatLabel, thb(p.vatAmount)), lf());
+  }
+  if (p.roundingAdjustment) {
+    parts.push(twoCol("Rounding", thb(p.roundingAdjustment)), lf());
   }
 
   parts.push(
