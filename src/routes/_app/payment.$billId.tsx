@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n, pickName } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth";
@@ -128,6 +128,8 @@ function PaymentPage() {
   const nav = useNavigate();
 
   const [bill, setBill] = useState<Bill | null>(null);
+  const [billHydrated, setBillHydrated] = useState(false);
+  const skipNextBillPersist = useRef(true);
   const [items, setItems] = useState<Item[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [appliedDiscount, setAppliedDiscount] = useState<BillDiscount | null>(null);
@@ -198,6 +200,10 @@ function PaymentPage() {
   const [discFreeItemId, setDiscFreeItemId] = useState<string>("");
 
   const load = async () => {
+    // Do not let the persistence effect write its initial zero-value state over
+    // a customer QR loyalty reservation while this bill is being hydrated.
+    skipNextBillPersist.current = true;
+    setBillHydrated(false);
     const [{ data: b }, { data: ps }, { data: s }] = await Promise.all([
       supabase.from("bills").select("*").eq("id", billId).single(),
       supabase.from("payments").select("*").eq("bill_id", billId),
@@ -265,6 +271,7 @@ function PaymentPage() {
       setGovQrEnabled(row.gov_qr_enabled ?? false);
       setGovQrLabel(row.gov_qr_label ?? "60/40");
     }
+    setBillHydrated(true);
   };
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [billId]);
@@ -314,7 +321,7 @@ function PaymentPage() {
 
   // Persist member discount + VAT + total to bill (discount_amount owned by applyDiscount/removeDiscount)
   const persistBill = async () => {
-    if (!bill) return null;
+    if (!bill || !billHydrated) return null;
     return (supabase as any).from("bills").update({
       subtotal,
       member_discount_amount: memberDisc,
@@ -328,7 +335,15 @@ function PaymentPage() {
     }).eq("id", bill.id);
   };
 
-  useEffect(() => { persistBill(); /* eslint-disable-next-line */ }, [memberDisc, pointsRedeemed, bill?.id, subtotal, settingsVatEnabled, settingsVatMode, settingsServiceFeeRate, settingsRoundingMode]);
+  useEffect(() => {
+    if (!billHydrated) return;
+    if (skipNextBillPersist.current) {
+      skipNextBillPersist.current = false;
+      return;
+    }
+    void persistBill();
+    /* eslint-disable-next-line */
+  }, [billHydrated, memberDisc, pointsRedeemed, bill?.id, subtotal, settingsVatEnabled, settingsVatMode, settingsServiceFeeRate, settingsRoundingMode]);
 
   // Sync QR field with remaining balance
   useEffect(() => { setQrAmt(remaining); }, [remaining]);
