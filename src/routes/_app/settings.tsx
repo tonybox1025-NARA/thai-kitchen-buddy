@@ -907,11 +907,28 @@ function GeneralTab() {
 function PrintersTab() {
   const { t } = useI18n();
   const [s, setS] = useState<Settings | null>(null);
-  const [recentJob, setRecentJob] = useState<{
+  const [recentJobs, setRecentJobs] = useState<Array<{
+    id: string;
+    printer: string;
     status: string;
     printed_at: string | null;
     created_at: string;
-  } | null>(null);
+    error: string | null;
+    payload: unknown;
+  }>>([]);
+
+  const loadRecentJobs = async () => {
+    const { data, error } = await supabase
+      .from("print_jobs")
+      .select("id,printer,status,printed_at,created_at,error,payload")
+      .order("created_at", { ascending: false })
+      .limit(10);
+    if (error) {
+      toast.error(`Print queue read failed: ${error.message}`);
+      return;
+    }
+    setRecentJobs((data ?? []) as typeof recentJobs);
+  };
 
   useEffect(() => {
     supabase
@@ -920,13 +937,7 @@ function PrintersTab() {
       .eq("id", 1)
       .single()
       .then(({ data }) => setS(data as unknown as Settings));
-    supabase
-      .from("print_jobs")
-      .select("status,printed_at,created_at")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle()
-      .then(({ data }) => setRecentJob(data as typeof recentJob));
+    void loadRecentJobs();
   }, []);
 
   if (!s) return null;
@@ -962,8 +973,8 @@ function PrintersTab() {
     toast.success(t("set_test_queued"));
   };
 
-  const bridgeAlive =
-    recentJob && new Date(recentJob.printed_at ?? 0).getTime() > Date.now() - 60_000;
+  const recentJob = recentJobs[0] ?? null;
+  const bridgeAlive = recentJob && new Date(recentJob.printed_at ?? 0).getTime() > Date.now() - 60_000;
 
   return (
     <div className="space-y-4 mt-4">
@@ -1018,6 +1029,36 @@ function PrintersTab() {
             <Button variant="outline" onClick={sendTestPrint}>
               <Printer className="h-4 w-4 mr-2" /> Test print
             </Button>
+          </div>
+
+          <div className="rounded-lg border p-3 text-sm space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-semibold">Recent print jobs</span>
+              <Button variant="ghost" size="sm" onClick={() => void loadRecentJobs()}>
+                Refresh
+              </Button>
+            </div>
+            {recentJobs.length === 0 ? (
+              <p className="text-muted-foreground">No visible print jobs</p>
+            ) : (
+              recentJobs.map((job) => {
+                const payload = job.payload && typeof job.payload === "object"
+                  ? (job.payload as Record<string, unknown>)
+                  : {};
+                return (
+                  <div key={job.id} className="rounded border bg-muted/20 p-2">
+                    <div className="flex justify-between gap-2 font-medium">
+                      <span>{job.printer} · {String(payload.kind ?? "unknown")}</span>
+                      <span>{job.status}</span>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {new Date(job.created_at).toLocaleTimeString()} · {String(payload.table ?? "—")}
+                    </div>
+                    {job.error && <div className="mt-1 text-xs text-destructive break-words">{job.error}</div>}
+                  </div>
+                );
+              })
+            )}
           </div>
         </CardContent>
       </Card>
