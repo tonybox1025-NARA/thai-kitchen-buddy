@@ -81,6 +81,7 @@ export type ReceiptPayload = {
     change_due?: number;
   }[];
   loyaltyClaimUrl?: string;
+  loyaltyEarnPoints?: number;
 };
 
 export type KitchenLine = {
@@ -497,7 +498,14 @@ export async function buildReceipt(p: ReceiptPayload): Promise<Uint8Array> {
 
   const out: number[] = [...INIT, ...d.toRaster()];
   if (p.loyaltyClaimUrl) {
-    out.push(0x0a, ...ALIGN_CENTER, ...qrBytes(p.loyaltyClaimUrl), 0x0a);
+    const loyalty = new Doc(40);
+    loyalty.text("สแกน QR เพื่อรับคะแนน", S.bold, "center");
+    loyalty.text("Scan to collect points", S.norm, "center");
+    if ((p.loyaltyEarnPoints ?? 0) > 0) {
+      loyalty.text(`+${Math.floor(p.loyaltyEarnPoints!)} points`, S.bold, "center");
+    }
+    loyalty.text("ใช้ได้ภายใน 30 วัน · Valid for 30 days", S.small, "center");
+    out.push(0x0a, ...loyalty.toRaster(), ...ALIGN_CENTER, ...qrBytes(p.loyaltyClaimUrl), 0x0a);
   }
   out.push(...CUT);
   return Uint8Array.from(out);
