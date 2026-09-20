@@ -308,10 +308,13 @@ function PaymentPage() {
 
   const paid = payments.reduce((s, p) => s + Number(p.amount), 0);
   const remaining = Math.max(0, total - paid);
-  // Earn on the amount actually paid (net total, after any points redemption).
-  // Redemption tiers cost far more points than the discount is worth, so points
-  // still deplete meaningfully even with normal earning.
-  const earnPoints = loyaltyEnabled && selectedMember ? Math.max(0, Math.floor(total * loyaltyPointsPerBaht)) : 0;
+  // Earn only on discounted merchandise before VAT, service fee, rounding and
+  // tips. Taxes and fees collected on the restaurant's behalf are not loyalty
+  // eligible. `afterDisc` already includes every merchandise/member/points
+  // discount and is the exact base immediately before those additions.
+  const earnPoints = loyaltyEnabled && selectedMember
+    ? Math.max(0, Math.floor(afterDisc * loyaltyPointsPerBaht))
+    : 0;
   const paymentMethodLabel = (method: PaymentMethod) => (
     method === "cash" ? t("cash")
     : method === "qr" ? t("qr_transfer")
