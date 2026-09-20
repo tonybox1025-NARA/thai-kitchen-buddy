@@ -13,6 +13,7 @@ import { ManagerPinDialog } from "@/components/ManagerPinDialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -530,7 +531,6 @@ function Reports() {
             </TabsContent>
           </>
         )}
-        <Row label="Coupon" value={`- ${thb(r.coupon)}`} />
       </Tabs>
 
       {/* Open register dialog — count starting cash */}

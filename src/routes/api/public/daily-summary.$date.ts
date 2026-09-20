@@ -25,9 +25,13 @@ function createPublicServerClient() {
   });
 }
 
-const sum = (rows: any[], f: (r: any) => number) => rows.reduce((s, r) => s + (Number(f(r)) || 0), 0);
+const sum = (rows: any[], f: (r: any) => number) =>
+  rows.reduce((s, r) => s + (Number(f(r)) || 0), 0);
 const json = (obj: unknown, status = 200) =>
-  new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json", ...CORS } });
+  new Response(JSON.stringify(obj), {
+    status,
+    headers: { "Content-Type": "application/json", ...CORS },
+  });
 
 export const Route = createFileRoute("/api/public/daily-summary/$date")({
   server: {
@@ -48,9 +52,14 @@ export const Route = createFileRoute("/api/public/daily-summary/$date")({
         const shiftIds = (shifts ?? []).map((s: any) => s.id);
         if (shiftIds.length === 0) return json({ date, bill_count: 0, has_data: false });
 
-        const { data: bills } = await sb.from("bills")
-          .select("id,subtotal,total,member_discount_amount,points_redeemed,discount_amount,vat_amount")
-          .in("shift_id", shiftIds).eq("status", "paid").not("is_test", "is", true);
+        const { data: bills } = await sb
+          .from("bills")
+          .select(
+            "id,subtotal,total,member_discount_amount,loyalty_discount_amount,discount_amount,vat_amount",
+          )
+          .in("shift_id", shiftIds)
+          .eq("status", "paid")
+          .not("is_test", "is", true);
         const billRows = bills ?? [];
         const billIds = billRows.map((b: any) => b.id);
 
@@ -61,7 +70,11 @@ export const Route = createFileRoute("/api/public/daily-summary/$date")({
           sb.from("refunds").select("amount").in("shift_id", shiftIds),
         ]);
         const payRows = pays ?? [];
-        const byMethod = (m: string) => sum(payRows.filter((p: any) => p.method === m), (p: any) => p.amount);
+        const byMethod = (m: string) =>
+          sum(
+            payRows.filter((p: any) => p.method === m),
+            (p: any) => p.amount,
+          );
 
         return json({
           date,
@@ -69,9 +82,10 @@ export const Route = createFileRoute("/api/public/daily-summary/$date")({
           bill_count: billRows.length,
           total_product_sales: sum(billRows, (b) => b.subtotal),
           refund: sum(refunds ?? [], (r) => r.amount),
-          // MB Discount = all member-related reductions: member discount + points used
-          // (1 point = 1 THB), matching the owner's "everything member goes here" habit.
-          mb_discount: sum(billRows, (b) => b.member_discount_amount) + sum(billRows, (b) => b.points_redeemed),
+          // MB Discount = actual baht reductions, not the number of points spent.
+          mb_discount:
+            sum(billRows, (b) => b.member_discount_amount) +
+            sum(billRows, (b) => b.loyalty_discount_amount),
           discount: sum(billRows, (b) => b.discount_amount),
           vat: sum(billRows, (b) => b.vat_amount),
           net_sales: sum(billRows, (b) => b.total),

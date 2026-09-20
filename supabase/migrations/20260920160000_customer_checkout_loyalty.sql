@@ -117,4 +117,3 @@ REVOKE ALL ON FUNCTION public.reserve_customer_bill_loyalty(uuid, text, integer)
   FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.reserve_customer_bill_loyalty(uuid, text, integer)
   TO authenticated, service_role;
-

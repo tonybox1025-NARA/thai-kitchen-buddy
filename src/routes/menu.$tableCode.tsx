@@ -11,9 +11,21 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { ShoppingCart, Plus, Minus, Check, Languages, Layers, ReceiptText, RefreshCw } from "lucide-react";
+import {
+  ShoppingCart,
+  Plus,
+  Minus,
+  Check,
+  Languages,
+  Layers,
+  ReceiptText,
+  RefreshCw,
+  Gift,
+  ArrowLeft,
+} from "lucide-react";
 import { toast } from "sonner";
 import { SETS, SET_C_DRINKS, type SetDef, type SetConfig, type SetItem } from "@/lib/set-menu";
+import { walletToken } from "@/lib/wallet";
 
 export const Route = createFileRoute("/menu/$tableCode")({
   component: CustomerMenu,
@@ -85,6 +97,24 @@ type CurrentOrder = {
   count: number;
 };
 type Lang = "th" | "en";
+type CheckoutState = {
+  order: { id: string; checkout_requested_at: string | null } | null;
+  bill?: {
+    id: string;
+    subtotal: number;
+    points: number;
+    discount: number;
+    total: number;
+    member_id: string | null;
+  };
+  member?: {
+    id: string;
+    full_name: string;
+    nickname: string | null;
+    current_points: number;
+  } | null;
+  rewards: { points: number; baht: number }[];
+};
 
 function categoryLabel(category: Category, lang: Lang) {
   return lang === "th"
@@ -125,6 +155,13 @@ const T = {
     required: "จำเป็น",
     required_missing: "กรุณาเลือกตัวเลือกที่จำเป็นก่อนเพิ่มรายการ",
     submit_slow: "การเชื่อมต่อช้า ยังไม่ได้ส่งออเดอร์ ลองอีกครั้งหรือแจ้งพนักงานค่ะ",
+    request_bill: "เรียกเก็บเงิน",
+    checkout: "ชำระเงิน / ใช้แต้ม",
+    member_points: "แต้มสมาชิก",
+    no_wallet: "เปิดกระเป๋าสมาชิกก่อนเพื่อใช้แต้ม",
+    bill_requested: "แจ้งพนักงานแล้ว กำลังนำบิลมาให้ค่ะ",
+    use_reward: "เลือกคูปองส่วนลด",
+    no_reward: "ไม่ใช้แต้ม",
     my_orders: "รายการที่สั่ง",
     current_order: "รายการสั่งของโต๊ะนี้",
     ordered_total: "ยอดสั่งรวม",
@@ -163,6 +200,13 @@ const T = {
     required: "Required",
     required_missing: "Please choose all required options before adding this item.",
     submit_slow: "Connection is slow — your order was not sent. Please try again or tell staff.",
+    request_bill: "Request bill",
+    checkout: "Pay / use points",
+    member_points: "Member points",
+    no_wallet: "Open your member wallet before using points.",
+    bill_requested: "Staff notified. Your bill is on the way.",
+    use_reward: "Choose a reward",
+    no_reward: "Do not use points",
     my_orders: "My orders",
     current_order: "Current table order",
     ordered_total: "Order total",
@@ -498,6 +542,9 @@ function PopupHeroImage({ src }: { src: string }) {
 // ── Main component ────────────────────────────────────────────────────────────
 function CustomerMenu() {
   const { tableCode } = Route.useParams();
+  const crewMode =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("crew") === "1";
   const [lang, setLang] = useState<Lang>("th");
   const [data, setData] = useState<{
     table: { id: string; code: string };
@@ -526,6 +573,9 @@ function CustomerMenu() {
     count: 0,
   });
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [checkout, setCheckout] = useState<CheckoutState | null>(null);
+  const [checkoutBusy, setCheckoutBusy] = useState(false);
   // Set menu state
   const [selectedSetDef, setSelectedSetDef] = useState<SetDef | null>(null);
   const [setMenuOrigin, setSetMenuOrigin] = useState<Menu | null>(null);
@@ -544,6 +594,64 @@ function CustomerMenu() {
       console.error("Unable to load current QR order", historyError);
     } finally {
       setHistoryLoading(false);
+    }
+  };
+
+  const loadCheckout = async () => {
+    const token = walletToken();
+    // Ensure this device has a wallet. Existing LINE-linked wallets keep their
+    // member identity; first-time guests receive an empty wallet they can claim.
+    await fetch("/api/public/wallet", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ guest_token: token }),
+    });
+    const response = await fetch(
+      `/api/public/checkout/${encodeURIComponent(tableCode)}?guest_token=${encodeURIComponent(token)}`,
+    );
+    if (!response.ok) throw new Error(await response.text());
+    const next = (await response.json()) as CheckoutState;
+    setCheckout(next);
+    return next;
+  };
+
+  const requestBill = async () => {
+    if (!orderHistory.order_id) return;
+    setCheckoutBusy(true);
+    try {
+      const response = await fetch(`/api/public/checkout/${encodeURIComponent(tableCode)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "request_bill" }),
+      });
+      if (!response.ok) throw new Error(await response.text());
+      await loadCheckout();
+      toast.success(tr.bill_requested);
+    } catch (requestError) {
+      toast.error(requestError instanceof Error ? requestError.message : "Unable to request bill");
+    } finally {
+      setCheckoutBusy(false);
+    }
+  };
+
+  const reserveReward = async (points: number) => {
+    setCheckoutBusy(true);
+    try {
+      const response = await fetch(`/api/public/checkout/${encodeURIComponent(tableCode)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reserve_reward", guest_token: walletToken(), points }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Unable to select reward");
+      await loadCheckout();
+      toast.success(
+        points > 0 ? `−฿${Number(result.reservation.discount_amount).toFixed(0)}` : tr.no_reward,
+      );
+    } catch (rewardError) {
+      toast.error(rewardError instanceof Error ? rewardError.message : "Unable to select reward");
+    } finally {
+      setCheckoutBusy(false);
     }
   };
 
@@ -764,6 +872,7 @@ function CustomerMenu() {
         signal: ac.signal,
         body: JSON.stringify({
           table_code: tableCode,
+          assisted_by_staff: crewMode,
           items: cart.map((c) => ({
             menu_id: c.menu_id,
             qty: c.qty,
@@ -842,6 +951,17 @@ function CustomerMenu() {
       {/* ── Header ── */}
       <header className="sticky top-0 z-20 bg-card/95 backdrop-blur border-b">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
+          {crewMode && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => {
+                window.location.href = "/crew";
+              }}
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+          )}
           <div className="flex-1 min-w-0">
             <div className="text-xs text-muted-foreground">{data.restaurant_name}</div>
             <div className="font-semibold truncate">
@@ -1075,12 +1195,17 @@ function CustomerMenu() {
                   <div className="min-w-0 flex-1">
                     <div className="font-medium">{name(item)}</div>
                     {item.modifiers?.map((modifier, index) => (
-                      <div key={`${item.id}-modifier-${index}`} className="mt-1 text-xs text-muted-foreground">
+                      <div
+                        key={`${item.id}-modifier-${index}`}
+                        className="mt-1 text-xs text-muted-foreground"
+                      >
                         + {modifier.option_name || modifier.group_name}
                         {Number(modifier.qty ?? 1) > 1 ? ` ×${modifier.qty}` : ""}
                       </div>
                     ))}
-                    {item.notes && <div className="mt-1 text-xs text-muted-foreground">{item.notes}</div>}
+                    {item.notes && (
+                      <div className="mt-1 text-xs text-muted-foreground">{item.notes}</div>
+                    )}
                     {item.round_number ? (
                       <div className="mt-1 text-[11px] text-muted-foreground">
                         {lang === "th" ? `รอบ ${item.round_number}` : `Round ${item.round_number}`}
@@ -1092,12 +1217,136 @@ function CustomerMenu() {
               </div>
             ))}
           </div>
-          <div className="sticky bottom-0 mt-4 flex items-center justify-between border-t bg-background py-4 text-lg font-bold">
-            <span>{tr.ordered_total}</span>
-            <span>฿{Number(orderHistory.total).toFixed(0)}</span>
+          <div className="sticky bottom-0 mt-4 space-y-3 border-t bg-background py-4">
+            <div className="flex items-center justify-between text-lg font-bold">
+              <span>{tr.ordered_total}</span>
+              <span>฿{Number(orderHistory.total).toFixed(0)}</span>
+            </div>
+            {orderHistory.items.length > 0 && (
+              <Button
+                className="w-full h-12 gap-2"
+                onClick={async () => {
+                  try {
+                    await loadCheckout();
+                    setHistoryOpen(false);
+                    setCheckoutOpen(true);
+                  } catch (checkoutError) {
+                    toast.error(
+                      checkoutError instanceof Error
+                        ? checkoutError.message
+                        : "Unable to open checkout",
+                    );
+                  }
+                }}
+              >
+                <ReceiptText className="h-5 w-5" />
+                {tr.checkout}
+              </Button>
+            )}
           </div>
         </SheetContent>
       </Sheet>
+
+      <Dialog open={checkoutOpen} onOpenChange={setCheckoutOpen}>
+        <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Gift className="h-5 w-5" />
+              {tr.checkout}
+            </DialogTitle>
+          </DialogHeader>
+          {!checkout?.order ? (
+            <p className="py-8 text-center text-muted-foreground">{tr.no_orders}</p>
+          ) : (
+            <div className="space-y-4">
+              <div className="rounded-xl border bg-muted/30 p-4 space-y-2">
+                <div className="flex justify-between">
+                  <span>{tr.ordered_total}</span>
+                  <span>฿{Number(checkout.bill?.subtotal ?? 0).toFixed(0)}</span>
+                </div>
+                {Number(checkout.bill?.discount ?? 0) > 0 && (
+                  <div className="flex justify-between text-green-700">
+                    <span>{checkout.bill?.points.toLocaleString()} points</span>
+                    <span>−฿{Number(checkout.bill?.discount).toFixed(0)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between border-t pt-2 text-xl font-bold">
+                  <span>Total</span>
+                  <span>฿{Number(checkout.bill?.total ?? 0).toFixed(0)}</span>
+                </div>
+              </div>
+
+              {checkout.member ? (
+                <div className="rounded-xl border p-4">
+                  <div className="text-sm text-muted-foreground">{tr.member_points}</div>
+                  <div className="flex items-end justify-between gap-4">
+                    <span className="font-semibold truncate">
+                      {checkout.member.nickname || checkout.member.full_name}
+                    </span>
+                    <span className="text-2xl font-black text-amber-600">
+                      {Number(checkout.member.current_points).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
+                  {tr.no_wallet}{" "}
+                  <a className="font-semibold text-primary underline" href="/wallet">
+                    Member Wallet
+                  </a>
+                </div>
+              )}
+
+              {checkout.member && (
+                <div className="space-y-2">
+                  <div className="font-semibold">{tr.use_reward}</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {checkout.rewards.map((reward) => {
+                      const disabled =
+                        checkoutBusy ||
+                        Number(checkout.member?.current_points ?? 0) < reward.points ||
+                        reward.baht > Number(checkout.bill?.subtotal ?? 0);
+                      const selected = checkout.bill?.points === reward.points;
+                      return (
+                        <Button
+                          key={reward.points}
+                          variant={selected ? "default" : "outline"}
+                          disabled={disabled}
+                          className="h-auto py-3 flex-col"
+                          onClick={() => void reserveReward(reward.points)}
+                        >
+                          <span className="font-bold">฿{reward.baht}</span>
+                          <span className="text-xs opacity-75">
+                            {reward.points.toLocaleString()} points
+                          </span>
+                        </Button>
+                      );
+                    })}
+                  </div>
+                  {Number(checkout.bill?.points ?? 0) > 0 && (
+                    <Button
+                      variant="ghost"
+                      className="w-full"
+                      disabled={checkoutBusy}
+                      onClick={() => void reserveReward(0)}
+                    >
+                      {tr.no_reward}
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              <Button
+                className="w-full h-12"
+                disabled={checkoutBusy || !!checkout.order.checkout_requested_at}
+                onClick={() => void requestBill()}
+              >
+                {checkout.order.checkout_requested_at ? tr.bill_requested : tr.request_bill}
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* ── Add item dialog (regular items only) ── */}
       <Dialog open={!!adding} onOpenChange={(o) => !o && setAdding(null)}>
@@ -1277,8 +1526,15 @@ function CustomerMenu() {
           </DialogHeader>
           <p className="text-sm text-muted-foreground">{tr.thanks}</p>
           <div className="mt-2 grid grid-cols-2 gap-2">
-            <Button variant="outline" onClick={() => { setSubmitted(false); setHistoryOpen(true); }}>
-              <ReceiptText className="mr-2 h-4 w-4" />{tr.my_orders}
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSubmitted(false);
+                setHistoryOpen(true);
+              }}
+            >
+              <ReceiptText className="mr-2 h-4 w-4" />
+              {tr.my_orders}
             </Button>
             <Button onClick={() => setSubmitted(false)}>{tr.order_more}</Button>
           </div>

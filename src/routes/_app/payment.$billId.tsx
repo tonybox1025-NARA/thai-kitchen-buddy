@@ -269,6 +269,17 @@ function PaymentPage() {
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [billId]);
 
+  // Customer QR reward selection is written to this bill. Keep the Sunmi
+  // payment screen in sync so the cashier never closes on a stale total.
+  useEffect(() => {
+    const channel = supabase
+      .channel(`payment-bill-${billId}`)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "bills", filter: `id=eq.${billId}` }, () => void load())
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [billId]);
+
   // ── Derived totals ──────────────────────────────────────────────────────────
   const subtotal = items.reduce((s, i) => s + i.qty * Number(i.unit_price), 0);
   const totalDisc = appliedDiscount?.amount ?? 0;

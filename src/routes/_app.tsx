@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { LayoutGrid, BarChart3, FileText, Settings, LogOut, UserCircle2, Heart, UtensilsCrossed, BadgePercent, Activity, Wallet } from "lucide-react";
+import { LayoutGrid, BarChart3, FileText, Settings, LogOut, UserCircle2, Heart, UtensilsCrossed, BadgePercent, Activity, Wallet, Smartphone } from "lucide-react";
 import { installAudioUnlockListeners, unlockAudio } from "@/lib/audio-alert";
 import { useQrAlertCount } from "@/lib/qr-alert-count";
 import { OfflineBanner } from "@/components/OfflineBanner";
@@ -72,6 +72,7 @@ function AppLayout() {
   }
 
   const navItems = [
+    { to: "/crew", label: "Crew", icon: Smartphone },
     { to: "/live", label: t("nav_live"), icon: Activity },
     { to: "/dashboard", label: t("nav_dashboard"), icon: BarChart3 },
     { to: "/pos", label: t("nav_pos"), icon: LayoutGrid },
@@ -84,9 +85,9 @@ function AppLayout() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background" lang={lang}>
-      <header className="h-14 border-b bg-card flex items-center px-4 gap-4 sticky top-0 z-30">
+      <header className="min-h-14 border-b bg-card flex items-center px-3 sm:px-4 gap-2 sm:gap-4 sticky top-0 z-30">
         <div className="font-semibold text-primary">🍽️ {t("app_name")}</div>
-        <nav className="flex items-center gap-1 ml-4">
+        <nav className={`${path.startsWith("/crew") ? "hidden" : "hidden lg:flex"} items-center gap-1 ml-4`}>
           {navItems.map((it) => {
             const active = path.startsWith(it.to);
             const showBadge = it.to === "/pos" && qrAlertCount > 0;
@@ -105,11 +106,11 @@ function AppLayout() {
         </nav>
         <div className="ml-auto flex items-center gap-2">
           <ConnectionStatus />
-          <LanguageToggle />
+          {!path.startsWith("/crew") && <LanguageToggle />}
           <Button variant="outline" size="sm" onClick={() => setStaff(null)} className="gap-2">
             <UserCircle2 className="h-4 w-4" />
-            <span className="font-medium">{staff.name}</span>
-            <span className="text-xs text-muted-foreground">({staff.role})</span>
+            <span className="hidden sm:inline font-medium">{staff.name}</span>
+            <span className="hidden sm:inline text-xs text-muted-foreground">({staff.role})</span>
           </Button>
           <Button variant="ghost" size="sm" onClick={() => signOut()} title={t("logout")}>
             <LogOut className="h-4 w-4" />
