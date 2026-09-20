@@ -28,6 +28,7 @@ function createPublicServerClient() {
 const Schema = z.object({
   table_code: z.string().min(1).max(20),
   guests: z.number().int().min(1).max(30).optional(),
+  assisted_by_staff: z.boolean().optional().default(false),
   items: z
     .array(
       z.object({
@@ -124,7 +125,7 @@ export const Route = createFileRoute("/api/public/qr-order")({
         const parsed = Schema.safeParse(body);
         if (!parsed.success)
           return Response.json({ error: parsed.error.flatten() }, { status: 400 });
-        const { table_code, guests, items } = parsed.data;
+        const { table_code, guests, items, assisted_by_staff } = parsed.data;
 
         const { data: table, error: tableErr } = await supabase
           .from("restaurant_tables")
@@ -356,7 +357,7 @@ export const Route = createFileRoute("/api/public/qr-order")({
               status: "sent" as const,
               sent_at: sentAt,
               round_number: roundNumber,
-              round_source: "qr",
+              round_source: assisted_by_staff ? "pos" : "qr",
               set_config: it.set_config ?? null,
             },
           };
@@ -387,7 +388,7 @@ export const Route = createFileRoute("/api/public/qr-order")({
         const ticketPayload = {
           kind: "order_ticket",
           table: table_code,
-          source: "qr",
+          source: assisted_by_staff ? "pos" : "qr",
           order_type: orderType,
           sent_at: sentAt,
           round_number: roundNumber,
@@ -482,13 +483,13 @@ export const Route = createFileRoute("/api/public/qr-order")({
           .update({
             status: "occupied",
             guests: guests ?? Math.max(table.guests || 1, 1),
-            has_qr_alert: true,
+            has_qr_alert: !assisted_by_staff,
           })
           .eq("id", table.id);
 
         // Insert a synthetic 'qr' source marker order if table previously had a pos order — emit notification
         // (POS already listens to source=qr inserts on `orders`; emit a no-op event for existing reused orders)
-        if (order) {
+        if (order && !assisted_by_staff) {
           await supabase
             .from("orders")
             .update({ source: "qr" })

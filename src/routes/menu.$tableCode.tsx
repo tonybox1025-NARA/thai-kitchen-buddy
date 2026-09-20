@@ -872,6 +872,7 @@ function CustomerMenu() {
         signal: ac.signal,
         body: JSON.stringify({
           table_code: tableCode,
+          assisted_by_staff: crewMode,
           items: cart.map((c) => ({
             menu_id: c.menu_id,
             qty: c.qty,

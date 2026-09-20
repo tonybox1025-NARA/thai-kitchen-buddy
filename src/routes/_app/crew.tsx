@@ -1,9 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { RefreshCw, ReceiptText, ShoppingCart, Users } from "lucide-react";
 import { tableLabel } from "@/lib/table";
 
@@ -19,12 +20,20 @@ type CrewTable = {
   points: number;
   discount: number;
   memberName?: string | null;
+  items: {
+    id: string;
+    name_th: string;
+    name_en: string;
+    qty: number;
+    unit_price: number;
+    notes: string | null;
+  }[];
 };
 
 function CrewPage() {
-  const nav = useNavigate();
   const [tables, setTables] = useState<CrewTable[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState<CrewTable | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -47,7 +56,7 @@ function CrewPage() {
       const [{ data: items }, { data: bill }] = await Promise.all([
         supabase
           .from("order_items")
-          .select("qty,unit_price,status")
+          .select("id,name_th,name_en,qty,unit_price,notes,status")
           .eq("order_id", order.id)
           .neq("status", "voided"),
         (supabase as any)
@@ -68,6 +77,14 @@ function CrewPage() {
         points: Number(bill?.points_redeemed ?? 0),
         discount: Number(bill?.loyalty_discount_amount ?? 0),
         memberName: bill?.members?.nickname || bill?.members?.full_name || null,
+        items: (items ?? []).map((item) => ({
+          id: item.id,
+          name_th: item.name_th,
+          name_en: item.name_en,
+          qty: Number(item.qty),
+          unit_price: Number(item.unit_price),
+          notes: item.notes,
+        })),
       });
     }
     setTables(next);
@@ -149,12 +166,7 @@ function CrewPage() {
                 <ShoppingCart className="mr-2 h-4 w-4" />
                 Order
               </Button>
-              <Button
-                onClick={() =>
-                  table.orderId &&
-                  nav({ to: "/order/$orderId", params: { orderId: table.orderId } })
-                }
-              >
+              <Button onClick={() => setSelected(table)}>
                 <ReceiptText className="mr-2 h-4 w-4" />
                 Details
               </Button>
@@ -165,6 +177,39 @@ function CrewPage() {
       {!loading && tables.length === 0 && (
         <div className="py-20 text-center text-muted-foreground">No occupied tables</div>
       )}
+      <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Table {selected ? tableLabel(selected.code) : ""}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            {selected?.items.map((item) => (
+              <div key={item.id} className="rounded-xl border p-3">
+                <div className="flex justify-between gap-3">
+                  <div>
+                    <span className="mr-2 font-bold text-primary">{item.qty}×</span>
+                    <span className="font-semibold">{item.name_th || item.name_en}</span>
+                  </div>
+                  <span className="font-semibold">฿{(item.qty * item.unit_price).toFixed(0)}</span>
+                </div>
+                {item.notes && <p className="mt-1 text-xs text-muted-foreground">{item.notes}</p>}
+              </div>
+            ))}
+          </div>
+          <div className="space-y-1 border-t pt-3">
+            {selected && selected.discount > 0 && (
+              <div className="flex justify-between text-green-700">
+                <span>Points discount</span>
+                <span>−฿{selected.discount.toFixed(0)}</span>
+              </div>
+            )}
+            <div className="flex justify-between text-xl font-black">
+              <span>Total</span>
+              <span>฿{selected?.total.toFixed(0)}</span>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
