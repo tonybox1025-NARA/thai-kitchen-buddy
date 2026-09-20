@@ -83,7 +83,9 @@ export const Route = createFileRoute("/api/public/qr-order")({
 
         const { data: items, error: itemsError } = await supabase
           .from("order_items")
-          .select("id,name_th,name_en,qty,unit_price,notes,modifiers,round_number,sent_at,status,voided_at")
+          .select(
+            "id,name_th,name_en,qty,unit_price,notes,modifiers,round_number,sent_at,status,voided_at",
+          )
           .eq("order_id", order.id)
           .neq("status", "voided")
           .is("voided_at", null)
@@ -131,6 +133,12 @@ export const Route = createFileRoute("/api/public/qr-order")({
           .maybeSingle();
         if (tableErr) return new Response(`DB error: ${tableErr.message}`, { status: 500 });
         if (!table) return new Response("Table not found", { status: 404 });
+        if (table.status === "bill_requested") {
+          return new Response(
+            "The bill has already been requested. Please ask staff before adding items.",
+            { status: 409 },
+          );
+        }
 
         // Validate menu items + fetch authoritative prices/names
         const menuIds = items.map((i) => i.menu_id);

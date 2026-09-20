@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as WalletRouteImport } from './routes/wallet'
+import { Route as AppCrewRouteImport } from './routes/_app/crew'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
 import { Route as AppDetailDiscountsRouteImport } from './routes/_app/detail-discounts'
 import { Route as AppDetailGrossRouteImport } from './routes/_app/detail-gross'
@@ -35,6 +36,7 @@ import { Route as ApiPublicQrOrderRouteImport } from './routes/api/public/qr-ord
 import { Route as ApiPublicWalletRouteImport } from './routes/api/public/wallet'
 import { Route as ApiPublicWalletLineRouteImport } from './routes/api/public/wallet-line'
 import { Route as LoyaltyClaimTokenRouteImport } from './routes/loyalty/claim.$token'
+import { Route as ApiPublicCheckoutTableCodeRouteImport } from './routes/api/public/checkout.$tableCode'
 import { Route as ApiPublicDailySummaryDateRouteImport } from './routes/api/public/daily-summary.$date'
 import { Route as ApiPublicItemSalesDateRouteImport } from './routes/api/public/item-sales.$date'
 import { Route as ApiPublicLoyaltyClaimTokenRouteImport } from './routes/api/public/loyalty-claim.$token'
@@ -58,6 +60,11 @@ const WalletRoute = WalletRouteImport.update({
   id: '/wallet',
   path: '/wallet',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AppCrewRoute = AppCrewRouteImport.update({
+  id: '/crew',
+  path: '/crew',
+  getParentRoute: () => AppRoute,
 } as any)
 const AppDashboardRoute = AppDashboardRouteImport.update({
   id: '/dashboard',
@@ -169,6 +176,12 @@ const LoyaltyClaimTokenRoute = LoyaltyClaimTokenRouteImport.update({
   path: '/loyalty/claim/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicCheckoutTableCodeRoute =
+  ApiPublicCheckoutTableCodeRouteImport.update({
+    id: '/api/public/checkout/$tableCode',
+    path: '/api/public/checkout/$tableCode',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicDailySummaryDateRoute =
   ApiPublicDailySummaryDateRouteImport.update({
     id: '/api/public/daily-summary/$date',
@@ -197,6 +210,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/wallet': typeof WalletRoute
+  '/crew': typeof AppCrewRoute
   '/dashboard': typeof AppDashboardRoute
   '/detail-discounts': typeof AppDetailDiscountsRoute
   '/detail-gross': typeof AppDetailGrossRoute
@@ -219,6 +233,7 @@ export interface FileRoutesByFullPath {
   '/api/public/wallet': typeof ApiPublicWalletRoute
   '/api/public/wallet-line': typeof ApiPublicWalletLineRoute
   '/loyalty/claim/$token': typeof LoyaltyClaimTokenRoute
+  '/api/public/checkout/$tableCode': typeof ApiPublicCheckoutTableCodeRoute
   '/api/public/daily-summary/$date': typeof ApiPublicDailySummaryDateRoute
   '/api/public/item-sales/$date': typeof ApiPublicItemSalesDateRoute
   '/api/public/loyalty-claim/$token': typeof ApiPublicLoyaltyClaimTokenRoute
@@ -228,6 +243,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/wallet': typeof WalletRoute
+  '/crew': typeof AppCrewRoute
   '/dashboard': typeof AppDashboardRoute
   '/detail-discounts': typeof AppDetailDiscountsRoute
   '/detail-gross': typeof AppDetailGrossRoute
@@ -250,6 +266,7 @@ export interface FileRoutesByTo {
   '/api/public/wallet': typeof ApiPublicWalletRoute
   '/api/public/wallet-line': typeof ApiPublicWalletLineRoute
   '/loyalty/claim/$token': typeof LoyaltyClaimTokenRoute
+  '/api/public/checkout/$tableCode': typeof ApiPublicCheckoutTableCodeRoute
   '/api/public/daily-summary/$date': typeof ApiPublicDailySummaryDateRoute
   '/api/public/item-sales/$date': typeof ApiPublicItemSalesDateRoute
   '/api/public/loyalty-claim/$token': typeof ApiPublicLoyaltyClaimTokenRoute
@@ -261,6 +278,7 @@ export interface FileRoutesById {
   '/_app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
   '/wallet': typeof WalletRoute
+  '/_app/crew': typeof AppCrewRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/detail-discounts': typeof AppDetailDiscountsRoute
   '/_app/detail-gross': typeof AppDetailGrossRoute
@@ -283,6 +301,7 @@ export interface FileRoutesById {
   '/api/public/wallet': typeof ApiPublicWalletRoute
   '/api/public/wallet-line': typeof ApiPublicWalletLineRoute
   '/loyalty/claim/$token': typeof LoyaltyClaimTokenRoute
+  '/api/public/checkout/$tableCode': typeof ApiPublicCheckoutTableCodeRoute
   '/api/public/daily-summary/$date': typeof ApiPublicDailySummaryDateRoute
   '/api/public/item-sales/$date': typeof ApiPublicItemSalesDateRoute
   '/api/public/loyalty-claim/$token': typeof ApiPublicLoyaltyClaimTokenRoute
@@ -294,6 +313,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/wallet'
+    | '/crew'
     | '/dashboard'
     | '/detail-discounts'
     | '/detail-gross'
@@ -316,6 +336,7 @@ export interface FileRouteTypes {
     | '/api/public/wallet'
     | '/api/public/wallet-line'
     | '/loyalty/claim/$token'
+    | '/api/public/checkout/$tableCode'
     | '/api/public/daily-summary/$date'
     | '/api/public/item-sales/$date'
     | '/api/public/loyalty-claim/$token'
@@ -325,6 +346,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/wallet'
+    | '/crew'
     | '/dashboard'
     | '/detail-discounts'
     | '/detail-gross'
@@ -347,6 +369,7 @@ export interface FileRouteTypes {
     | '/api/public/wallet'
     | '/api/public/wallet-line'
     | '/loyalty/claim/$token'
+    | '/api/public/checkout/$tableCode'
     | '/api/public/daily-summary/$date'
     | '/api/public/item-sales/$date'
     | '/api/public/loyalty-claim/$token'
@@ -357,6 +380,7 @@ export interface FileRouteTypes {
     | '/_app'
     | '/login'
     | '/wallet'
+    | '/_app/crew'
     | '/_app/dashboard'
     | '/_app/detail-discounts'
     | '/_app/detail-gross'
@@ -379,6 +403,7 @@ export interface FileRouteTypes {
     | '/api/public/wallet'
     | '/api/public/wallet-line'
     | '/loyalty/claim/$token'
+    | '/api/public/checkout/$tableCode'
     | '/api/public/daily-summary/$date'
     | '/api/public/item-sales/$date'
     | '/api/public/loyalty-claim/$token'
@@ -396,6 +421,7 @@ export interface RootRouteChildren {
   ApiPublicWalletRoute: typeof ApiPublicWalletRoute
   ApiPublicWalletLineRoute: typeof ApiPublicWalletLineRoute
   LoyaltyClaimTokenRoute: typeof LoyaltyClaimTokenRoute
+  ApiPublicCheckoutTableCodeRoute: typeof ApiPublicCheckoutTableCodeRoute
   ApiPublicDailySummaryDateRoute: typeof ApiPublicDailySummaryDateRoute
   ApiPublicItemSalesDateRoute: typeof ApiPublicItemSalesDateRoute
   ApiPublicLoyaltyClaimTokenRoute: typeof ApiPublicLoyaltyClaimTokenRoute
@@ -431,6 +457,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/wallet'
       preLoaderRoute: typeof WalletRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_app/crew': {
+      id: '/_app/crew'
+      path: '/crew'
+      fullPath: '/crew'
+      preLoaderRoute: typeof AppCrewRouteImport
+      parentRoute: typeof AppRoute
     }
     '/_app/dashboard': {
       id: '/_app/dashboard'
@@ -586,6 +619,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoyaltyClaimTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/checkout/$tableCode': {
+      id: '/api/public/checkout/$tableCode'
+      path: '/api/public/checkout/$tableCode'
+      fullPath: '/api/public/checkout/$tableCode'
+      preLoaderRoute: typeof ApiPublicCheckoutTableCodeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/daily-summary/$date': {
       id: '/api/public/daily-summary/$date'
       path: '/api/public/daily-summary/$date'
@@ -618,6 +658,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppRouteChildren {
+  AppCrewRoute: typeof AppCrewRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppDetailDiscountsRoute: typeof AppDetailDiscountsRoute
   AppDetailGrossRoute: typeof AppDetailGrossRoute
@@ -637,6 +678,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppCrewRoute: AppCrewRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppDetailDiscountsRoute: AppDetailDiscountsRoute,
   AppDetailGrossRoute: AppDetailGrossRoute,
@@ -668,6 +710,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicWalletRoute: ApiPublicWalletRoute,
   ApiPublicWalletLineRoute: ApiPublicWalletLineRoute,
   LoyaltyClaimTokenRoute: LoyaltyClaimTokenRoute,
+  ApiPublicCheckoutTableCodeRoute: ApiPublicCheckoutTableCodeRoute,
   ApiPublicDailySummaryDateRoute: ApiPublicDailySummaryDateRoute,
   ApiPublicItemSalesDateRoute: ApiPublicItemSalesDateRoute,
   ApiPublicLoyaltyClaimTokenRoute: ApiPublicLoyaltyClaimTokenRoute,
