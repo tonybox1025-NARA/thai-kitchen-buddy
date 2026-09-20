@@ -13,6 +13,7 @@ import { LayoutGrid, BarChart3, FileText, Settings, LogOut, UserCircle2, Heart, 
 import { installAudioUnlockListeners, unlockAudio } from "@/lib/audio-alert";
 import { useQrAlertCount } from "@/lib/qr-alert-count";
 import { OfflineBanner } from "@/components/OfflineBanner";
+import { useNativePrintQueue } from "@/lib/native-print-queue";
 
 export const Route = createFileRoute("/_app")({ component: AppLayout });
 
@@ -23,6 +24,7 @@ function AppLayout() {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const [pinErr, setPinErr] = useState<string | null>(null);
   const qrAlertCount = useQrAlertCount(Boolean(session && staff));
+  useNativePrintQueue(Boolean(session && staff));
 
   useEffect(() => { installAudioUnlockListeners(); }, []);
 
