@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,14 +15,17 @@ export const Route = createFileRoute("/login")({ component: LoginPage });
 function LoginPage() {
   const { loading, session, signIn } = useAuth();
   const { t } = useI18n();
-  const nav = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  const nextPath = typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search).get("next")
+    : null;
+  const safeNextPath = nextPath === "/crew" ? "/crew" : "/pos";
 
   useEffect(() => {
-    if (!loading && session) nav({ to: "/pos", replace: true });
-  }, [loading, session, nav]);
+    if (!loading && session) window.location.replace(safeNextPath);
+  }, [loading, session, safeNextPath]);
 
   if (loading) {
     return (
