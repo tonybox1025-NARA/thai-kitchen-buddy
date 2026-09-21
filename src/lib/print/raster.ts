@@ -137,7 +137,10 @@ export type PrintPayload = ReceiptPayload | KitchenPayload | TableQrPayload | Re
 // ── formatting ────────────────────────────────────────────────────────────────
 
 function money(n: number): string {
-  return (Number(n) || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return (Number(n) || 0).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 function two(n: number): string {
   return String(n).padStart(2, "0");
@@ -335,7 +338,16 @@ class Doc {
     const band = 128;
     for (let y0 = 0; y0 < h; y0 += band) {
       const rows = Math.min(band, h - y0);
-      out.push(0x1d, 0x76, 0x30, 0x00, bytesPerRow & 0xff, (bytesPerRow >> 8) & 0xff, rows & 0xff, (rows >> 8) & 0xff);
+      out.push(
+        0x1d,
+        0x76,
+        0x30,
+        0x00,
+        bytesPerRow & 0xff,
+        (bytesPerRow >> 8) & 0xff,
+        rows & 0xff,
+        (rows >> 8) & 0xff,
+      );
       for (let row = 0; row < rows; row++) {
         for (let bx = 0; bx < bytesPerRow; bx++) {
           let b = 0;
@@ -400,15 +412,54 @@ function qrBytes(text: string): number[] {
   const pL = len & 0xff;
   const pH = (len >> 8) & 0xff;
   return [
-    0x1d, 0x28, 0x6b, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00, // model 2
-    0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x43, 0x07, // module size 7
-    0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x45, 0x31, // error correction M
-    0x1d, 0x28, 0x6b, pL, pH, 0x31, 0x50, 0x30, ...data, // store data
-    0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x51, 0x30, // print
+    0x1d,
+    0x28,
+    0x6b,
+    0x04,
+    0x00,
+    0x31,
+    0x41,
+    0x32,
+    0x00, // model 2
+    0x1d,
+    0x28,
+    0x6b,
+    0x03,
+    0x00,
+    0x31,
+    0x43,
+    0x07, // module size 7
+    0x1d,
+    0x28,
+    0x6b,
+    0x03,
+    0x00,
+    0x31,
+    0x45,
+    0x31, // error correction M
+    0x1d,
+    0x28,
+    0x6b,
+    pL,
+    pH,
+    0x31,
+    0x50,
+    0x30,
+    ...data, // store data
+    0x1d,
+    0x28,
+    0x6b,
+    0x03,
+    0x00,
+    0x31,
+    0x51,
+    0x30, // print
   ];
 }
 
-async function loadBitmap(url: string): Promise<{ bmp: CanvasImageSource; w: number; h: number } | null> {
+async function loadBitmap(
+  url: string,
+): Promise<{ bmp: CanvasImageSource; w: number; h: number } | null> {
   try {
     // Fetch to a blob first: a blob-URL image is same-origin and won't taint the
     // canvas (a cross-origin <img> would make getImageData throw). Fails closed
@@ -476,8 +527,10 @@ export async function buildReceipt(p: ReceiptPayload): Promise<Uint8Array> {
   const shownSub = items.length > 0 ? subtotal : p.total;
   d.row("ยอดรวมก่อนส่วนลด", money(shownSub), S.norm);
   if ((p.discountAmount ?? 0) > 0) d.row("ส่วนลด", "-" + money(p.discountAmount!), S.norm);
-  if ((p.memberDiscountAmount ?? 0) > 0) d.row("ส่วนลดสมาชิก", "-" + money(p.memberDiscountAmount!), S.norm);
-  if ((p.pointsDiscountAmount ?? 0) > 0) d.row("ใช้แต้ม", "-" + money(p.pointsDiscountAmount!), S.norm);
+  if ((p.memberDiscountAmount ?? 0) > 0)
+    d.row("ส่วนลดสมาชิก", "-" + money(p.memberDiscountAmount!), S.norm);
+  if ((p.pointsDiscountAmount ?? 0) > 0)
+    d.row("ใช้แต้ม", "-" + money(p.pointsDiscountAmount!), S.norm);
   if ((p.serviceFeeAmount ?? 0) > 0) d.row("ค่าบริการ", money(p.serviceFeeAmount!), S.norm);
   if ((p.vatAmount ?? 0) > 0) d.row(`VAT (${p.vatRate ?? 7}%)`, money(p.vatAmount!), S.norm);
   if ((p.roundingAdjustment ?? 0) !== 0) d.row("ปัดเศษ", money(p.roundingAdjustment!), S.norm);
@@ -488,7 +541,13 @@ export async function buildReceipt(p: ReceiptPayload): Promise<Uint8Array> {
 
   for (const pay of p.payments ?? []) {
     const label =
-      pay.method === "cash" ? "เงินสด" : pay.method === "qr" ? "QR" : pay.method === "gov_qr" ? "60/40" : "บัตรเครดิต";
+      pay.method === "cash"
+        ? "เงินสด"
+        : pay.method === "qr"
+          ? "QR"
+          : pay.method === "gov_qr"
+            ? "60/40"
+            : "บัตรเครดิต";
     d.row(label, money(pay.amount), S.norm);
     if ((pay.cash_received ?? 0) > 0) d.row("  รับมา", money(pay.cash_received!), S.small);
     if ((pay.change_due ?? 0) > 0) d.row("  ทอน", money(pay.change_due!), S.small);
@@ -540,7 +599,14 @@ export async function buildKitchen(p: KitchenPayload): Promise<Uint8Array> {
   // only call out the exceptional case below: an explicit reprint.
   if (p.reprint) d.text("*** REPRINT · พิมพ์ซ้ำ ***", S.bold, "center");
   if (p.waiter) d.text(`โดย ${p.waiter}`, S.norm);
-  d.text(p.order_type === "added" ? "เพิ่มออเดอร์ (ADDED)" : "ออเดอร์ใหม่ (NEW)", S.small);
+  d.text(
+    p.order_type === "void"
+      ? "ยกเลิกรายการ (VOID / CANCEL)"
+      : p.order_type === "added"
+        ? "เพิ่มออเดอร์ (ADDED)"
+        : "ออเดอร์ใหม่ (NEW)",
+    p.order_type === "void" ? S.big : S.small,
+  );
   if (isQr) d.text("[ QR ORDER ]", S.bold);
   d.text(`รายการ (${lines.length})`, S.norm);
   d.rule(true);
@@ -653,11 +719,15 @@ export async function buildTest(label = "APP"): Promise<Uint8Array> {
 
 // ── dispatch ──────────────────────────────────────────────────────────────────
 
-export async function buildEscPos(payload: PrintPayload, printer?: "counter" | "kitchen"): Promise<Uint8Array> {
+export async function buildEscPos(
+  payload: PrintPayload,
+  printer?: "counter" | "kitchen",
+): Promise<Uint8Array> {
   if (payload.kind === "receipt") return buildReceipt(payload);
   if (payload.kind === "table_qr") return buildTableQr(payload);
   if (payload.kind === "report") return buildReport(payload);
-  if (payload.kind === "order_ticket" || printer === "kitchen") return buildKitchen(payload as KitchenPayload);
+  if (payload.kind === "order_ticket" || printer === "kitchen")
+    return buildKitchen(payload as KitchenPayload);
   throw new Error(`Unknown print payload kind: ${(payload as { kind?: string }).kind}`);
 }
 
