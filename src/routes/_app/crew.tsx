@@ -85,6 +85,10 @@ function CrewPage() {
           enterReason: "ระบุเหตุผล",
           confirmVoid: "ยืนยันยกเลิก",
           voiding: "กำลังยกเลิก…",
+          guests: "จำนวนลูกค้า",
+          openTable: "เปิดโต๊ะ",
+          opening: "กำลังเปิดโต๊ะ…",
+          openRegisterFirst: "กรุณาเปิดกะที่แคชเชียร์ก่อน",
         }
       : {
           title: "Tables",
@@ -116,10 +120,17 @@ function CrewPage() {
           enterReason: "Enter reason",
           confirmVoid: "Confirm VOID",
           voiding: "Voiding…",
+          guests: "Number of guests",
+          openTable: "Open table",
+          opening: "Opening table…",
+          openRegisterFirst: "Open the register shift first",
         };
   const [tables, setTables] = useState<CrewTable[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<TableFilter>("available");
+  const [openingTable, setOpeningTable] = useState<CrewTable | null>(null);
+  const [guestCount, setGuestCount] = useState(1);
+  const [opening, setOpening] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [revealedItem, setRevealedItem] = useState<string | null>(null);
   const [voidItem, setVoidItem] = useState<CrewItem | null>(null);
@@ -246,6 +257,54 @@ function CrewPage() {
 
   const openOrder = (table: CrewTable) => {
     window.location.href = `/menu/${encodeURIComponent(table.code)}?crew=1`;
+  };
+  const requestOpenTable = (table: CrewTable) => {
+    setGuestCount(1);
+    setOpeningTable(table);
+  };
+  const confirmOpenTable = async () => {
+    if (!openingTable || !staff || guestCount < 1 || opening) return;
+    setOpening(true);
+    const { data: shift, error: shiftError } = await supabase
+      .from("shifts")
+      .select("id")
+      .eq("status", "open")
+      .maybeSingle();
+    if (shiftError || !shift) {
+      toast.error(shiftError?.message || c.openRegisterFirst);
+      setOpening(false);
+      return;
+    }
+    const { data: order, error: orderError } = await supabase
+      .from("orders")
+      .insert({
+        table_id: openingTable.id,
+        guests: guestCount,
+        opened_by: staff.id,
+        shift_id: shift.id,
+        source: "pos",
+      })
+      .select("id")
+      .single();
+    if (orderError || !order) {
+      toast.error(orderError?.message || "Failed to open table");
+      setOpening(false);
+      return;
+    }
+    const { error: tableError } = await supabase
+      .from("restaurant_tables")
+      .update({ status: "occupied", guests: guestCount })
+      .eq("id", openingTable.id)
+      .eq("status", "available");
+    if (tableError) {
+      toast.error(tableError.message);
+      setOpening(false);
+      return;
+    }
+    const table = openingTable;
+    setOpeningTable(null);
+    setOpening(false);
+    openOrder(table);
   };
   const requestVoid = (item: CrewItem) => {
     if (selected?.billStatus === "paid") {
@@ -385,7 +444,7 @@ function CrewPage() {
           return (
             <button
               key={table.id}
-              onClick={() => (available ? openOrder(table) : setSelectedId(table.id))}
+              onClick={() => (available ? requestOpenTable(table) : setSelectedId(table.id))}
               className={`min-h-44 rounded-3xl border-2 p-4 text-left shadow-sm transition active:scale-[.98] ${table.status === "bill_requested" ? "border-orange-400 bg-orange-50" : available ? "bg-card" : "border-slate-300 bg-slate-100"}`}
             >
               <div className="flex items-start justify-between">
@@ -419,6 +478,54 @@ function CrewPage() {
       {!loading && visibleTables.length === 0 && (
         <div className="py-20 text-center text-muted-foreground">{c.empty}</div>
       )}
+
+      <Dialog
+        open={!!openingTable}
+        onOpenChange={(open) => {
+          if (!open && !opening) setOpeningTable(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-2xl">
+              {c.table} {openingTable ? tableLabel(openingTable.code) : ""}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="mb-4 text-lg font-semibold">{c.guests}</div>
+            <div className="flex items-center justify-center gap-6">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-16 w-16 text-3xl"
+                onClick={() => setGuestCount((count) => Math.max(1, count - 1))}
+                disabled={opening || guestCount <= 1}
+              >
+                −
+              </Button>
+              <span className="w-14 text-center text-4xl font-black">{guestCount}</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-16 w-16 text-3xl"
+                onClick={() => setGuestCount((count) => Math.min(30, count + 1))}
+                disabled={opening || guestCount >= 30}
+              >
+                +
+              </Button>
+            </div>
+          </div>
+          <Button
+            className="h-14 text-lg"
+            onClick={() => void confirmOpenTable()}
+            disabled={opening}
+          >
+            {opening ? c.opening : c.openTable}
+          </Button>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={!!selected}
