@@ -18,6 +18,7 @@ import {
 import { Plus, RefreshCw, ShoppingCart, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { tableLabel } from "@/lib/table";
+import { isFrontCounterCategory } from "@/lib/print/routing";
 
 export const Route = createFileRoute("/_app/crew")({ component: CrewPage });
 
@@ -374,6 +375,34 @@ function CrewPage() {
         qty: voidItem.qty,
         notes: `VOID: ${voidReason.trim()}`,
       };
+      let routeToKitchen = true;
+      let zoneLabel = "Main Kitchen";
+      if (voidItem.menu_id) {
+        const { data: menu } = await supabase
+          .from("menus")
+          .select("category_id")
+          .eq("id", voidItem.menu_id)
+          .maybeSingle();
+        if (menu?.category_id) {
+          const { data: category } = await supabase
+            .from("categories")
+            .select("id,name_th,name_en,kitchen_zone_id")
+            .eq("id", menu.category_id)
+            .maybeSingle();
+          if (category && isFrontCounterCategory(category)) {
+            routeToKitchen = false;
+            zoneLabel = "COUNTER";
+          } else if (category?.kitchen_zone_id) {
+            const { data: zone } = await supabase
+              .from("kitchen_zones")
+              .select("name_th,name_en,print_to_kitchen")
+              .eq("id", category.kitchen_zone_id)
+              .maybeSingle();
+            routeToKitchen = zone?.print_to_kitchen ?? true;
+            zoneLabel = zone?.name_en || zone?.name_th || zoneLabel;
+          }
+        }
+      }
       const payload: CounterPrintPayload = {
         kind: "order_ticket",
         ticket_type: "void",
@@ -383,14 +412,16 @@ function CrewPage() {
         sent_at: now,
         lines: [line],
         language: "my",
-        department: "VOID / CANCEL",
-        station: "VOID / CANCEL",
+        department: routeToKitchen ? zoneLabel : "COUNTER",
+        station: routeToKitchen ? zoneLabel : "COUNTER",
         footer: "kitchen",
         alert_beep: true,
       };
       try {
-        await printKitchenJobs([{ printer: "kitchen", payload }]);
-        await printCounterJobs([{ ...payload, footer: "counter" }]);
+        if (routeToKitchen) {
+          await printKitchenJobs([{ printer: "kitchen", payload }]);
+        }
+        await printCounterJobs([{ ...payload, department: "VOID / CANCEL", station: "VOID / CANCEL", footer: "counter" }]);
       } catch (error) {
         toast.error(
           `${c.printFailed}: ${error instanceof Error ? error.message : "unknown error"}`,
