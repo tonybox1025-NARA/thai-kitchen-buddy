@@ -23,6 +23,7 @@ import type { DateRange } from "react-day-picker";
 import { PencilLine, ArrowRight, CalendarIcon, Download, XCircle, Printer } from "lucide-react";
 import { bucketizeQr, parseBuckets, type QrBucketTotal, type QrTimeBucket } from "@/lib/qr-buckets";
 import { canPrintDirect, printDirect } from "@/lib/counter-printer";
+import { retryPendingDailyCloses, syncDailyClose } from "@/lib/daily-close-sync";
 
 export const Route = createFileRoute("/_app/reports")({ component: Reports });
 
@@ -227,6 +228,7 @@ function Reports() {
   const [adjLoading, setAdjLoading] = useState(false);
 
   useEffect(() => {
+    void retryPendingDailyCloses();
     supabase.from("shifts").select("*").eq("status", "open").maybeSingle().then(({ data }) => {
       setShift((data as Shift) ?? null);
     });
@@ -406,12 +408,17 @@ function Reports() {
   const doZ = async () => {
     if (!shift || !report) return;
     const { cashTotal, expected, overShort } = calcCashSummary(cashCount, report);
-    await supabase.from("shifts").update({
+    const closingShiftId = shift.id;
+    const { error: closeError } = await supabase.from("shifts").update({
       closed_at: new Date().toISOString(), closed_by: staff?.id, status: "closed",
       cash_count: cashCount, totals: { ...report, cashTotal, expected, overShort },
     }).eq("id", shift.id);
+    if (closeError) { toast.error(closeError.message); return; }
     setZDlg(false); setShift(null); setReport(null);
     toast.success(t("rep_z_saved"));
+    void syncDailyClose(closingShiftId).then((result) => {
+      if (result.enabled && result.status === "sent") toast.success("Manager sales upload complete");
+    }).catch((error) => toast.error(`Register closed; Manager upload queued: ${error instanceof Error ? error.message : String(error)}`));
   };
 
   const openAdj = async () => {

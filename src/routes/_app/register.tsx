@@ -22,6 +22,7 @@ import type { DateRange } from "react-day-picker";
 import { PencilLine, ArrowRight, CalendarIcon, XCircle, Printer } from "lucide-react";
 import { bucketizeQr, parseBuckets, type QrBucketTotal, type QrTimeBucket } from "@/lib/qr-buckets";
 import { canPrintDirect, printDirect } from "@/lib/counter-printer";
+import { retryPendingDailyCloses, syncDailyClose } from "@/lib/daily-close-sync";
 
 export const Route = createFileRoute("/_app/register")({ component: Register });
 
@@ -231,6 +232,7 @@ function Register() {
   const [adjLoading, setAdjLoading] = useState(false);
 
   useEffect(() => {
+    void retryPendingDailyCloses();
     supabase.from("shifts").select("*").eq("status", "open").maybeSingle().then(({ data }) => {
       setShift((data as Shift) ?? null);
       // No register open yet → prompt to open it (count starting cash) right away.
@@ -412,12 +414,20 @@ function Register() {
   const doZ = async () => {
     if (!shift || !report) return;
     const { cashTotal, expected, overShort } = calcCashSummary(cashCount, report);
-    await supabase.from("shifts").update({
+    const closingShiftId = shift.id;
+    const { error: closeError } = await supabase.from("shifts").update({
       closed_at: new Date().toISOString(), closed_by: staff?.id, status: "closed",
       cash_count: cashCount, totals: { ...report, cashTotal, expected, overShort },
     }).eq("id", shift.id);
+    if (closeError) { toast.error(closeError.message); return; }
     setZDlg(false); setShift(null); setReport(null);
     toast.success(t("rep_z_saved"));
+    // The server flag is intentionally OFF before dry-run day. Once enabled,
+    // failure never reopens/rolls back the register: the outbox keeps the shift
+    // available for a safe, idempotent retry.
+    void syncDailyClose(closingShiftId).then((result) => {
+      if (result.enabled && result.status === "sent") toast.success("Manager sales upload complete");
+    }).catch((error) => toast.error(`Register closed; Manager upload queued: ${error instanceof Error ? error.message : String(error)}`));
   };
 
   const openAdj = async () => {
