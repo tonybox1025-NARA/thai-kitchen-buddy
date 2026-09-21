@@ -33,6 +33,12 @@ const Body = z.discriminatedUnion("action", [
     phone: z.string().trim().min(8).max(24),
   }),
   z.object({
+    action: z.literal("register_member"),
+    guest_token: z.string().min(20).max(120),
+    full_name: z.string().trim().min(1).max(120),
+    phone: z.string().trim().min(8).max(24),
+  }),
+  z.object({
     action: z.literal("reserve_reward"),
     guest_token: z.string().min(20).max(120),
     points: z.number().int().min(0),
@@ -196,7 +202,12 @@ export const Route = createFileRoute("/api/public/checkout/$tableCode")({
           );
           if (matches.length !== 1) {
             return Response.json(
-              { error: matches.length === 0 ? "Member not found" : "Duplicate phone records need staff review" },
+              {
+                error:
+                  matches.length === 0
+                    ? "Member not found"
+                    : "Duplicate phone records need staff review",
+              },
               { status: matches.length === 0 ? 404 : 409 },
             );
           }
@@ -234,6 +245,65 @@ export const Route = createFileRoute("/api/public/checkout/$tableCode")({
             .single();
           if (linkError) return Response.json({ error: linkError.message }, { status: 500 });
           return Response.json({ ok: true, member: linked });
+        }
+
+        if (parsed.data.action === "register_member") {
+          const wantedPhone = normalizePhone(parsed.data.phone);
+          if (wantedPhone.length < 9) {
+            return Response.json({ error: "Please enter a valid phone number" }, { status: 400 });
+          }
+          const { data: current } = await (sb as any)
+            .from("members")
+            .select("id,current_points,guest_token,imported_from")
+            .eq("guest_token", parsed.data.guest_token)
+            .maybeSingle();
+          if (current) {
+            const { count: ledgerCount } = await (sb as any)
+              .from("member_point_ledger")
+              .select("id", { count: "exact", head: true })
+              .eq("member_id", current.id);
+            if (Number(current.current_points ?? 0) !== 0 || Number(ledgerCount ?? 0) !== 0) {
+              return Response.json(
+                { error: "This phone already has wallet activity. Ask staff to merge it safely." },
+                { status: 409 },
+              );
+            }
+          }
+          const { data: settings } = await sb
+            .from("settings")
+            .select("loyalty_signup_bonus")
+            .eq("id", 1)
+            .maybeSingle();
+          const { data: created, error: createError } = await (sb as any).rpc(
+            "create_or_get_member",
+            {
+              p_full_name: parsed.data.full_name,
+              p_nickname: null,
+              p_phone: wantedPhone,
+              p_signup_points: Math.max(0, Math.floor(Number(settings?.loyalty_signup_bonus ?? 0))),
+              p_imported_from: "customer_checkout",
+              p_signup_description: "Signup bonus from customer checkout",
+            },
+          );
+          if (createError) return Response.json({ error: createError.message }, { status: 500 });
+          const memberId = created?.member_id;
+          if (!memberId)
+            return Response.json({ error: "Unable to create member" }, { status: 500 });
+          if (current && current.id !== memberId) {
+            const { error: deleteError } = await (sb as any)
+              .from("members")
+              .delete()
+              .eq("id", current.id);
+            if (deleteError) return Response.json({ error: deleteError.message }, { status: 500 });
+          }
+          const { data: member, error: linkError } = await (sb as any)
+            .from("members")
+            .update({ guest_token: parsed.data.guest_token, updated_at: new Date().toISOString() })
+            .eq("id", memberId)
+            .select("id,full_name,nickname,current_points,phone,imported_from")
+            .single();
+          if (linkError) return Response.json({ error: linkError.message }, { status: 500 });
+          return Response.json({ ok: true, created: Boolean(created.created), member });
         }
 
         const { data, error } = await (sb as any).rpc("reserve_customer_bill_loyalty", {

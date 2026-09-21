@@ -554,7 +554,7 @@ function CrewPage() {
             </div>
           ) : null}
           <p className="text-xs text-muted-foreground">{c.swipe}</p>
-          <div className="space-y-2">
+          <div className="max-h-[48dvh] space-y-2 overflow-y-auto overscroll-contain pr-1">
             {selected?.items.map((item) => (
               <div key={item.id} className="relative overflow-hidden rounded-xl bg-red-600">
                 <button
