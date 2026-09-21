@@ -63,11 +63,19 @@ Deno.serve(async (req) => {
     }
     const items = [...itemMap.values()].sort((a, b) => String(a.menu_id || a.name_th).localeCompare(String(b.menu_id || b.name_th)));
     const cashSummary = (shift.totals || {}) as any;
+    const promptPayAmount = byMethod("qr");
+    const sixtyFortyAmount = byMethod("gov_qr");
     const summary = {
       total_product_sales: sum(bills || [], "subtotal"), refund: sum(refunds || [], "amount"),
       mb_discount: sum(bills || [], "member_discount_amount") + sum(bills || [], "loyalty_discount_amount"),
       discount: sum(bills || [], "discount_amount"), vat: sum(bills || [], "vat_amount"), net_sales: sum(bills || [], "total"),
-      qr_total_amount: byMethod("qr"), sixty_forty_amount: byMethod("gov_qr"), credit_amount: byMethod("card"), cash_amount: byMethod("cash"),
+      // Manager historically stores QR Total as the combined QR bucket and
+      // derives PromptPay by subtracting 60/40. Preserve that meaning while
+      // also transmitting the explicit POS figures for reconciliation.
+      qr_total_amount: promptPayAmount + sixtyFortyAmount,
+      qr_prompt_amount: promptPayAmount,
+      sixty_forty_amount: sixtyFortyAmount,
+      credit_amount: byMethod("card"), cash_amount: byMethod("cash"),
       cash_count: Number(cashSummary.cashTotal || 0), cash_over_short: Number(cashSummary.overShort || 0),
       item_revenue: items.reduce((n, i) => n + i.revenue, 0), bill_count: (bills || []).length,
     };
