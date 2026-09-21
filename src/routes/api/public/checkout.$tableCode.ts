@@ -132,7 +132,7 @@ export const Route = createFileRoute("/api/public/checkout/$tableCode")({
         if (guestToken && guestToken.length >= 20) {
           const result = await (sb as any)
             .from("members")
-            .select("id,full_name,nickname,current_points,phone,imported_from")
+            .select("id,full_name,nickname,current_points,phone,line_user_id,imported_from")
             .eq("guest_token", guestToken)
             .eq("status", "active")
             .maybeSingle();

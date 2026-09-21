@@ -115,10 +115,20 @@ type CheckoutState = {
     nickname: string | null;
     current_points: number;
     phone?: string | null;
+    line_user_id?: string | null;
     imported_from?: string | null;
   } | null;
   rewards: { points: number; baht: number }[];
 };
+
+function isRecognizedMember(member: CheckoutState["member"]) {
+  if (!member) return false;
+  return Boolean(
+    member.phone ||
+      member.line_user_id ||
+      member.imported_from !== "guest_wallet",
+  );
+}
 
 function categoryLabel(category: Category, lang: Lang) {
   return lang === "th"
@@ -1363,7 +1373,7 @@ function CustomerMenu() {
                 </div>
               </div>
 
-              {checkout.member && checkout.member.imported_from !== "guest_wallet" ? (
+              {checkout.member && isRecognizedMember(checkout.member) ? (
                 <div className="rounded-xl border p-4">
                   <div className="text-sm text-muted-foreground">{tr.member_points}</div>
                   <div className="flex items-end justify-between gap-4">
@@ -1411,7 +1421,7 @@ function CustomerMenu() {
                 </div>
               )}
 
-              {checkout.member && checkout.member.imported_from !== "guest_wallet" && (
+              {checkout.member && isRecognizedMember(checkout.member) && (
                 <div className="space-y-2">
                   <Button
                     type="button"
