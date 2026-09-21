@@ -728,6 +728,18 @@ function CustomerMenu() {
 
   useEffect(() => {
     const ac = new AbortController();
+    const cacheKey = `lonmoh:qr-menu:v2:${tableCode}`;
+    let hadCache = false;
+    try {
+      const cached = JSON.parse(sessionStorage.getItem(cacheKey) ?? "null");
+      if (cached?.data && Date.now() - Number(cached.savedAt ?? 0) < 5 * 60_000) {
+        hadCache = true;
+        setData(cached.data);
+        setLoading(false);
+      }
+    } catch {
+      sessionStorage.removeItem(cacheKey);
+    }
     fetch(`/api/public/qr-menu/${encodeURIComponent(tableCode)}`, { signal: ac.signal })
       .then(async (r) => {
         if (!r.ok) throw new Error(await r.text());
@@ -736,9 +748,14 @@ function CustomerMenu() {
       .then((d) => {
         setData(d);
         setLoading(false);
+        try {
+          sessionStorage.setItem(cacheKey, JSON.stringify({ savedAt: Date.now(), data: d }));
+        } catch {
+          // Private browsing or storage pressure must never block ordering.
+        }
       })
       .catch((e) => {
-        if (e.name !== "AbortError") {
+        if (e.name !== "AbortError" && !hadCache) {
           setError(String(e.message ?? e));
           setLoading(false);
         }

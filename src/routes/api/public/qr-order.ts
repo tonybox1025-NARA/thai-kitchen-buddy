@@ -460,21 +460,16 @@ export const Route = createFileRoute("/api/public/qr-order")({
           },
         }));
 
-        // Insert tickets one at a time, counter first. The restaurant's bridge
-        // receives INSERT events immediately; a batch can make it open several
-        // connections to the same ESC/POS printer at once, and some printers
-        // silently drop the later connection. Spacing the events also protects
-        // installations still running an older bridge without its own queue.
+        // Insert the complete print plan in one request. The native POS queue
+        // serializes jobs per device and adds the printer cooldown. Waiting 750ms
+        // between cloud inserts made every customer order feel slow and did not
+        // add reliability when Realtime briefly disconnected.
         const printJobs = [...counterJobs, ...kitchenJobs];
-        for (let index = 0; index < printJobs.length; index += 1) {
+        if (printJobs.length > 0) {
           const { error: printErr } = await (supabase as any)
             .from("print_jobs")
-            .insert(printJobs[index]);
-          if (printErr)
-            return new Response(`Print queue error: ${printErr.message}`, { status: 500 });
-          if (index < printJobs.length - 1) {
-            await new Promise((resolve) => setTimeout(resolve, 750));
-          }
+            .insert(printJobs);
+          if (printErr) return new Response(`Print queue error: ${printErr.message}`, { status: 500 });
         }
 
         // Mark table occupied + raise QR alert flag (the POS realtime listener will react)

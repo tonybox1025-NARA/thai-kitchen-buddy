@@ -74,6 +74,18 @@ export function useNativePrintQueue(enabled: boolean) {
       chain = chain.then(() => process(job), () => process(job));
     };
 
+    const recoverPending = async () => {
+      if (stopped || document.visibilityState !== "visible") return;
+      const cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+      const { data } = await supabase
+        .from("print_jobs")
+        .select("id,printer,payload,status,error")
+        .eq("status", "pending")
+        .gte("created_at", cutoff)
+        .order("created_at");
+      for (const row of data ?? []) enqueue(row as PrintJob);
+    };
+
     // Recover recent tickets if the POS was closed or updating when the guest
     // submitted. The cutoff prevents an old forgotten backlog from printing.
     const cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
@@ -111,8 +123,19 @@ export function useNativePrintQueue(enabled: boolean) {
       )
       .subscribe();
 
+    // Realtime is an accelerator, not the only delivery mechanism. Android can
+    // suspend the websocket while the screen sleeps or Wi-Fi roams; polling the
+    // tiny pending set prevents a successful queue insert from remaining stuck.
+    const poll = window.setInterval(() => void recoverPending(), 4_000);
+    const onFocus = () => void recoverPending();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+
     return () => {
       stopped = true;
+      window.clearInterval(poll);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
       void supabase.removeChannel(channel);
     };
   }, [enabled]);

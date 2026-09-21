@@ -43,6 +43,7 @@ function PosPage() {
   const { staff } = useAuth();
   const nav = useNavigate();
   const [tables, setTables] = useState<RTable[]>([]);
+  const [openOrderByTable, setOpenOrderByTable] = useState<Record<string, string>>({});
   const [openTable, setOpenTable] = useState<RTable | null>(null);
   const [guests, setGuests] = useState(2);
   const [banner, setBanner] = useState<{ tableCode: string; key: number } | null>(null);
@@ -57,8 +58,14 @@ function PosPage() {
   const [combinePinOpen, setCombinePinOpen] = useState(false);
 
   const load = async () => {
-    const { data } = await supabase.from("restaurant_tables").select("*").order("code");
+    const [{ data }, { data: openOrders }] = await Promise.all([
+      supabase.from("restaurant_tables").select("*").order("code"),
+      supabase.from("orders").select("id,table_id,opened_at").eq("status", "open").not("table_id", "is", null).order("opened_at", { ascending: false }),
+    ]);
     if (data) setTables(data as RTable[]);
+    const map: Record<string, string> = {};
+    for (const order of openOrders ?? []) if (order.table_id && !map[order.table_id]) map[order.table_id] = order.id;
+    setOpenOrderByTable(map);
   };
 
   const loadSpecialOrders = async () => {
@@ -106,6 +113,11 @@ function PosPage() {
       setOpenTable(tbl);
       setGuests(0); // keypad starts empty so the tapped number lands directly
     } else {
+      const prefetched = openOrderByTable[tbl.id];
+      if (prefetched) {
+        nav({ to: "/order/$orderId", params: { orderId: prefetched } });
+        return;
+      }
       // Use limit(1) + data?.[0] instead of maybeSingle() so that duplicate
       // open orders (e.g. from a previous crashed session) don't return null.
       // IMPORTANT: orders table uses "opened_at", not "created_at".

@@ -177,14 +177,11 @@ function OrderPage() {
   const [receiptLogoUrl, setReceiptLogoUrl] = useState<string | null>(null);
   const [reprintingRound, setReprintingRound] = useState<number | null>(null);
 
-  const loadAll = async () => {
-    const [{ data: m }, { data: c }, { data: it }, { data: ord }, { data: s }, { data: reservedBill }] = await Promise.all([
+  const loadCatalog = async () => {
+    const [{ data: m }, { data: c }, { data: s }] = await Promise.all([
       supabase.from("menus").select("*").eq("available", true).order("sort"),
       supabase.from("categories").select("*").order("sort"),
-      supabase.from("order_items").select("*").eq("order_id", orderId).order("sent_at", { ascending: true, nullsFirst: true }),
-      supabase.from("orders").select("table_id,source,order_number").eq("id", orderId).single(),
       supabase.from("settings").select("vat_enabled,vat_mode,vat_rate,service_fee_rate,rounding_mode,restaurant_name,receipt_logo_url").eq("id", 1).single(),
-      (supabase as any).from("bills").select("points_redeemed,loyalty_discount_amount").eq("order_id", orderId).maybeSingle(),
     ]);
     if (m) setMenus(m as Menu[]);
     if (c) {
@@ -200,7 +197,6 @@ function OrderPage() {
           ),
       );
     }
-    if (it) setItems(it as Item[]);
     if (s) {
       setSettingsVatEnabled((s as any).vat_enabled ?? true);
       setSettingsVatMode((s.vat_mode as "inclusive" | "exclusive") || "inclusive");
@@ -210,6 +206,15 @@ function OrderPage() {
       setRestaurantName(s.restaurant_name);
       setReceiptLogoUrl((s as any).receipt_logo_url ?? null);
     }
+  };
+
+  const loadOrderState = async () => {
+    const [{ data: it }, { data: ord }, { data: reservedBill }] = await Promise.all([
+      supabase.from("order_items").select("*").eq("order_id", orderId).order("sent_at", { ascending: true, nullsFirst: true }),
+      supabase.from("orders").select("table_id,source,order_number").eq("id", orderId).single(),
+      (supabase as any).from("bills").select("points_redeemed,loyalty_discount_amount").eq("order_id", orderId).maybeSingle(),
+    ]);
+    if (it) setItems(it as Item[]);
     setReservedPoints(Math.max(0, Math.floor(Number((reservedBill as any)?.points_redeemed ?? 0))));
     setReservedPointsDiscount(Math.max(0, Number((reservedBill as any)?.loyalty_discount_amount ?? 0)));
     if (ord) {
@@ -228,20 +233,21 @@ function OrderPage() {
   };
 
   useEffect(() => {
-    loadAll();
+    void loadCatalog();
+    void loadOrderState();
     const ch = supabase
       .channel(`order-${orderId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "order_items", filter: `order_id=eq.${orderId}` }, () => loadAll())
+      .on("postgres_changes", { event: "*", schema: "public", table: "order_items", filter: `order_id=eq.${orderId}` }, () => loadOrderState())
       .subscribe();
 
     // Realtime can briefly disconnect on the SUNMI device while Android sleeps
     // or changes network state. Polling keeps QR orders visible even if an event
     // is missed, and focus/visibility refreshes update the screen immediately.
     const poll = window.setInterval(() => {
-      if (document.visibilityState === "visible") void loadAll();
+      if (document.visibilityState === "visible") void loadOrderState();
     }, 2_000);
     const refresh = () => {
-      if (document.visibilityState === "visible") void loadAll();
+      if (document.visibilityState === "visible") void loadOrderState();
     };
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", refresh);
@@ -541,9 +547,22 @@ function OrderPage() {
     });
     // Route through the active transport: direct raster print in the APK, or the
     // print_jobs queue (picked up by the bridge) otherwise — same as before on web.
-    if (kitchenJobs.length > 0) await printKitchenJobs(kitchenJobs);
-    await printCounterJobs(counterTickets);
-    toast.success(t("send_to_kitchen") + " ✓");
+    // The printers are independent. A kitchen connection failure must not prevent
+    // the counter copy (and vice versa), otherwise one offline device silently
+    // loses every ticket that follows it in the function.
+    const [kitchenResult, counterResult] = await Promise.allSettled([
+      printKitchenJobs(kitchenJobs),
+      printCounterJobs(counterTickets),
+    ]);
+    const failures = [
+      kitchenResult.status === "rejected" ? `Kitchen: ${String(kitchenResult.reason)}` : null,
+      counterResult.status === "rejected" ? `Counter: ${String(counterResult.reason)}` : null,
+    ].filter(Boolean);
+    if (failures.length > 0) {
+      toast.error(`Print failed — ${failures.join(" · ")}`, { duration: 12_000 });
+    } else {
+      toast.success(t("send_to_kitchen") + " ✓");
+    }
   };
 
   const requestVoid = (item: Item) => {

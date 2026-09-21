@@ -169,42 +169,27 @@ function CrewPage() {
       setLoading(false);
       return;
     }
-    const next = await Promise.all(
-      (tableRows ?? []).map(async (table): Promise<CrewTable> => {
-        if (table.status === "available")
-          return { ...table, status: "available", total: 0, points: 0, discount: 0, items: [] };
-        const { data: orderRows } = await supabase
-          .from("orders")
-          .select("id,shift_id")
-          .eq("table_id", table.id)
-          .eq("status", "open")
-          .order("opened_at", { ascending: false })
-          .limit(1);
-        const order = orderRows?.[0];
-        if (!order)
-          return {
-            ...table,
-            status: table.status as CrewTable["status"],
-            total: 0,
-            points: 0,
-            discount: 0,
-            items: [],
-          };
-        const [{ data: items }, { data: bill }] = await Promise.all([
-          supabase
-            .from("order_items")
-            .select("id,menu_id,name_th,name_en,name_my,qty,unit_price,notes,status")
-            .eq("order_id", order.id)
-            .neq("status", "voided")
-            .order("created_at"),
-          (supabase as any)
-            .from("bills")
-            .select(
-              "status,member_id,points_redeemed,loyalty_discount_amount,members(full_name,nickname)",
-            )
-            .eq("order_id", order.id)
-            .maybeSingle(),
-        ]);
+    const occupiedIds = (tableRows ?? []).filter((t) => t.status !== "available").map((t) => t.id);
+    const { data: orderRows } = occupiedIds.length
+      ? await supabase.from("orders").select("id,table_id,shift_id,opened_at").in("table_id", occupiedIds).eq("status", "open").order("opened_at", { ascending: false })
+      : { data: [] as any[] };
+    const orderByTable = new Map<string, any>();
+    for (const order of orderRows ?? []) if (!orderByTable.has(order.table_id)) orderByTable.set(order.table_id, order);
+    const orderIds = [...orderByTable.values()].map((order) => order.id);
+    const [{ data: allItems }, { data: allBills }] = orderIds.length
+      ? await Promise.all([
+          supabase.from("order_items").select("id,order_id,menu_id,name_th,name_en,name_my,qty,unit_price,notes,status,created_at").in("order_id", orderIds).neq("status", "voided").order("created_at"),
+          (supabase as any).from("bills").select("order_id,status,member_id,points_redeemed,loyalty_discount_amount,members(full_name,nickname)").in("order_id", orderIds),
+        ])
+      : [{ data: [] as any[] }, { data: [] as any[] }];
+    const itemsByOrder = new Map<string, any[]>();
+    for (const item of allItems ?? []) itemsByOrder.set(item.order_id, [...(itemsByOrder.get(item.order_id) ?? []), item]);
+    const billByOrder = new Map((allBills ?? []).map((bill: any) => [bill.order_id, bill]));
+    const next = (tableRows ?? []).map((table): CrewTable => {
+        const order = orderByTable.get(table.id);
+        if (!order) return { ...table, status: table.status as CrewTable["status"], total: 0, points: 0, discount: 0, items: [] };
+        const items = itemsByOrder.get(order.id) ?? [];
+        const bill: any = billByOrder.get(order.id);
         const subtotal = (items ?? []).reduce(
           (sum, item) => sum + Number(item.qty) * Number(item.unit_price),
           0,
@@ -225,8 +210,7 @@ function CrewPage() {
             unit_price: Number(item.unit_price),
           })),
         };
-      }),
-    );
+      });
     next.sort((a, b) =>
       tableLabel(a.code).localeCompare(tableLabel(b.code), undefined, { numeric: true }),
     );
