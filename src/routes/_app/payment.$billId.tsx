@@ -15,7 +15,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { ManagerPinDialog } from "@/components/ManagerPinDialog";
-import { printCounter } from "@/lib/counter-printer";
+import { openCashDrawer, printCounter } from "@/lib/counter-printer";
 import { isOffline } from "@/lib/online-status";
 import { tableLabel } from "@/lib/table";
 import { publicBaseUrl } from "@/lib/public-url";
@@ -522,7 +522,29 @@ function PaymentPage() {
         if (rollbackError) toast.error(`Payment rollback failed: ${rollbackError.message}`);
         await load();
       }
+      if (completed && method === "cash") {
+        try {
+          await openCashDrawer();
+        } catch (drawerError) {
+          toast.error(
+            drawerError instanceof Error
+              ? `Payment completed, but cash drawer did not open: ${drawerError.message}`
+              : "Payment completed, but cash drawer did not open.",
+          );
+        }
+      }
       return;
+    }
+    if (method === "cash") {
+      try {
+        await openCashDrawer();
+      } catch (drawerError) {
+        toast.error(
+          drawerError instanceof Error
+            ? `Cash payment saved, but cash drawer did not open: ${drawerError.message}`
+            : "Cash payment saved, but cash drawer did not open.",
+        );
+      }
     }
     await load();
   };

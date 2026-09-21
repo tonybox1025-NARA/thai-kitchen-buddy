@@ -156,6 +156,41 @@ export async function probePrinter(printer: PrinterName) {
 }
 
 /**
+ * Pulse the cash-drawer port on the counter printer (ESC p, pin 2).
+ *
+ * The drawer is physically attached to the receipt printer, so this follows the
+ * same per-device USB/LAN/SUNMI route as counter receipts. It is intentionally
+ * native-only: a browser must never report success for a drawer it cannot reach.
+ */
+export async function openCashDrawer() {
+  if (!canPrintDirect()) {
+    throw new Error("Cash drawer control is available only in the LONMOH POS app.");
+  }
+
+  // ESC p m t1 t2 — standard drawer-kick pulse, connector pin 2.
+  const data = toBase64(new Uint8Array([0x1b, 0x70, 0x00, 0x19, 0xfa]));
+
+  if (getCounterLink() === "usb") {
+    await PosPrinter.printUsb({ data });
+    return;
+  }
+
+  const { counter: host } = await loadPrinterIps(true);
+  if (host) {
+    await PosPrinter.printTcp({ host, data });
+    return;
+  }
+
+  const { available } = await PosPrinter.sunmiStatus().catch(() => ({ available: false }));
+  if (available) {
+    await PosPrinter.printSunmi({ data });
+    return;
+  }
+
+  throw new Error("No counter printer configured for the cash drawer.");
+}
+
+/**
  * Send one job by whichever transport this device is set to.
  * Falls back to the queue whenever direct printing is unavailable, so a
  * misconfigured tablet degrades to today's behaviour instead of losing the ticket.
