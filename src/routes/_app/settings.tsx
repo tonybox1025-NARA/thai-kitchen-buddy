@@ -70,6 +70,8 @@ import {
 import { parseBuckets, isValidBucket, type QrTimeBucket } from "@/lib/qr-buckets";
 import { isNativeApp } from "@/lib/print/native-printer";
 import { AppUpdate, getLatestAppRelease, newerVersion, type GithubRelease } from "@/lib/app-update";
+import { ManagerPinDialog } from "@/components/ManagerPinDialog";
+import { useAuth } from "@/lib/auth";
 // qrcode is dynamically imported inside QrCodesTab to avoid Node deps at SSR module-eval
 
 export const Route = createFileRoute("/_app/settings")({ component: SettingsPage });
@@ -2270,6 +2272,7 @@ function AddonsSection({
 // ── MenuTab ───────────────────────────────────────────────────────────────────
 function MenuTab() {
   const { t, lang } = useI18n();
+  const { staff } = useAuth();
   const [menus, setMenus] = useState<Menu[]>([]);
   const [cats, setCats] = useState<Category[]>([]);
   const [edit, setEdit] = useState<Partial<Menu> | null>(null);
@@ -2283,6 +2286,11 @@ function MenuTab() {
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [availabilityFilter, setAvailabilityFilter] = useState("all");
+  const [emergencyOpen, setEmergencyOpen] = useState(false);
+  const [managerPinOpen, setManagerPinOpen] = useState(false);
+  const [emergencyPrice, setEmergencyPrice] = useState(0);
+  const [emergencyReason, setEmergencyReason] = useState("");
+  const [emergencySaving, setEmergencySaving] = useState(false);
 
   const db = supabase as any;
 
@@ -2433,6 +2441,64 @@ function MenuTab() {
     setEditIngRows([]);
     setLinkedAddonIds(new Set());
     setSetComposition([]);
+  };
+
+  const openEmergencyPrice = () => {
+    setEmergencyPrice(Number(edit?.price ?? 0));
+    setEmergencyReason("");
+    setEmergencyOpen(true);
+  };
+
+  const requestEmergencyPriceApproval = () => {
+    if (!edit?.id || !edit.manager_menu_id) return;
+    if (!staff) {
+      toast.error("A staff PIN session is required");
+      return;
+    }
+    if (!Number.isFinite(emergencyPrice) || emergencyPrice < 0) {
+      toast.error("Enter a valid price");
+      return;
+    }
+    if (Number(emergencyPrice.toFixed(2)) === Number(Number(edit.price ?? 0).toFixed(2))) {
+      toast.error("The new price is unchanged");
+      return;
+    }
+    if (emergencyReason.trim().length < 3) {
+      toast.error("Enter a reason for the price change");
+      return;
+    }
+    setEmergencyOpen(false);
+    setManagerPinOpen(true);
+  };
+
+  const syncEmergencyPrice = async (managerPin: string) => {
+    if (!edit?.id || !edit.manager_menu_id || !staff) return;
+    setEmergencySaving(true);
+    try {
+      const requestId = crypto.randomUUID();
+      const { data, error } = await supabase.functions.invoke("emergency-menu-price", {
+        body: {
+          requestId,
+          menuId: edit.id,
+          newPrice: Number(emergencyPrice.toFixed(2)),
+          reason: emergencyReason.trim(),
+          requestedBy: staff.id,
+          managerPin,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      const syncedPrice = Number(data?.newPrice ?? emergencyPrice);
+      setEdit((current) => current ? { ...current, price: syncedPrice } : current);
+      await load();
+      toast.success(`Price updated in POS and Manager: ฿${syncedPrice.toFixed(2)}`);
+      setEmergencyReason("");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(`Price was not changed: ${message}`);
+    } finally {
+      setEmergencySaving(false);
+    }
   };
 
   const setGroups = [
@@ -2810,6 +2876,18 @@ function MenuTab() {
               {!edit?.is_set && (
                 <MarginIndicator price={Number(edit?.price ?? 0)} cost={Number(edit?.cost ?? 0)} />
               )}
+              {edit?.manager_menu_id && (
+                <div className="rounded-md border border-amber-300 bg-amber-50 p-3">
+                  <div className="text-sm font-semibold text-amber-900">Emergency price change</div>
+                  <p className="mt-1 text-xs text-amber-800">
+                    Requires a Manager or Admin PIN. The new selling price is saved to both POS and
+                    Manager with a permanent audit record.
+                  </p>
+                  <Button type="button" variant="outline" className="mt-3" onClick={openEmergencyPrice}>
+                    Change price with approval
+                  </Button>
+                </div>
+              )}
               <div className="flex items-center justify-between rounded-md border px-3 py-2">
                 <div>
                   <div className="text-sm font-medium">Available for sale</div>
@@ -2930,6 +3008,41 @@ function MenuTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={emergencyOpen} onOpenChange={setEmergencyOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Emergency price change</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-md border bg-muted/30 p-3">
+              <div className="font-semibold">{edit?.name_th}</div>
+              <div className="text-sm text-muted-foreground">Current price: ฿{Number(edit?.price ?? 0).toFixed(2)}</div>
+            </div>
+            <div>
+              <Label>New selling price (฿)</Label>
+              <KeypadInput value={emergencyPrice} onChange={setEmergencyPrice} title="New selling price" decimal />
+            </div>
+            <div>
+              <Label>Reason</Label>
+              <Input value={emergencyReason} onChange={(event) => setEmergencyReason(event.target.value)}
+                placeholder="Example: supplier price increased" maxLength={500} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEmergencyOpen(false)}>Cancel</Button>
+            <Button onClick={requestEmergencyPriceApproval}>Continue to Manager approval</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ManagerPinDialog open={managerPinOpen} onOpenChange={setManagerPinOpen}
+        onApproved={(pin) => void syncEmergencyPrice(pin)} />
+      {emergencySaving && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40">
+          <div className="rounded-lg bg-background px-6 py-4 font-semibold shadow-xl">Updating POS and Manager…</div>
+        </div>
+      )}
     </div>
   );
 }
