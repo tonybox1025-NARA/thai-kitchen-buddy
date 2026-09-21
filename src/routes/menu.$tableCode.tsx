@@ -23,6 +23,7 @@ import {
   RefreshCw,
   Gift,
   ArrowLeft,
+  Search,
 } from "lucide-react";
 import { toast } from "sonner";
 import { SETS, SET_C_DRINKS, type SetDef, type SetConfig, type SetItem } from "@/lib/set-menu";
@@ -580,6 +581,9 @@ function CustomerMenu() {
   const [checkout, setCheckout] = useState<CheckoutState | null>(null);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [memberPhone, setMemberPhone] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [signupOpen, setSignupOpen] = useState(false);
+  const [signupName, setSignupName] = useState("");
   // Set menu state
   const [selectedSetDef, setSelectedSetDef] = useState<SetDef | null>(null);
   const [setMenuOrigin, setSetMenuOrigin] = useState<Menu | null>(null);
@@ -684,6 +688,34 @@ function CustomerMenu() {
     }
   };
 
+  const registerMember = async () => {
+    if (!signupName.trim() || memberPhone.replace(/\D/g, "").length < 9) return;
+    setCheckoutBusy(true);
+    try {
+      const response = await fetch(`/api/public/checkout/${encodeURIComponent(tableCode)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "register_member",
+          guest_token: walletToken(),
+          full_name: signupName,
+          phone: memberPhone,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Unable to register member");
+      await loadCheckout();
+      setSignupOpen(false);
+      setSignupName("");
+      setMemberPhone("");
+      toast.success(lang === "th" ? "สมัครสมาชิกแล้ว" : "Membership created");
+    } catch (signupError) {
+      toast.error(signupError instanceof Error ? signupError.message : "Unable to register member");
+    } finally {
+      setCheckoutBusy(false);
+    }
+  };
+
   useEffect(() => {
     const ac = new AbortController();
     fetch(`/api/public/qr-menu/${encodeURIComponent(tableCode)}`, { signal: ac.signal })
@@ -743,20 +775,26 @@ function CustomerMenu() {
 
   const filtered = useMemo(() => {
     if (!data) return [];
-    return activeCat === "all"
-      ? allMenusSorted
-      : allMenusSorted.filter((m) => m.category_id === activeCat);
-  }, [allMenusSorted, activeCat, data]);
+    const byCategory =
+      activeCat === "all"
+        ? allMenusSorted
+        : allMenusSorted.filter((m) => m.category_id === activeCat);
+    const query = searchQuery.trim().toLocaleLowerCase();
+    if (!query) return byCategory;
+    return byCategory.filter((menu) =>
+      `${menu.name_th} ${menu.name_en}`.toLocaleLowerCase().includes(query),
+    );
+  }, [allMenusSorted, activeCat, data, searchQuery]);
 
   const menuSections = useMemo(() => {
     if (!data || activeCat !== "all") return [];
     return orderedCategories
       .map((category) => ({
         category,
-        menus: allMenusSorted.filter((menu) => menu.category_id === category.id),
+        menus: filtered.filter((menu) => menu.category_id === category.id),
       }))
       .filter((section) => section.menus.length > 0);
-  }, [activeCat, allMenusSorted, data, orderedCategories]);
+  }, [activeCat, data, filtered, orderedCategories]);
 
   const cartTotal = useMemo(() => cart.reduce((s, c) => s + c.qty * c.price, 0), [cart]);
   const cartCount = useMemo(() => cart.reduce((s, c) => s + c.qty, 0), [cart]);
@@ -1048,6 +1086,26 @@ function CustomerMenu() {
             ))}
           </div>
         </div>
+        {crewMode && (
+          <div className="mx-auto max-w-2xl px-4 pb-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="search"
+                enterKeyHint="search"
+                autoComplete="off"
+                className="h-12 rounded-xl bg-background pl-10 text-base"
+                placeholder={
+                  lang === "th"
+                    ? "ค้นหาเมนู (พิมพ์หรือใช้ไมค์)"
+                    : "Search menu (type or use microphone)"
+                }
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+              />
+            </div>
+          </div>
+        )}
       </header>
 
       {/* ── Menu list — compact rows with a larger thumbnail ── */}
@@ -1347,11 +1405,26 @@ function CustomerMenu() {
                       {lang === "th" ? "เชื่อมต่อ" : "Connect"}
                     </Button>
                   </div>
+                  <Button type="button" className="w-full" onClick={() => setSignupOpen(true)}>
+                    {lang === "th" ? "สมัครสมาชิกใหม่" : "New member sign up"}
+                  </Button>
                 </div>
               )}
 
               {checkout.member && checkout.member.imported_from !== "guest_wallet" && (
                 <div className="space-y-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => {
+                      window.location.href = "/wallet";
+                    }}
+                  >
+                    {lang === "th"
+                      ? "เปิดบัตรสมาชิก / เชื่อมต่อ LINE"
+                      : "Open member card / Connect LINE"}
+                  </Button>
                   <div className="font-semibold">{tr.use_reward}</div>
                   <div className="grid grid-cols-2 gap-2">
                     {checkout.rewards.map((reward) => {
@@ -1398,6 +1471,49 @@ function CustomerMenu() {
               </Button>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={signupOpen} onOpenChange={setSignupOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{lang === "th" ? "สมัครสมาชิกใหม่" : "New member sign up"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>{lang === "th" ? "ชื่อ" : "Name"}</Label>
+              <Input
+                autoComplete="name"
+                value={signupName}
+                onChange={(event) => setSignupName(event.target.value)}
+              />
+            </div>
+            <div>
+              <Label>{lang === "th" ? "เบอร์โทรศัพท์" : "Phone number"}</Label>
+              <Input
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                value={memberPhone}
+                onChange={(event) => setMemberPhone(event.target.value)}
+              />
+            </div>
+            <Button
+              className="h-12 w-full"
+              disabled={
+                checkoutBusy || !signupName.trim() || memberPhone.replace(/\D/g, "").length < 9
+              }
+              onClick={() => void registerMember()}
+            >
+              {checkoutBusy
+                ? lang === "th"
+                  ? "กำลังสมัคร…"
+                  : "Creating…"
+                : lang === "th"
+                  ? "สมัครและเชื่อมต่อ"
+                  : "Create and connect"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
