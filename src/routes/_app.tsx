@@ -9,12 +9,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { LayoutGrid, BarChart3, FileText, Settings, LogOut, UserCircle2, Heart, UtensilsCrossed, BadgePercent, Activity, Wallet, Smartphone } from "lucide-react";
+import { LayoutGrid, BarChart3, FileText, Settings, LogOut, UserCircle2, Heart, UtensilsCrossed, BadgePercent, Activity, Wallet } from "lucide-react";
 import { installAudioUnlockListeners, unlockAudio } from "@/lib/audio-alert";
 import { useQrAlertCount } from "@/lib/qr-alert-count";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { useNativePrintQueue } from "@/lib/native-print-queue";
-import { isNativeApp } from "@/lib/print/native-printer";
 
 export const Route = createFileRoute("/_app")({ component: AppLayout });
 
@@ -82,7 +81,6 @@ function AppLayout() {
   }
 
   const navItems = [
-    ...(!isNativeApp() ? [{ to: "/crew", label: "Crew", icon: Smartphone }] : []),
     { to: "/live", label: t("nav_live"), icon: Activity },
     { to: "/dashboard", label: t("nav_dashboard"), icon: BarChart3 },
     { to: "/pos", label: t("nav_pos"), icon: LayoutGrid },
