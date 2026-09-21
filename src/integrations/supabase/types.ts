@@ -316,6 +316,93 @@ export type Database = {
           },
         ]
       }
+      emergency_menu_price_changes: {
+        Row: {
+          approved_by: string
+          approved_by_name: string
+          created_at: string
+          error_message: string | null
+          id: string
+          manager_menu_id: string
+          menu_id: string
+          new_price: number
+          old_price: number
+          reason: string
+          request_id: string
+          requested_by: string
+          status: string
+          synced_at: string | null
+        }
+        Insert: {
+          approved_by: string
+          approved_by_name: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          manager_menu_id: string
+          menu_id: string
+          new_price: number
+          old_price: number
+          reason: string
+          request_id: string
+          requested_by: string
+          status?: string
+          synced_at?: string | null
+        }
+        Update: {
+          approved_by?: string
+          approved_by_name?: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          manager_menu_id?: string
+          menu_id?: string
+          new_price?: number
+          old_price?: number
+          reason?: string
+          request_id?: string
+          requested_by?: string
+          status?: string
+          synced_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "emergency_menu_price_changes_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "emergency_menu_price_changes_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "staff_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "emergency_menu_price_changes_menu_id_fkey"
+            columns: ["menu_id"]
+            isOneToOne: false
+            referencedRelation: "menus"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "emergency_menu_price_changes_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "emergency_menu_price_changes_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "staff_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ingredients: {
         Row: {
           cost_per_unit: number
@@ -1654,6 +1741,14 @@ export type Database = {
           bill_status: Database["public"]["Enums"]["bill_status"]
         }[]
       }
+      finish_emergency_menu_price_change: {
+        Args: {
+          p_error_message?: string
+          p_request_id: string
+          p_success: boolean
+        }
+        Returns: undefined
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1680,6 +1775,24 @@ export type Database = {
         Returns: Json
       }
       normalize_member_phone: { Args: { p_phone: string }; Returns: string }
+      prepare_emergency_menu_price_change: {
+        Args: {
+          p_manager_pin: string
+          p_menu_id: string
+          p_new_price: number
+          p_reason: string
+          p_request_id: string
+          p_requested_by: string
+        }
+        Returns: {
+          approved_by: string
+          approved_by_name: string
+          change_id: string
+          manager_menu_id: string
+          new_price: number
+          old_price: number
+        }[]
+      }
       process_bill_loyalty: {
         Args: {
           p_bill_id: string
