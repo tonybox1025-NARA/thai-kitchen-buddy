@@ -46,7 +46,7 @@ type CrewTable = {
   memberName?: string | null;
   items: CrewItem[];
 };
-type TableFilter = "all" | "available" | "serving";
+type TableFilter = "available" | "serving";
 const VOID_REASON_KEYS = ["changedMind", "wrongOrder", "other"] as const;
 type VoidReasonKey = (typeof VOID_REASON_KEYS)[number];
 
@@ -119,7 +119,7 @@ function CrewPage() {
         };
   const [tables, setTables] = useState<CrewTable[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<TableFilter>("all");
+  const [filter, setFilter] = useState<TableFilter>("available");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [revealedItem, setRevealedItem] = useState<string | null>(null);
   const [voidItem, setVoidItem] = useState<CrewItem | null>(null);
@@ -140,9 +140,7 @@ function CrewPage() {
   const visibleTables = useMemo(
     () =>
       tables.filter((table) => {
-        if (filter === "available") return table.status === "available";
-        if (filter === "serving") return table.status !== "available";
-        return true;
+        return filter === "available" ? table.status === "available" : table.status !== "available";
       }),
     [filter, tables],
   );
@@ -364,7 +362,7 @@ function CrewPage() {
       <div className="mb-4 grid grid-cols-2 rounded-2xl bg-muted p-1.5">
         <button
           className={`rounded-xl px-3 py-3 font-bold ${filter === "available" ? "bg-background shadow-sm" : "text-muted-foreground"}`}
-          onClick={() => setFilter(filter === "available" ? "all" : "available")}
+          onClick={() => setFilter("available")}
         >
           {c.available}{" "}
           <Badge variant="secondary" className="ml-1">
@@ -373,26 +371,13 @@ function CrewPage() {
         </button>
         <button
           className={`rounded-xl px-3 py-3 font-bold ${filter === "serving" ? "bg-background shadow-sm" : "text-muted-foreground"}`}
-          onClick={() => setFilter(filter === "serving" ? "all" : "serving")}
+          onClick={() => setFilter("serving")}
         >
           {c.serving}{" "}
           <Badge variant="secondary" className="ml-1">
             {counts.serving}
           </Badge>
         </button>
-      </div>
-      <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
-        {(["all", "available", "serving"] as TableFilter[]).map((value) => (
-          <Button
-            key={value}
-            size="sm"
-            variant={filter === value ? "default" : "outline"}
-            className="rounded-full capitalize"
-            onClick={() => setFilter(value)}
-          >
-            {value === "all" ? c.all : value === "available" ? c.available : c.serving}
-          </Button>
-        ))}
       </div>
       <div className="grid grid-cols-2 gap-3">
         {visibleTables.map((table) => {
