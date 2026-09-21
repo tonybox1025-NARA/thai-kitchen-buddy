@@ -861,21 +861,6 @@ function OrderPage() {
           </div>
         </div>
 
-        {tableHasQrAlert && (
-          <div className="mx-4 mb-3 rounded-xl border border-destructive bg-destructive/10 p-3 text-sm flex items-center gap-3">
-            <Bell className="h-5 w-5 text-destructive animate-pulse shrink-0" />
-            <div className="min-w-0">
-              <div className="font-semibold text-destructive">{t("qr_alert")}</div>
-              <div className="text-muted-foreground">
-                {lang === "th" ? "ตรวจรายการ QR ที่เพิ่งเข้ามา แล้วกดรับทราบ" : "Review the latest QR order, then mark it checked."}
-              </div>
-            </div>
-            <Button size="sm" className="ml-auto shrink-0" onClick={acknowledgeQrAlert}>
-              {lang === "th" ? "รับทราบ" : "Checked"}
-            </Button>
-          </div>
-        )}
-
         {/* MERI-style category grid: eight large choices per horizontally scrollable page. */}
         <div className="sticky top-0 z-10 shrink-0 border-b bg-background px-4 py-3 shadow-sm">
           <div
@@ -944,8 +929,24 @@ function OrderPage() {
 
       {/* Order panel */}
       <aside className="min-h-0 min-w-0 overflow-hidden border-l bg-card flex flex-col">
-        <div className="p-4 border-b">
+        <div className="flex min-h-16 items-center justify-between gap-2 border-b p-4">
           <h2 className="font-bold">{t("order")}</h2>
+          {tableHasQrAlert && (
+            <Button
+              size="sm"
+              variant="destructive"
+              className="shrink-0 gap-1.5"
+              onClick={acknowledgeQrAlert}
+              title={
+                lang === "th"
+                  ? "ตรวจรายการ QR ที่เพิ่งเข้ามา แล้วกดรับทราบ"
+                  : "Review the latest QR order, then mark it checked."
+              }
+            >
+              <Bell className="h-4 w-4 animate-pulse" />
+              {lang === "th" ? "QR ใหม่ · รับทราบ" : "New QR · Checked"}
+            </Button>
+          )}
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 space-y-3">
           {liveItems.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">{t("empty_order")}</p>}
