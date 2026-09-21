@@ -7,7 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ManagerPinDialog } from "@/components/ManagerPinDialog";
+import { LanguageToggle } from "@/components/LanguageToggle";
 import { useAuth } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
 import {
   printCounterJobs,
   printKitchenJobs,
@@ -45,18 +47,84 @@ type CrewTable = {
   items: CrewItem[];
 };
 type TableFilter = "all" | "available" | "serving";
-const VOID_REASONS = ["Customer changed mind", "Wrong order", "Other"];
+const VOID_REASON_KEYS = ["changedMind", "wrongOrder", "other"] as const;
+type VoidReasonKey = (typeof VOID_REASON_KEYS)[number];
 
 function CrewPage() {
   const { staff } = useAuth();
+  const { lang } = useI18n();
+  const c =
+    lang === "th"
+      ? {
+          title: "โต๊ะ",
+          subtitle: "สั่งอาหาร · ตรวจบิล · บริการลูกค้า",
+          available: "ว่าง",
+          serving: "กำลังให้บริการ",
+          all: "ทั้งหมด",
+          billRequested: "เรียกเก็บเงิน",
+          currentTotal: "ยอดปัจจุบัน",
+          empty: "ไม่มีโต๊ะในรายการนี้",
+          table: "โต๊ะ",
+          swipe: "ปัดรายการไปทางซ้ายเพื่อยกเลิก รายการที่ส่งแล้วจะพิมพ์ใบยกเลิก",
+          member: "สมาชิก",
+          points: "แต้ม",
+          rewardDiscount: "ส่วนลดคะแนน",
+          total: "รวม",
+          addOrder: "เพิ่มออเดอร์",
+          void: "ยกเลิก",
+          paidBlocked: "ไม่สามารถแก้ไขบิลที่ชำระแล้ว",
+          alreadyVoided: "รายการนี้ถูกยกเลิกแล้ว",
+          auditFailed: "บันทึก VOID ไม่สำเร็จ",
+          printFailed: "ยกเลิกรายการแล้ว แต่พิมพ์ใบยกเลิกไม่สำเร็จ",
+          voided: "ยกเลิกรายการและบันทึกแล้ว",
+          voidTitle: "ยกเลิกรายการ",
+          voidHelp: "รายการจะยังอยู่ในรายงาน VOID และไม่ถูกรวมเป็นยอดขายปกติ",
+          changedMind: "ลูกค้าเปลี่ยนใจ",
+          wrongOrder: "สั่งผิด",
+          other: "อื่นๆ",
+          enterReason: "ระบุเหตุผล",
+          confirmVoid: "ยืนยันยกเลิก",
+          voiding: "กำลังยกเลิก…",
+        }
+      : {
+          title: "Tables",
+          subtitle: "Order · check bill · assisted service",
+          available: "Available",
+          serving: "Serving",
+          all: "All",
+          billRequested: "Bill requested",
+          currentTotal: "Current total",
+          empty: "No tables in this view",
+          table: "Table",
+          swipe: "Swipe an item left to void it. Sent items print a cancellation slip.",
+          member: "Member",
+          points: "points",
+          rewardDiscount: "Reward discount",
+          total: "Total",
+          addOrder: "Add order",
+          void: "VOID",
+          paidBlocked: "A paid bill cannot be changed",
+          alreadyVoided: "This item was already voided",
+          auditFailed: "VOID audit failed",
+          printFailed: "Item voided, but cancellation print failed",
+          voided: "Item voided and recorded",
+          voidTitle: "Void item",
+          voidHelp: "This stays in the VOID report and cannot be mistaken for a normal sale.",
+          changedMind: "Customer changed mind",
+          wrongOrder: "Wrong order",
+          other: "Other",
+          enterReason: "Enter reason",
+          confirmVoid: "Confirm VOID",
+          voiding: "Voiding…",
+        };
   const [tables, setTables] = useState<CrewTable[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<TableFilter>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [revealedItem, setRevealedItem] = useState<string | null>(null);
   const [voidItem, setVoidItem] = useState<CrewItem | null>(null);
-  const [voidPreset, setVoidPreset] = useState(VOID_REASONS[0]);
-  const [voidReason, setVoidReason] = useState(VOID_REASONS[0]);
+  const [voidPreset, setVoidPreset] = useState<VoidReasonKey>("changedMind");
+  const [voidReason, setVoidReason] = useState("");
   const [voiding, setVoiding] = useState(false);
   const [managerOpen, setManagerOpen] = useState(false);
   const touchStart = useRef(0);
@@ -183,11 +251,11 @@ function CrewPage() {
   };
   const requestVoid = (item: CrewItem) => {
     if (selected?.billStatus === "paid") {
-      toast.error("A paid bill cannot be changed");
+      toast.error(c.paidBlocked);
       return;
     }
-    setVoidPreset(VOID_REASONS[0]);
-    setVoidReason(VOID_REASONS[0]);
+    setVoidPreset("changedMind");
+    setVoidReason(c.changedMind);
     setVoidItem(item);
   };
   const confirmVoid = async () => {
@@ -208,7 +276,7 @@ function CrewPage() {
       .eq("id", voidItem.id)
       .single();
     if (latestError || latest?.status === "voided" || latest?.voided_at) {
-      toast.error("This item was already voided");
+      toast.error(c.alreadyVoided);
       setVoiding(false);
       setVoidItem(null);
       await load();
@@ -229,17 +297,15 @@ function CrewPage() {
       setVoiding(false);
       return;
     }
-    const { error: auditError } = await supabase
-      .from("voids")
-      .insert({
-        order_item_id: voidItem.id,
-        reason: voidReason.trim(),
-        voided_by: staff?.id,
-        amount: voidItem.qty * voidItem.unit_price,
-        shift_id: selected.shiftId ?? null,
-      });
+    const { error: auditError } = await supabase.from("voids").insert({
+      order_item_id: voidItem.id,
+      reason: voidReason.trim(),
+      voided_by: staff?.id,
+      amount: voidItem.qty * voidItem.unit_price,
+      shift_id: selected.shiftId ?? null,
+    });
     if (auditError) {
-      toast.error(`VOID audit failed: ${auditError.message}`);
+      toast.error(`${c.auditFailed}: ${auditError.message}`);
       setVoiding(false);
       return;
     }
@@ -270,11 +336,11 @@ function CrewPage() {
         await printCounterJobs([{ ...payload, footer: "counter" }]);
       } catch (error) {
         toast.error(
-          `Item voided, but cancellation print failed: ${error instanceof Error ? error.message : "unknown error"}`,
+          `${c.printFailed}: ${error instanceof Error ? error.message : "unknown error"}`,
         );
       }
     }
-    toast.success("Item voided and recorded");
+    toast.success(c.voided);
     setVoidItem(null);
     setRevealedItem(null);
     setVoiding(false);
@@ -285,19 +351,22 @@ function CrewPage() {
     <div className="mx-auto max-w-xl p-4 pb-24">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-black">Tables</h1>
-          <p className="text-sm text-muted-foreground">Order · check bill · assisted service</p>
+          <h1 className="text-3xl font-black">{c.title}</h1>
+          <p className="text-sm text-muted-foreground">{c.subtitle}</p>
         </div>
-        <Button variant="outline" size="icon" onClick={() => void load()} disabled={loading}>
-          <RefreshCw className={`h-5 w-5 ${loading ? "animate-spin" : ""}`} />
-        </Button>
+        <div className="flex items-center gap-2">
+          <LanguageToggle />
+          <Button variant="outline" size="icon" onClick={() => void load()} disabled={loading}>
+            <RefreshCw className={`h-5 w-5 ${loading ? "animate-spin" : ""}`} />
+          </Button>
+        </div>
       </div>
       <div className="mb-4 grid grid-cols-2 rounded-2xl bg-muted p-1.5">
         <button
           className={`rounded-xl px-3 py-3 font-bold ${filter === "available" ? "bg-background shadow-sm" : "text-muted-foreground"}`}
           onClick={() => setFilter(filter === "available" ? "all" : "available")}
         >
-          Available{" "}
+          {c.available}{" "}
           <Badge variant="secondary" className="ml-1">
             {counts.available}
           </Badge>
@@ -306,7 +375,7 @@ function CrewPage() {
           className={`rounded-xl px-3 py-3 font-bold ${filter === "serving" ? "bg-background shadow-sm" : "text-muted-foreground"}`}
           onClick={() => setFilter(filter === "serving" ? "all" : "serving")}
         >
-          Serving{" "}
+          {c.serving}{" "}
           <Badge variant="secondary" className="ml-1">
             {counts.serving}
           </Badge>
@@ -321,7 +390,7 @@ function CrewPage() {
             className="rounded-full capitalize"
             onClick={() => setFilter(value)}
           >
-            {value}
+            {value === "all" ? c.all : value === "available" ? c.available : c.serving}
           </Button>
         ))}
       </div>
@@ -352,9 +421,9 @@ function CrewPage() {
               ) : (
                 <>
                   {table.status === "bill_requested" && (
-                    <Badge className="mt-3 bg-orange-500">Bill requested</Badge>
+                    <Badge className="mt-3 bg-orange-500">{c.billRequested}</Badge>
                   )}
-                  <div className="mt-5 text-sm text-muted-foreground">Current total</div>
+                  <div className="mt-5 text-sm text-muted-foreground">{c.currentTotal}</div>
                   <div className="text-right text-2xl font-black">฿{table.total.toFixed(0)}</div>
                 </>
               )}
@@ -363,7 +432,7 @@ function CrewPage() {
         })}
       </div>
       {!loading && visibleTables.length === 0 && (
-        <div className="py-20 text-center text-muted-foreground">No tables in this view</div>
+        <div className="py-20 text-center text-muted-foreground">{c.empty}</div>
       )}
 
       <Dialog
@@ -378,23 +447,21 @@ function CrewPage() {
         <DialogContent className="max-h-[94dvh] overflow-y-auto p-4 sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-2xl">
-              Table {selected ? tableLabel(selected.code) : ""}
+              {c.table} {selected ? tableLabel(selected.code) : ""}
             </DialogTitle>
           </DialogHeader>
           {selected?.points ? (
             <div className="rounded-xl border border-green-300 bg-green-50 p-3 text-sm text-green-800">
               <b>
-                {selected.memberName || "Member"} · {selected.points.toLocaleString()} points
+                {selected.memberName || c.member} · {selected.points.toLocaleString()} {c.points}
               </b>
               <div className="flex justify-between">
-                <span>Reward discount</span>
+                <span>{c.rewardDiscount}</span>
                 <span>−฿{selected.discount.toFixed(0)}</span>
               </div>
             </div>
           ) : null}
-          <p className="text-xs text-muted-foreground">
-            Swipe an item left to void it. Sent items print a cancellation slip.
-          </p>
+          <p className="text-xs text-muted-foreground">{c.swipe}</p>
           <div className="space-y-2">
             {selected?.items.map((item) => (
               <div key={item.id} className="relative overflow-hidden rounded-xl bg-red-600">
@@ -403,7 +470,7 @@ function CrewPage() {
                   onClick={() => requestVoid(item)}
                 >
                   <Trash2 className="mb-1 h-5 w-5" />
-                  VOID
+                  {c.void}
                 </button>
                 <div
                   className={`relative rounded-xl border bg-background p-3 transition-transform ${revealedItem === item.id ? "-translate-x-24" : "translate-x-0"}`}
@@ -419,7 +486,11 @@ function CrewPage() {
                   <div className="flex justify-between gap-3">
                     <div>
                       <span className="mr-2 font-bold text-primary">{item.qty}×</span>
-                      <span className="font-semibold">{item.name_th || item.name_en}</span>
+                      <span className="font-semibold">
+                        {lang === "th"
+                          ? item.name_th || item.name_en
+                          : item.name_en || item.name_th}
+                      </span>
                     </div>
                     <span className="font-semibold">
                       ฿{(item.qty * item.unit_price).toFixed(0)}
@@ -442,14 +513,14 @@ function CrewPage() {
               </div>
             )}
             <div className="flex justify-between text-xl font-black">
-              <span>Total</span>
+              <span>{c.total}</span>
               <span>฿{selected?.total.toFixed(0)}</span>
             </div>
           </div>
           {selected && (
             <Button onClick={() => openOrder(selected)}>
               <ShoppingCart className="mr-2 h-4 w-4" />
-              Add order
+              {c.addOrder}
             </Button>
           )}
         </DialogContent>
@@ -463,30 +534,33 @@ function CrewPage() {
       >
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Void {voidItem?.name_th || voidItem?.name_en}</DialogTitle>
+            <DialogTitle>
+              {c.voidTitle}:{" "}
+              {lang === "th"
+                ? voidItem?.name_th || voidItem?.name_en
+                : voidItem?.name_en || voidItem?.name_th}
+            </DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            This stays in the VOID report and cannot be mistaken for a normal sale.
-          </p>
+          <p className="text-sm text-muted-foreground">{c.voidHelp}</p>
           <div className="grid gap-2">
-            {VOID_REASONS.map((reason) => (
+            {VOID_REASON_KEYS.map((reason) => (
               <Button
                 key={reason}
                 type="button"
                 variant={voidPreset === reason ? "default" : "outline"}
                 onClick={() => {
                   setVoidPreset(reason);
-                  setVoidReason(reason === "Other" ? "" : reason);
+                  setVoidReason(reason === "other" ? "" : c[reason]);
                 }}
               >
-                {reason}
+                {c[reason]}
               </Button>
             ))}
           </div>
-          {voidPreset === "Other" && (
+          {voidPreset === "other" && (
             <Input
               autoFocus
-              placeholder="Enter reason"
+              placeholder={c.enterReason}
               value={voidReason}
               onChange={(event) => setVoidReason(event.target.value)}
             />
@@ -496,7 +570,7 @@ function CrewPage() {
             onClick={() => void confirmVoid()}
             disabled={voiding || !voidReason.trim()}
           >
-            {voiding ? "Voiding…" : "Confirm VOID"}
+            {voiding ? c.voiding : c.confirmVoid}
           </Button>
         </DialogContent>
       </Dialog>
