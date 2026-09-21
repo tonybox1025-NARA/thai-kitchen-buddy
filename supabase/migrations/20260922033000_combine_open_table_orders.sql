@@ -140,7 +140,10 @@ BEGIN
   WHERE id = p_source_order_id;
 
   UPDATE public.restaurant_tables
-  SET status = CASE WHEN v_target_table.status = 'bill_requested' THEN 'bill_requested' ELSE 'occupied' END,
+  SET status = CASE
+        WHEN v_target_table.status = 'bill_requested' THEN 'bill_requested'::public.table_status
+        ELSE 'occupied'::public.table_status
+      END,
       guests = v_guests,
       has_qr_alert = COALESCE(v_target_table.has_qr_alert, false) OR COALESCE(v_source_table.has_qr_alert, false)
   WHERE id = v_target.table_id;

@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { CountKeypad } from "@/components/CountKeypad";
-import { Bell, Users, X, ShoppingBag, UtensilsCrossed, Plus, QrCode } from "lucide-react";
+import { ManagerPinDialog } from "@/components/ManagerPinDialog";
+import { Bell, Users, X, ShoppingBag, UtensilsCrossed, Plus, QrCode, Merge } from "lucide-react";
 import { toast } from "sonner";
 import { playAlertBeep } from "@/lib/audio-alert";
 import { printCounter } from "@/lib/counter-printer";
@@ -29,8 +30,16 @@ type SpecialOrder = {
   source: "takeout" | "staff_meal";
 };
 
+type CombineOption = {
+  orderId: string;
+  tableId: string;
+  code: string;
+  guests: number;
+  subtotal: number;
+};
+
 function PosPage() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const { staff } = useAuth();
   const nav = useNavigate();
   const [tables, setTables] = useState<RTable[]>([]);
@@ -40,6 +49,12 @@ function PosPage() {
   const [specialOrders, setSpecialOrders] = useState<SpecialOrder[]>([]);
   // Table view filter: show all tables, only free ones, or only in-use ones (MERI-style).
   const [tableFilter, setTableFilter] = useState<"all" | "available" | "occupied">("all");
+  const [combineOpen, setCombineOpen] = useState(false);
+  const [combineOptions, setCombineOptions] = useState<CombineOption[]>([]);
+  const [combineSelected, setCombineSelected] = useState<string[]>([]);
+  const [combineTargetId, setCombineTargetId] = useState<string | null>(null);
+  const [combineBusy, setCombineBusy] = useState(false);
+  const [combinePinOpen, setCombinePinOpen] = useState(false);
 
   const load = async () => {
     const { data } = await supabase.from("restaurant_tables").select("*").order("code");
@@ -191,6 +206,81 @@ function PosPage() {
     nav({ to: "/order/$orderId", params: { orderId: order.id } });
   };
 
+  const openCombine = async () => {
+    const { data, error } = await (supabase as any)
+      .from("orders")
+      .select("id,table_id,guests,restaurant_tables!inner(id,code,status),order_items(qty,unit_price,status)")
+      .eq("status", "open")
+      .not("table_id", "is", null);
+    if (error) { toast.error(error.message); return; }
+    const options = (data ?? []).map((row: any) => ({
+      orderId: row.id,
+      tableId: row.table_id,
+      code: row.restaurant_tables?.code ?? "",
+      guests: Number(row.guests ?? 0),
+      subtotal: (row.order_items ?? [])
+        .filter((item: any) => item.status !== "voided")
+        .reduce((sum: number, item: any) => sum + Number(item.qty) * Number(item.unit_price), 0),
+    })).filter((row: CombineOption) => row.code)
+      .sort((a: CombineOption, b: CombineOption) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+    if (options.length < 2) {
+      toast.info(lang === "th" ? "ต้องมีโต๊ะที่กำลังใช้งานอย่างน้อย 2 โต๊ะ" : "At least two serving tables are required");
+      return;
+    }
+    setCombineOptions(options);
+    setCombineSelected([]);
+    setCombineTargetId(null);
+    setCombineOpen(true);
+  };
+
+  const toggleCombineTable = (orderId: string) => {
+    setCombineSelected((current) => {
+      if (current.includes(orderId)) {
+        const next = current.filter((id) => id !== orderId);
+        if (combineTargetId === orderId) setCombineTargetId(next[0] ?? null);
+        return next;
+      }
+      if (current.length >= 2) return current;
+      const next = [...current, orderId];
+      if (next.length === 2 && !combineTargetId) setCombineTargetId(next[0]);
+      return next;
+    });
+  };
+
+  const combineChosenTables = async () => {
+    if (combineSelected.length !== 2 || !combineTargetId || combineBusy) return;
+    const sourceOrderId = combineSelected.find((id) => id !== combineTargetId);
+    if (!sourceOrderId) return;
+    setCombineBusy(true);
+    const { data, error } = await (supabase as any).rpc("combine_open_table_orders", {
+      p_target_order_id: combineTargetId,
+      p_source_order_id: sourceOrderId,
+      p_merged_by: staff?.id ?? null,
+    });
+    setCombineBusy(false);
+    if (error) {
+      toast.error(error.message.includes("payment, member points, or discounts")
+        ? (lang === "th" ? "รวมไม่ได้: เริ่มชำระเงิน ใช้แต้ม หรือส่วนลดแล้ว" : "Cannot combine: payment, points, or a discount has already started")
+        : error.message);
+      return;
+    }
+    const target = combineOptions.find((x) => x.orderId === combineTargetId);
+    const result = data?.[0];
+    setCombineOpen(false);
+    setCombineSelected([]);
+    setCombineTargetId(null);
+    await load();
+    toast.success(lang === "th"
+      ? `รวมโต๊ะแล้ว · ชำระที่โต๊ะ ${tableLabel(target?.code)} · ${result?.combined_guests ?? ""} คน`
+      : `Tables combined · Pay at table ${tableLabel(target?.code)} · ${result?.combined_guests ?? ""} guests`);
+  };
+
+  const requestCombine = () => {
+    if (combineSelected.length !== 2 || !combineTargetId) return;
+    if (staff?.role === "staff") setCombinePinOpen(true);
+    else void combineChosenTables();
+  };
+
   const takeoutOrders = specialOrders.filter((o) => o.source === "takeout");
   const staffOrders = specialOrders.filter((o) => o.source === "staff_meal");
   const availCount = tables.filter((x) => x.status === "available").length;
@@ -271,8 +361,11 @@ function PosPage() {
         </div>
       )}
 
-      <div className="mb-5">
+      <div className="mb-5 flex items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">{t("nav_pos")}</h1>
+        <Button variant="outline" onClick={openCombine}>
+          <Merge className="h-4 w-4 mr-1" />{lang === "th" ? "รวมโต๊ะ" : "Combine tables"}
+        </Button>
       </div>
       <div className="tbl-floor-wrap">
         <div className="tbl-floor">
@@ -348,6 +441,62 @@ function PosPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={combineOpen} onOpenChange={(open) => { if (!combineBusy) setCombineOpen(open); }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{lang === "th" ? "รวมโต๊ะเพื่อชำระครั้งเดียว" : "Combine tables for one payment"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              {lang === "th" ? "เลือก 2 โต๊ะ แล้วเลือกว่าจะเก็บโต๊ะใดไว้สำหรับชำระเงิน" : "Choose two tables, then choose which table remains for payment."}
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[45vh] overflow-y-auto">
+              {combineOptions.map((option) => {
+                const selected = combineSelected.includes(option.orderId);
+                return (
+                  <button
+                    key={option.orderId}
+                    type="button"
+                    onClick={() => toggleCombineTable(option.orderId)}
+                    className={`rounded-xl border p-3 text-left transition-colors ${selected ? "border-primary bg-primary/10 ring-2 ring-primary" : "hover:bg-muted/60"}`}
+                  >
+                    <div className="text-lg font-bold">{lang === "th" ? "โต๊ะ" : "Table"} {tableLabel(option.code)}</div>
+                    <div className="text-sm text-muted-foreground">{option.guests} {lang === "th" ? "คน" : "guests"} · ฿{option.subtotal.toFixed(2)}</div>
+                  </button>
+                );
+              })}
+            </div>
+            {combineSelected.length === 2 && (
+              <div className="rounded-xl border bg-muted/30 p-4 space-y-2">
+                <Label>{lang === "th" ? "เลือกโต๊ะสำหรับชำระเงิน" : "Choose the payment table"}</Label>
+                <div className="grid grid-cols-2 gap-3">
+                  {combineSelected.map((id) => {
+                    const option = combineOptions.find((x) => x.orderId === id)!;
+                    return (
+                      <Button key={id} type="button" variant={combineTargetId === id ? "default" : "outline"} onClick={() => setCombineTargetId(id)}>
+                        {lang === "th" ? "ชำระที่โต๊ะ" : "Pay at table"} {tableLabel(option.code)}
+                      </Button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button variant="outline" onClick={() => setCombineOpen(false)} disabled={combineBusy}>{t("cancel")}</Button>
+            <Button onClick={requestCombine} disabled={combineSelected.length !== 2 || !combineTargetId || combineBusy}>
+              <Merge className="h-4 w-4 mr-1" />{lang === "th" ? "ยืนยันรวมโต๊ะ" : "Confirm combine"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ManagerPinDialog
+        open={combinePinOpen}
+        onOpenChange={setCombinePinOpen}
+        onApproved={() => { void combineChosenTables(); }}
+      />
     </div>
   );
 }

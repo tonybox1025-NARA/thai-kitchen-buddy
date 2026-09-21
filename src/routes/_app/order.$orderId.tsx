@@ -10,7 +10,7 @@ import { KeypadInput } from "@/components/KeypadInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Minus, Trash2, ChefHat, Receipt, ArrowLeft, AlertTriangle, ArrowLeftRight, X, Printer, Eye, Layers, Bell, QrCode, Check, Merge } from "lucide-react";
+import { Plus, Minus, Trash2, ChefHat, Receipt, ArrowLeft, AlertTriangle, ArrowLeftRight, X, Printer, Eye, Layers, Bell, QrCode, Check } from "lucide-react";
 import { ManagerPinDialog } from "@/components/ManagerPinDialog";
 import { SetMenuDialog } from "@/components/SetMenuDialog";
 import { SETS, buildSetDef, setConfigCost, type SetConfig, type SetDef, type SetItemRow } from "@/lib/set-menu";
@@ -86,7 +86,6 @@ type AddonGroup = { id: string; name: string; kitchen_name: string | null; max_s
 type SelectedAddon = { group_id: string; group_name: string; option_id: string; option_name: string; price: number };
 type Modifier = { option_id: string; group_name: string; option_name: string; price: number; qty: number };
 type RoundingMode = "none" | "nearest_whole" | "up_whole" | "down_whole";
-type CombineTableOption = { orderId: string; tableId: string; code: string; guests: number; subtotal: number };
 
 const roundMoney = (value: number) => Math.round(value * 100) / 100;
 function previewTotals(
@@ -150,7 +149,7 @@ function OrderPage() {
   const [voidReason, setVoidReason] = useState("");
   const [voidPreset, setVoidPreset] = useState<string>("");
   const [managerOpen, setManagerOpen] = useState(false);
-  const [managerAction, setManagerAction] = useState<"void" | "close_table" | "move_table" | "combine_tables" | null>(null);
+  const [managerAction, setManagerAction] = useState<"void" | "close_table" | "move_table" | null>(null);
   const [tableCode, setTableCode] = useState<string>("");
   const [tableRawCode, setTableRawCode] = useState<string>("");
   const [tableId, setTableId] = useState<string>("");
@@ -162,9 +161,6 @@ function OrderPage() {
   const [closePreset, setClosePreset] = useState("");
   const [moveTableOpen, setMoveTableOpen] = useState(false);
   const [availableTables, setAvailableTables] = useState<{ id: string; code: string }[]>([]);
-  const [combineTableOpen, setCombineTableOpen] = useState(false);
-  const [combineTables, setCombineTables] = useState<CombineTableOption[]>([]);
-  const [combiningOrderId, setCombiningOrderId] = useState<string | null>(null);
   const [selectedSet, setSelectedSet] = useState<SetDef | null>(null);
 
   // Bill preview
@@ -604,26 +600,6 @@ function OrderPage() {
     setAvailableTables(data ?? []);
   };
 
-  const loadCombineTables = async () => {
-    const { data, error } = await (supabase as any)
-      .from("orders")
-      .select("id,table_id,guests,restaurant_tables!inner(id,code,status),order_items(qty,unit_price,status)")
-      .eq("status", "open")
-      .neq("id", orderId)
-      .not("table_id", "is", null);
-    if (error) { toast.error(error.message); return; }
-    const options = (data ?? []).map((row: any) => ({
-      orderId: row.id,
-      tableId: row.table_id,
-      code: row.restaurant_tables?.code ?? "",
-      guests: Number(row.guests ?? 0),
-      subtotal: (row.order_items ?? [])
-        .filter((item: any) => item.status !== "voided")
-        .reduce((sum: number, item: any) => sum + Number(item.qty) * Number(item.unit_price), 0),
-    })).filter((row: CombineTableOption) => row.code).sort((a: CombineTableOption, b: CombineTableOption) => a.code.localeCompare(b.code, undefined, { numeric: true }));
-    setCombineTables(options);
-  };
-
   // Reprint the table's self-order QR slip anytime (not only when opening the table).
   const reprintTableQr = async () => {
     if (isOffline()) { toast.error(t("err_offline")); return; }
@@ -654,35 +630,6 @@ function OrderPage() {
     if (staff?.role === "staff") { setManagerAction("move_table"); setManagerOpen(true); return; }
     await loadAvailableTables();
     setMoveTableOpen(true);
-  };
-
-  const openCombineTables = async () => {
-    if (staff?.role === "staff") { setManagerAction("combine_tables"); setManagerOpen(true); return; }
-    await loadCombineTables();
-    setCombineTableOpen(true);
-  };
-
-  const doCombineTables = async (source: CombineTableOption) => {
-    if (combiningOrderId) return;
-    setCombiningOrderId(source.orderId);
-    const { data, error } = await (supabase as any).rpc("combine_open_table_orders", {
-      p_target_order_id: orderId,
-      p_source_order_id: source.orderId,
-      p_merged_by: staff?.id ?? null,
-    });
-    setCombiningOrderId(null);
-    if (error) {
-      toast.error(error.message.includes("payment, member points, or discounts")
-        ? (lang === "th" ? "รวมไม่ได้: เริ่มชำระเงิน ใช้แต้ม หรือส่วนลดแล้ว" : "Cannot combine: payment, points, or a discount has already started")
-        : error.message);
-      return;
-    }
-    const result = data?.[0];
-    setCombineTableOpen(false);
-    await loadAll();
-    toast.success(lang === "th"
-      ? `รวมโต๊ะ ${tableLabel(result?.source_table_code ?? source.code)} แล้ว · ${result?.combined_guests ?? ""} คน`
-      : `Table ${tableLabel(result?.source_table_code ?? source.code)} combined · ${result?.combined_guests ?? ""} guests`);
   };
 
   const acknowledgeQrAlert = async () => {
@@ -904,14 +851,9 @@ function OrderPage() {
           )}
           <div className="ml-auto flex gap-2">
             {(orderSource === "pos" || orderSource === "qr") && (
-              <>
-                <Button size="sm" variant="outline" onClick={openCombineTables}>
-                  <Merge className="h-4 w-4 mr-1" />{lang === "th" ? "รวมโต๊ะ" : "Combine tables"}
-                </Button>
-                <Button size="sm" variant="outline" onClick={openMoveTable}>
-                  <ArrowLeftRight className="h-4 w-4 mr-1" />{t("move_table")}
-                </Button>
-              </>
+              <Button size="sm" variant="outline" onClick={openMoveTable}>
+                <ArrowLeftRight className="h-4 w-4 mr-1" />{t("move_table")}
+              </Button>
             )}
             <Button size="sm" variant="destructive" onClick={openCloseTable}>
               <X className="h-4 w-4 mr-1" />{t("close_table")}
@@ -1225,43 +1167,6 @@ function OrderPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Combine another occupied table into this table for one checkout. */}
-      <Dialog open={combineTableOpen} onOpenChange={setCombineTableOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {lang === "th" ? `รวมกับโต๊ะ ${tableCode}` : `Combine into table ${tableCode}`}
-            </DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            {lang === "th"
-              ? "เลือกโต๊ะอื่น ออเดอร์และจำนวนลูกค้าจะย้ายมาที่โต๊ะนี้เพื่อชำระครั้งเดียว"
-              : "Choose another table. Its orders and guest count will move here for one payment."}
-          </p>
-          {combineTables.length === 0 ? (
-            <p className="text-center text-muted-foreground py-6">{lang === "th" ? "ไม่มีโต๊ะที่กำลังใช้งาน" : "No other serving tables"}</p>
-          ) : (
-            <div className="grid grid-cols-2 gap-3 py-2 max-h-[55vh] overflow-y-auto">
-              {combineTables.map((tbl) => (
-                <Button
-                  key={tbl.orderId}
-                  variant="outline"
-                  className="h-auto min-h-20 flex-col items-start gap-1 px-4 py-3 text-left"
-                  disabled={combiningOrderId !== null}
-                  onClick={() => doCombineTables(tbl)}
-                >
-                  <span className="text-lg font-bold">{lang === "th" ? "โต๊ะ" : "Table"} {tableLabel(tbl.code)}</span>
-                  <span className="text-sm font-normal text-muted-foreground">{tbl.guests} {lang === "th" ? "คน" : "guests"} · {thb(tbl.subtotal)}</span>
-                </Button>
-              ))}
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCombineTableOpen(false)}>{t("cancel")}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* Void dialog */}
       <Dialog open={!!voidItem} onOpenChange={(o) => !o && closeVoidDialog()}>
         <DialogContent>
@@ -1401,7 +1306,6 @@ function OrderPage() {
           if (managerAction === "void") { doVoid(); }
           else if (managerAction === "close_table") { setCloseTableOpen(true); }
           else if (managerAction === "move_table") { await loadAvailableTables(); setMoveTableOpen(true); }
-          else if (managerAction === "combine_tables") { await loadCombineTables(); setCombineTableOpen(true); }
           setManagerAction(null);
         }}
       />
