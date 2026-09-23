@@ -10,7 +10,7 @@ import { KeypadInput } from "@/components/KeypadInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Minus, Trash2, ChefHat, Receipt, ArrowLeft, AlertTriangle, ArrowLeftRight, X, Printer, Eye, Layers, Bell, QrCode, Check } from "lucide-react";
+import { Plus, Minus, Trash2, ChefHat, Receipt, ArrowLeft, AlertTriangle, ArrowLeftRight, X, Printer, Eye, Layers, Bell, QrCode, Check, ShoppingBag } from "lucide-react";
 import { ManagerPinDialog } from "@/components/ManagerPinDialog";
 import { SetMenuDialog } from "@/components/SetMenuDialog";
 import { SETS, buildSetDef, setConfigCost, type SetConfig, type SetDef, type SetItemRow } from "@/lib/set-menu";
@@ -80,6 +80,7 @@ type Item = {
   round_number?: number | null;
   round_source?: "pos" | "qr" | null;
   set_config?: any;
+  is_takeout?: boolean;
 };
 type AddonOption = { id: string; name: string; price: number };
 type AddonGroup = { id: string; name: string; kitchen_name: string | null; max_select: number; addon_options: AddonOption[] };
@@ -440,7 +441,10 @@ function OrderPage() {
       status: "pending",
       set_config: config,
     });
-    if (error) toast.error(error.message);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     setSelectedSet(null);
   };
 
@@ -452,6 +456,17 @@ function OrderPage() {
     } else {
       await supabase.from("order_items").update({ qty: newQty }).eq("id", item.id);
     }
+  };
+
+  const toggleItemTakeout = async (item: Item) => {
+    if (item.status !== "pending") return;
+    const next = !item.is_takeout;
+    const { error } = await (supabase as any).from("order_items").update({ is_takeout: next }).eq("id", item.id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setItems((current) => current.map((row) => row.id === item.id ? { ...row, is_takeout: next } : row));
   };
 
   const sendToKitchen = async () => {
@@ -494,9 +509,11 @@ function OrderPage() {
           ...(sc.drink ? [`เครื่องดื่ม: ${sc.drink.th}`] : []),
           `ข้าว: ${riceStr}`,
         ].join("\n");
-        return { name_my: p.name_en, name_en: p.name_en, name_th: p.name_th, qty: p.qty, notes: setNotes, modifiers: null, zoneId, zoneLabel, printToKitchen };
+        const prefix = p.is_takeout ? "[ TAKEOUT ] " : "";
+        return { name_my: `${prefix}${p.name_en}`, name_en: `${prefix}${p.name_en}`, name_th: `${prefix}${p.name_th}`, qty: p.qty, notes: setNotes, modifiers: null, zoneId, zoneLabel, printToKitchen };
       }
-      return { name_my: p.name_my, name_en: p.name_en, name_th: p.name_th, qty: p.qty, notes: p.notes, modifiers: (p.modifiers as Modifier[] | null) ?? null, zoneId, zoneLabel, printToKitchen };
+      const prefix = p.is_takeout ? "[ TAKEOUT ] " : "";
+      return { name_my: `${prefix}${p.name_my}`, name_en: `${prefix}${p.name_en}`, name_th: `${prefix}${p.name_th}`, qty: p.qty, notes: p.notes, modifiers: (p.modifiers as Modifier[] | null) ?? null, zoneId, zoneLabel, printToKitchen };
     });
     const displayLabel = orderSource === "takeout" ? `Takeout ${orderNumber ?? ""}` : orderSource === "staff_meal" ? `Staff ${orderNumber ?? ""}` : tableCode;
     const stripZone = ({ zoneId: _z, zoneLabel: _zl, printToKitchen: _pk, ...line }: (typeof lines)[number]) => line;
@@ -790,9 +807,9 @@ function OrderPage() {
     try {
       const displayLabel = orderSource === "takeout" ? `Takeout ${orderNumber ?? ""}` : orderSource === "staff_meal" ? `Staff ${orderNumber ?? ""}` : tableCode;
       const lines = round.items.map((item) => ({
-        name_th: item.name_th,
-        name_en: item.name_en,
-        name_my: item.name_my,
+        name_th: `${item.is_takeout ? "[ TAKEOUT ] " : ""}${item.name_th}`,
+        name_en: `${item.is_takeout ? "[ TAKEOUT ] " : ""}${item.name_en}`,
+        name_my: `${item.is_takeout ? "[ TAKEOUT ] " : ""}${item.name_my}`,
         qty: item.qty,
         notes: item.notes,
         modifiers: (item.modifiers as Modifier[] | null) ?? null,
@@ -1018,6 +1035,7 @@ function OrderPage() {
                         <Layers className="h-3.5 w-3.5 shrink-0" />
                         {lang === "th" ? i.name_th : i.name_en}
                       </div>
+                      {i.is_takeout && <div className="mt-1 inline-flex rounded bg-blue-600 px-2 py-0.5 text-[11px] font-bold text-white">TAKEOUT</div>}
                       <div className="mt-1.5 space-y-0.5 text-xs text-muted-foreground pl-5">
                         <div>🍽️ {sc.main.th}{lang === "en" ? ` (${sc.main.en})` : ""}</div>
                         {sc.sides.map((s, idx) => (
@@ -1039,7 +1057,10 @@ function OrderPage() {
                     </div>
                   </div>
                   {i.status === "pending" && (
-                    <div className="flex justify-end mt-2">
+                    <div className="flex items-center justify-end gap-2 mt-2">
+                      <Button size="sm" variant={i.is_takeout ? "default" : "outline"} className={i.is_takeout ? "bg-blue-600 hover:bg-blue-700" : ""} onClick={() => void toggleItemTakeout(i)}>
+                        <ShoppingBag className="h-3 w-3 mr-1" />TAKEOUT
+                      </Button>
                       <Button size="sm" variant="ghost" className="text-destructive" onClick={() => requestVoid(i)}>
                         <Trash2 className="h-3 w-3 mr-1" />VOID
                       </Button>
@@ -1065,6 +1086,7 @@ function OrderPage() {
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="font-medium truncate">{pickName(i, lang)}</div>
+                    {i.is_takeout && <div className="mt-1 inline-flex rounded bg-blue-600 px-2 py-0.5 text-[11px] font-bold text-white">TAKEOUT</div>}
                     {mods.length > 0 && (
                       <div className="text-xs text-muted-foreground mt-0.5">
                         {mods.map((m) => {
@@ -1090,6 +1112,9 @@ function OrderPage() {
                     <Button size="sm" variant="outline" onClick={() => adjustQty(i, -1)}><Minus className="h-3 w-3" /></Button>
                     <span className="text-sm font-medium w-6 text-center">{i.qty}</span>
                     <Button size="sm" variant="outline" onClick={() => adjustQty(i, 1)}><Plus className="h-3 w-3" /></Button>
+                    <Button size="sm" variant={i.is_takeout ? "default" : "outline"} className={i.is_takeout ? "bg-blue-600 hover:bg-blue-700" : ""} onClick={() => void toggleItemTakeout(i)}>
+                      <ShoppingBag className="h-3 w-3 mr-1" />TAKEOUT
+                    </Button>
                     <Button size="sm" variant="ghost" className="ml-auto text-destructive" onClick={() => requestVoid(i)}>
                       <Trash2 className="h-3 w-3 mr-1" />VOID
                     </Button>

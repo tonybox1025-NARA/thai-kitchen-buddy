@@ -55,6 +55,7 @@ function PosPage() {
   const [guests, setGuests] = useState(2);
   const [banner, setBanner] = useState<{ tableCode: string; key: number } | null>(null);
   const [specialOrders, setSpecialOrders] = useState<SpecialOrder[]>([]);
+  const [takeoutOpen, setTakeoutOpen] = useState(false);
   // Table view filter: show all tables, only free ones, or only in-use ones (MERI-style).
   const [tableFilter, setTableFilter] = useState<"all" | "available" | "occupied">("all");
   const [combineOpen, setCombineOpen] = useState(false);
@@ -227,6 +228,7 @@ function PosPage() {
     }).select("id").single();
 
     if (error || !order) { toast.error(error?.message || "Failed to create order"); return; }
+    if (source === "takeout") setTakeoutOpen(false);
     nav({ to: "/order/$orderId", params: { orderId: order.id } });
   };
 
@@ -464,7 +466,7 @@ function PosPage() {
           <div className="flex flex-wrap gap-3">
             {extraTables.map((tbl) => renderTable(tbl, false))}
             <button
-              onClick={() => createSpecialOrder("takeout")}
+              onClick={() => setTakeoutOpen(true)}
               className="tbl-card relative aspect-square rounded-2xl p-3 shadow-sm hover:shadow-md transition-all flex flex-col w-32 shrink-0"
             >
               {takeoutOrders.length > 0 && (
@@ -518,6 +520,34 @@ function PosPage() {
               <QrCode className="h-4 w-4 mr-1" />Print QR
             </Button>
             <Button onClick={startTable} disabled={guests < 1}>{t("start")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={takeoutOpen} onOpenChange={setTakeoutOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{lang === "th" ? "ออเดอร์เทคอะเวย์ที่ยังไม่ชำระ" : "Open takeout orders"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            {takeoutOrders.length === 0 ? (
+              <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{t("no_takeout_orders")}</div>
+            ) : takeoutOrders.map((order) => (
+              <Button
+                key={order.id}
+                variant="outline"
+                className="h-14 w-full justify-between border-blue-300 text-base"
+                onClick={() => { setTakeoutOpen(false); nav({ to: "/order/$orderId", params: { orderId: order.id } }); }}
+              >
+                <span className="flex items-center gap-2"><ShoppingBag className="h-5 w-5 text-blue-600" />{order.order_number ?? "TO-?"}</span>
+                <span className="text-xs text-muted-foreground">{lang === "th" ? "ยังไม่ชำระ" : "Unpaid"}</span>
+              </Button>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={() => void createSpecialOrder("takeout")}>
+              <Plus className="mr-2 h-4 w-4" />{lang === "th" ? "ออเดอร์เทคอะเวย์ใหม่" : "New takeout order"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
