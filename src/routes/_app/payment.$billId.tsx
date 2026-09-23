@@ -1463,7 +1463,23 @@ function PaymentPage() {
             <div className="font-semibold">{lang === "th" ? "คืนเป็นเงินสดเท่านั้น" : "Cash refund only"}</div>
             <div className="mt-1 text-xs">{lang === "th" ? "ยอดนี้จะถูกหักออกจากเงินสดที่ควรมีตอนปิดกะ โดยคงรายการชำระเดิมไว้" : "This amount is deducted from expected drawer cash at closing. Original payment methods remain recorded."}</div>
           </div>
-          <Label>{t("amount")}</Label>
+          <div className="rounded-lg border p-3">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {lang === "th" ? "การชำระเงินเดิม" : "Original payments"}
+            </div>
+            <div className="space-y-1.5">
+              {Object.entries(payments.reduce<Record<string, number>>((totals, payment) => {
+                totals[payment.method] = (totals[payment.method] ?? 0) + Number(payment.amount);
+                return totals;
+              }, {})).map(([method, amount]) => (
+                <div key={method} className="flex items-center justify-between text-sm">
+                  <span>{paymentMethodLabel(method as PaymentMethod)}</span>
+                  <span className="font-semibold tabular-nums">{thb(amount)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <Label>{lang === "th" ? "จำนวนเงินสดที่คืน" : "Cash refund amount"}</Label>
           <KeypadInput value={refundAmt} onChange={setRefundAmt} title={t("refund")} placeholder="0" />
           <Label>{t("refund_reason")}</Label>
           <Textarea value={refundReason} onChange={(e) => setRefundReason(e.target.value)} />
