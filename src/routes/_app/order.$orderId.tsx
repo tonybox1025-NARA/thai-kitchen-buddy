@@ -156,6 +156,8 @@ function OrderPage() {
   const [tableHasQrAlert, setTableHasQrAlert] = useState(false);
   const [orderSource, setOrderSource] = useState<string>("pos");
   const [orderNumber, setOrderNumber] = useState<string | null>(null);
+  const [staffDebtorName, setStaffDebtorName] = useState<string | null>(null);
+  const [recordingStaffTab, setRecordingStaffTab] = useState(false);
   const [closeTableOpen, setCloseTableOpen] = useState(false);
   const [closeReason, setCloseReason] = useState("");
   const [closePreset, setClosePreset] = useState("");
@@ -211,7 +213,7 @@ function OrderPage() {
   const loadOrderState = async () => {
     const [{ data: it }, { data: ord }, { data: reservedBill }] = await Promise.all([
       supabase.from("order_items").select("*").eq("order_id", orderId).order("sent_at", { ascending: true, nullsFirst: true }),
-      supabase.from("orders").select("table_id,source,order_number").eq("id", orderId).single(),
+      supabase.from("orders").select("table_id,source,order_number,staff_debtor_id").eq("id", orderId).single(),
       (supabase as any).from("bills").select("points_redeemed,loyalty_discount_amount").eq("order_id", orderId).maybeSingle(),
     ]);
     if (it) setItems(it as Item[]);
@@ -220,6 +222,13 @@ function OrderPage() {
     if (ord) {
       setOrderSource((ord as any).source ?? "pos");
       setOrderNumber((ord as any).order_number ?? null);
+      if ((ord as any).staff_debtor_id) {
+        const { data: people } = await supabase.rpc("list_staff");
+        const debtor = (people ?? []).find((person) => person.id === (ord as any).staff_debtor_id);
+        setStaffDebtorName(debtor?.name ?? null);
+      } else {
+        setStaffDebtorName(null);
+      }
     }
     if (ord?.table_id) {
       setTableId(ord.table_id);
@@ -614,6 +623,30 @@ function OrderPage() {
     if (bill) nav({ to: "/payment/$billId", params: { billId: bill.id } });
   };
 
+  const recordOnStaffTab = async () => {
+    if (!staff || recordingStaffTab) return;
+    const live = items.filter((item) => item.status !== "voided");
+    if (live.length === 0) { toast.error(t("empty_order")); return; }
+    if (live.some((item) => item.status === "pending")) {
+      toast.error(`${t("send_to_kitchen")} first`);
+      return;
+    }
+    setRecordingStaffTab(true);
+    try {
+      const { data, error } = await (supabase as any).rpc("record_staff_tab_charge", {
+        p_order_id: orderId,
+        p_charged_by: staff.id,
+      });
+      if (error || !data?.[0]) throw error ?? new Error("Could not record staff tab");
+      toast.success(`${staffDebtorName ?? "Staff"} · ฿${Number(data[0].amount).toFixed(2)} recorded`);
+      nav({ to: "/pos" });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not record staff tab");
+    } finally {
+      setRecordingStaffTab(false);
+    }
+  };
+
   const loadAvailableTables = async () => {
     const { data } = await supabase.from("restaurant_tables").select("id,code").eq("status", "available").order("code");
     setAvailableTables(data ?? []);
@@ -857,6 +890,7 @@ function OrderPage() {
             <h1 className="text-xl font-bold flex items-center gap-2">
               <span className="text-purple-600 dark:text-purple-400">{t("staff_meal")}</span>
               {orderNumber && <span className="text-base font-mono bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded">{orderNumber}</span>}
+              {staffDebtorName && <span className="text-base rounded bg-purple-50 px-2 py-0.5 text-purple-800">{staffDebtorName}</span>}
             </h1>
           ) : (
             <h1 className="text-xl font-bold flex items-center gap-2">
@@ -1104,6 +1138,12 @@ function OrderPage() {
           <Button className="w-full" size="lg" onClick={goToPayment}>
             <Receipt className="h-4 w-4 mr-2" />{t("go_to_payment")}
           </Button>
+          {orderSource === "staff_meal" && staffDebtorName && (
+            <Button className="w-full bg-purple-700 hover:bg-purple-800" size="lg" onClick={recordOnStaffTab} disabled={recordingStaffTab || liveItems.length === 0 || pendingCount > 0}>
+              <Receipt className="h-4 w-4 mr-2" />
+              {recordingStaffTab ? (lang === "th" ? "กำลังบันทึก…" : "Recording…") : (lang === "th" ? "บันทึกเป็นบัญชีพนักงาน" : "Record on staff tab")}
+            </Button>
+          )}
         </div>
       </aside>
 

@@ -49,13 +49,19 @@ export const Route = createFileRoute("/api/public/item-sales/$date")({
         const shiftIds = (shifts ?? []).map((s: any) => s.id);
         if (shiftIds.length === 0) return json({ date, has_data: false, item_count: 0, items: [] });
 
-        const { data: bills } = await sb.from("bills")
-          .select("order_id").in("shift_id", shiftIds).eq("status", "paid").not("is_test", "is", true);
-        const orderIds = [...new Set((bills ?? []).map((b: any) => b.order_id).filter(Boolean))] as string[];
+        const [{ data: bills }, { data: staffCharges }] = await Promise.all([
+          sb.from("bills").select("order_id").in("shift_id", shiftIds).eq("status", "paid").not("is_test", "is", true),
+          sb.from("staff_tab_charges").select("order_id").in("shift_id", shiftIds).neq("status", "voided"),
+        ]);
+        const staffOrderIds = new Set((staffCharges ?? []).map((charge: any) => charge.order_id).filter(Boolean));
+        const orderIds = [...new Set([
+          ...(bills ?? []).map((bill: any) => bill.order_id),
+          ...staffOrderIds,
+        ].filter(Boolean))] as string[];
         if (orderIds.length === 0) return json({ date, has_data: false, item_count: 0, items: [] });
 
         const { data: items } = await sb.from("order_items")
-          .select("menu_id,name_th,name_en,qty,unit_price,unit_cost")
+          .select("order_id,menu_id,name_th,name_en,qty,unit_price,unit_cost")
           .in("order_id", orderIds).neq("status", "voided");
 
         const agg = new Map<string, Agg>();
@@ -68,7 +74,8 @@ export const Route = createFileRoute("/api/public/item-sales/$date")({
             agg.set(key, row);
           }
           row.qty += qty;
-          row.revenue += qty * (Number(it.unit_price) || 0);
+          // Staff consumption reduces stock but is not customer sales revenue.
+          if (!staffOrderIds.has(it.order_id)) row.revenue += qty * (Number(it.unit_price) || 0);
           row.cost += qty * (Number(it.unit_cost) || 0);
         }
 

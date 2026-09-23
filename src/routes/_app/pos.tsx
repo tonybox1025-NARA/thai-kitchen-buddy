@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { CountKeypad } from "@/components/CountKeypad";
+import { PinKeypad } from "@/components/PinKeypad";
 import { ManagerPinDialog } from "@/components/ManagerPinDialog";
 import { Bell, Users, X, ShoppingBag, UtensilsCrossed, Plus, QrCode, Merge } from "lucide-react";
 import { toast } from "sonner";
@@ -38,6 +39,12 @@ type CombineOption = {
   subtotal: number;
 };
 
+type StaffChoice = { id: string; name: string; role: "admin" | "manager" | "staff"; active: boolean };
+type StaffTabSummary = { staff_id: string; staff_name: string; unpaid_count: number; outstanding: number; oldest_charge: string };
+type StaffTabAction =
+  | { kind: "new"; person: StaffChoice }
+  | { kind: "settle"; person: StaffTabSummary; method: "cash" | "qr" };
+
 function PosPage() {
   const { t, lang } = useI18n();
   const { staff } = useAuth();
@@ -56,6 +63,11 @@ function PosPage() {
   const [combineTargetId, setCombineTargetId] = useState<string | null>(null);
   const [combineBusy, setCombineBusy] = useState(false);
   const [combinePinOpen, setCombinePinOpen] = useState(false);
+  const [staffTabOpen, setStaffTabOpen] = useState(false);
+  const [staffChoices, setStaffChoices] = useState<StaffChoice[]>([]);
+  const [staffTabRows, setStaffTabRows] = useState<StaffTabSummary[]>([]);
+  const [staffTabAction, setStaffTabAction] = useState<StaffTabAction | null>(null);
+  const [staffTabError, setStaffTabError] = useState<string | null>(null);
 
   const load = async () => {
     const [{ data }, { data: openOrders }] = await Promise.all([
@@ -216,6 +228,62 @@ function PosPage() {
 
     if (error || !order) { toast.error(error?.message || "Failed to create order"); return; }
     nav({ to: "/order/$orderId", params: { orderId: order.id } });
+  };
+
+  const loadStaffTabs = async () => {
+    const [{ data: people }, { data: balances, error }] = await Promise.all([
+      supabase.rpc("list_staff"),
+      (supabase as any).rpc("staff_tab_summary"),
+    ]);
+    if (error) { toast.error(error.message); return; }
+    setStaffChoices(((people ?? []) as StaffChoice[]).filter((person) => person.active));
+    setStaffTabRows(((balances ?? []) as StaffTabSummary[]).map((row) => ({
+      ...row,
+      unpaid_count: Number(row.unpaid_count),
+      outstanding: Number(row.outstanding),
+    })));
+  };
+
+  const openStaffTabs = async () => {
+    if (isOffline()) { toast.error(t("err_offline")); return; }
+    await loadStaffTabs();
+    setStaffTabAction(null);
+    setStaffTabError(null);
+    setStaffTabOpen(true);
+  };
+
+  const submitStaffTabPin = async (pin: string) => {
+    if (!staff || !staffTabAction) return;
+    setStaffTabError(null);
+    if (staffTabAction.kind === "new") {
+      const { data, error } = await (supabase as any).rpc("start_staff_tab_order", {
+        p_staff_id: staffTabAction.person.id,
+        p_pin: pin,
+        p_opened_by: staff.id,
+      });
+      if (error || !data?.[0]?.order_id) {
+        setStaffTabError(error?.message ?? "Could not start staff tab");
+        return;
+      }
+      setStaffTabOpen(false);
+      setStaffTabAction(null);
+      nav({ to: "/order/$orderId", params: { orderId: data[0].order_id } });
+      return;
+    }
+
+    const { data, error } = await (supabase as any).rpc("settle_staff_tab", {
+      p_staff_id: staffTabAction.person.staff_id,
+      p_method: staffTabAction.method,
+      p_pin: pin,
+      p_received_by: staff.id,
+    });
+    if (error || !data?.[0]) {
+      setStaffTabError(error?.message ?? "Could not settle staff tab");
+      return;
+    }
+    toast.success(`${staffTabAction.person.staff_name} · ฿${Number(data[0].amount).toFixed(2)} paid`);
+    setStaffTabAction(null);
+    await loadStaffTabs();
   };
 
   const openCombine = async () => {
@@ -409,7 +477,7 @@ function PosPage() {
               <div className="text-xs font-semibold text-muted-foreground">{t("takeout")}</div>
             </button>
             <button
-              onClick={() => createSpecialOrder("staff_meal")}
+              onClick={() => void openStaffTabs()}
               className="tbl-card relative aspect-square rounded-2xl p-3 shadow-sm hover:shadow-md transition-all flex flex-col w-32 shrink-0"
             >
               {staffOrders.length > 0 && (
@@ -419,7 +487,7 @@ function PosPage() {
               <div className="flex-1 grid place-items-center">
                 <span className="grid place-items-center h-12 w-12 rounded-full bg-primary/15 text-primary"><Plus className="h-7 w-7" /></span>
               </div>
-              <div className="text-xs font-semibold text-muted-foreground">{t("staff_meal")}</div>
+              <div className="text-xs font-semibold text-muted-foreground">{lang === "th" ? "บัญชีพนักงาน" : "Staff tab"}</div>
             </button>
           </div>
           {(takeoutOrders.length > 0 || staffOrders.length > 0) && (
@@ -451,6 +519,56 @@ function PosPage() {
             </Button>
             <Button onClick={startTable} disabled={guests < 1}>{t("start")}</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={staffTabOpen} onOpenChange={(open) => { setStaffTabOpen(open); if (!open) { setStaffTabAction(null); setStaffTabError(null); } }}>
+        <DialogContent className="max-w-xl max-h-[88vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{lang === "th" ? "บัญชีค้างจ่ายพนักงาน" : "Staff tab"}</DialogTitle>
+          </DialogHeader>
+          {staffTabAction ? (
+            <PinKeypad
+              title={staffTabAction.kind === "new"
+                ? `${staffTabAction.person.name} · ${lang === "th" ? "ใส่ PIN" : "Enter PIN"}`
+                : `${staffTabAction.person.staff_name} · ${staffTabAction.method.toUpperCase()}`}
+              error={staffTabError}
+              onCancel={() => { setStaffTabAction(null); setStaffTabError(null); }}
+              onSubmit={submitStaffTabPin}
+            />
+          ) : (
+            <div className="space-y-5">
+              <section>
+                <h3 className="font-semibold mb-2">{lang === "th" ? "ยอดค้างชำระ" : "Outstanding"}</h3>
+                {staffTabRows.length === 0 ? (
+                  <p className="rounded-lg border p-4 text-sm text-muted-foreground">{lang === "th" ? "ไม่มีรายการค้างชำระ" : "No outstanding staff tabs"}</p>
+                ) : (
+                  <div className="space-y-2">
+                    {staffTabRows.map((row) => (
+                      <div key={row.staff_id} className="rounded-xl border p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div><div className="font-bold">{row.staff_name}</div><div className="text-xs text-muted-foreground">{row.unpaid_count} {lang === "th" ? "รายการ" : "charges"}</div></div>
+                          <div className="text-xl font-black">฿{row.outstanding.toFixed(2)}</div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 mt-3">
+                          <Button variant="outline" onClick={() => setStaffTabAction({ kind: "settle", person: row, method: "cash" })}>{lang === "th" ? "จ่ายเงินสด" : "Pay cash"}</Button>
+                          <Button variant="outline" onClick={() => setStaffTabAction({ kind: "settle", person: row, method: "qr" })}>{lang === "th" ? "จ่าย QR" : "Pay QR"}</Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+              <section>
+                <h3 className="font-semibold mb-2">{lang === "th" ? "เพิ่มรายการใหม่" : "New staff charge"}</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {staffChoices.map((person) => (
+                    <Button key={person.id} variant="outline" className="h-12" onClick={() => setStaffTabAction({ kind: "new", person })}>{person.name}</Button>
+                  ))}
+                </div>
+              </section>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

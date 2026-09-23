@@ -42,6 +42,9 @@ type ReportData = {
   cancelledCount: number; // number of cancelled (table-closed) orders this shift
   takeoutTotal: number; // net sales from takeout orders
   staffMealTotal: number; // net sales from staff meal orders
+  staffTabCharged: number; // employee consumption put on account this shift
+  staffTabCashCollected: number; // staff tabs repaid in cash this shift
+  staffTabQrCollected: number; // staff tabs repaid by QR this shift
   discountByType: { percent: number; fixed: number; free_item: number }; // discount amount per type
   discountByStaff: { staffName: string; amount: number; count: number }[]; // who gave how much
   qrByBucket: QrBucketTotal[]; // QR revenue split into the user-defined time windows
@@ -80,7 +83,7 @@ function cashTipsPaidOut(r: ReportData) {
 
 function calcCashSummary(cashCount: Record<number, number>, r: ReportData) {
   const cashTotal = Object.entries(cashCount).reduce((s, [d, c]) => s + Number(d) * (c || 0), 0);
-  const expected = r.openingFloat + r.byMethod.cash - cashTipsPaidOut(r);
+  const expected = r.openingFloat + r.byMethod.cash + r.staffTabCashCollected - cashTipsPaidOut(r);
   return { cashTotal, expected, overShort: cashTotal - expected };
 }
 
@@ -125,6 +128,9 @@ async function openPrintWindow(
         ...(r.cancelledCount > 0 ? [["Cancelled orders", String(r.cancelledCount)] as [string, string]] : []),
         ...(r.takeoutTotal > 0 ? [["Takeout sales", thb(r.takeoutTotal)] as [string, string]] : []),
         ...(r.staffMealTotal > 0 ? [["Staff meal cost", thb(r.staffMealTotal)] as [string, string]] : []),
+        ...(r.staffTabCharged > 0 ? [["Staff tab charged", thb(r.staffTabCharged)] as [string, string]] : []),
+        ...(r.staffTabCashCollected > 0 ? [["Staff tab collected (cash)", thb(r.staffTabCashCollected)] as [string, string]] : []),
+        ...(r.staffTabQrCollected > 0 ? [["Staff tab collected (QR)", thb(r.staffTabQrCollected)] as [string, string]] : []),
       ]) },
       ...(r.discount > 0 ? [{ title: "Discount breakdown", rows: rows([
         ["Total discounts", `- ${thb(r.discount)}`],
@@ -136,6 +142,7 @@ async function openPrintWindow(
       { title: "Cash count", rows: rows(DENOMS.filter((d) => (counts[d] ?? 0) > 0).map((d) => [`${d} THB x ${counts[d]}`, thb(d * counts[d])] as [string, string])) },
       { title: "Cash drawer", rows: rows([
         ["Opening float", thb(r.openingFloat)], ["Cash sales", thb(r.byMethod.cash)],
+        ...(r.staffTabCashCollected > 0 ? [["Staff tab cash collected", thb(r.staffTabCashCollected)] as [string, string]] : []),
         ...(cashTipsPaidOut(r) > 0 ? [["Tips paid out (cash)", `- ${thb(cashTipsPaidOut(r))}`] as [string, string]] : []),
         ["Expected", thb(expected), true], ["Counted", thb(cashTotal)], ["Over / Short", thb(overShort), true],
       ]) },
@@ -177,6 +184,9 @@ ${row("Bills", String(r.bills))}
 ${r.cancelledCount > 0 ? row("Cancelled orders", String(r.cancelledCount)) : ""}
 ${r.takeoutTotal > 0 ? row("Takeout sales", thb(r.takeoutTotal)) : ""}
 ${r.staffMealTotal > 0 ? row("Staff meal cost", thb(r.staffMealTotal)) : ""}
+${r.staffTabCharged > 0 ? row("Staff tab charged", thb(r.staffTabCharged)) : ""}
+${r.staffTabCashCollected > 0 ? row("Staff tab collected (cash)", thb(r.staffTabCashCollected)) : ""}
+${r.staffTabQrCollected > 0 ? row("Staff tab collected (QR)", thb(r.staffTabQrCollected)) : ""}
 </table>
 ${r.discount > 0 ? `<h2>Discount breakdown</h2><table>
 ${row("Total discounts", `- ${thb(r.discount)}`)}
@@ -190,6 +200,7 @@ ${r.discountByStaff.map((s) => row(`  ${escapeHtml(s.staffName)} (×${s.count})`
 <h2>Cash drawer</h2><table>
 ${row("Opening float", thb(r.openingFloat))}
 ${row("Cash sales", thb(r.byMethod.cash))}
+${r.staffTabCashCollected > 0 ? row("Staff tab cash collected", thb(r.staffTabCashCollected)) : ""}
 ${cashTipsPaidOut(r) > 0 ? row("Tips paid out (cash)", `- ${thb(cashTipsPaidOut(r))}`) : ""}
 ${row("Expected", thb(expected), true)}
 ${row("Counted", thb(cashTotal))}
@@ -240,7 +251,7 @@ function Reports() {
     const { data: bills } = await supabase.from("bills").select("id,total,subtotal,discount_amount,member_discount_amount,vat_amount,vat_mode,order_id").eq("shift_id", s.id).eq("status", "paid").not("is_test", "is", true);
     const billIds = (bills ?? []).map((b) => b.id);
     const orderIds = (bills ?? []).map((b) => (b as any).order_id).filter(Boolean) as string[];
-    const [{ data: pays }, { data: voids }, { data: refunds }, { data: cancelledOrds }, { data: orderSources }, { data: billDiscs }] = await Promise.all([
+    const [{ data: pays }, { data: voids }, { data: refunds }, { data: cancelledOrds }, { data: orderSources }, { data: billDiscs }, { data: staffTabCharges }, { data: staffTabSettlements }] = await Promise.all([
       billIds.length
         ? supabase.from("payments").select("method,amount,tip_amount,created_at").in("bill_id", billIds)
         : Promise.resolve({ data: [] as { method: string; amount: number; tip_amount: number; created_at: string }[], error: null }),
@@ -253,6 +264,8 @@ function Reports() {
       billIds.length
         ? (supabase as any).from("bill_discounts").select("type,amount,applied_by,free_item_name").in("bill_id", billIds)
         : Promise.resolve({ data: [] as { type: string; amount: number; applied_by: string | null; free_item_name: string | null }[], error: null }),
+      (supabase as any).from("staff_tab_charges").select("amount").eq("shift_id", s.id).neq("status", "voided"),
+      (supabase as any).from("staff_tab_settlements").select("amount,method").eq("shift_id", s.id),
     ]);
     const gross = (bills ?? []).reduce((x, b) => x + Number(b.subtotal), 0);
     const net = (bills ?? []).reduce((x, b) => x + Number(b.total), 0);
@@ -304,6 +317,9 @@ function Reports() {
       entry.count += 1;
     }
     const discountByStaff = [...discountByStaffMap.values()].sort((a, b) => b.amount - a.amount);
+    const staffTabCharged = (staffTabCharges ?? []).reduce((sum: number, row: any) => sum + Number(row.amount), 0);
+    const staffTabCashCollected = (staffTabSettlements ?? []).filter((row: any) => row.method === "cash").reduce((sum: number, row: any) => sum + Number(row.amount), 0);
+    const staffTabQrCollected = (staffTabSettlements ?? []).filter((row: any) => row.method === "qr").reduce((sum: number, row: any) => sum + Number(row.amount), 0);
 
     return {
       gross, net, discount, member, coupon, vatIncluded, vatAdded,
@@ -315,6 +331,9 @@ function Reports() {
       cancelledCount: (cancelledOrds ?? []).length,
       takeoutTotal,
       staffMealTotal,
+      staffTabCharged,
+      staffTabCashCollected,
+      staffTabQrCollected,
       discountByType,
       discountByStaff,
       qrByBucket,
@@ -1835,6 +1854,7 @@ function CashSummary({ r, cashCount, overShortLabel }: { r: ReportData; cashCoun
     <div className="text-sm space-y-1 pt-3 border-t">
       <Row label="Opening float" value={thb(r.openingFloat)} />
       <Row label="Cash sales" value={thb(r.byMethod.cash)} />
+      {r.staffTabCashCollected > 0 && <Row label="Staff tab cash collected" value={thb(r.staffTabCashCollected)} />}
       {tipsOut > 0 && <Row label="Tips paid out (cash)" value={`- ${thb(tipsOut)}`} />}
       <Row label="Expected" value={thb(expected)} bold />
       <Row label="Counted" value={thb(cashTotal)} />
@@ -1895,6 +1915,14 @@ function ReportCard({ r }: { r: ReportData }) {
             <div className="border-t pt-2 mt-2" />
             {r.takeoutTotal > 0 && <Row label="  ↳ Takeout sales" value={thb(r.takeoutTotal)} />}
             {r.staffMealTotal > 0 && <Row label="  ↳ Staff meal cost" value={thb(r.staffMealTotal)} />}
+          </>
+        )}
+        {(r.staffTabCharged > 0 || r.staffTabCashCollected > 0 || r.staffTabQrCollected > 0) && (
+          <>
+            <div className="border-t pt-2 mt-2" />
+            {r.staffTabCharged > 0 && <Row label="Staff tab charged" value={thb(r.staffTabCharged)} />}
+            {r.staffTabCashCollected > 0 && <Row label="Staff tab collected (cash)" value={thb(r.staffTabCashCollected)} />}
+            {r.staffTabQrCollected > 0 && <Row label="Staff tab collected (QR)" value={thb(r.staffTabQrCollected)} />}
           </>
         )}
       </CardContent>
