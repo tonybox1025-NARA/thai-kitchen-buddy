@@ -1411,6 +1411,8 @@ export type Database = {
           bill_id: string | null
           created_at: string
           id: string
+          original_payment_breakdown: Json
+          payout_method: string
           reason: string
           refunded_by: string | null
           shift_id: string | null
@@ -1420,6 +1422,8 @@ export type Database = {
           bill_id?: string | null
           created_at?: string
           id?: string
+          original_payment_breakdown?: Json
+          payout_method?: string
           reason: string
           refunded_by?: string | null
           shift_id?: string | null
@@ -1429,6 +1433,8 @@ export type Database = {
           bill_id?: string | null
           created_at?: string
           id?: string
+          original_payment_breakdown?: Json
+          payout_method?: string
           reason?: string
           refunded_by?: string | null
           shift_id?: string | null
@@ -2124,6 +2130,8 @@ export type Database = {
           bill_id: string | null
           created_at: string
           id: string
+          original_payment_breakdown: Json
+          payout_method: string
           reason: string
           refunded_by: string | null
           shift_id: string | null
