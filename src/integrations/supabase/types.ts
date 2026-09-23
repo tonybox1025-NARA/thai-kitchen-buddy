@@ -1135,6 +1135,85 @@ export type Database = {
           },
         ]
       }
+      order_table_merges: {
+        Row: {
+          id: string
+          merged_at: string
+          merged_by: string | null
+          source_guests: number
+          source_order_id: string
+          source_subtotal: number
+          source_table_id: string
+          target_order_id: string
+          target_table_id: string
+        }
+        Insert: {
+          id?: string
+          merged_at?: string
+          merged_by?: string | null
+          source_guests?: number
+          source_order_id: string
+          source_subtotal?: number
+          source_table_id: string
+          target_order_id: string
+          target_table_id: string
+        }
+        Update: {
+          id?: string
+          merged_at?: string
+          merged_by?: string | null
+          source_guests?: number
+          source_order_id?: string
+          source_subtotal?: number
+          source_table_id?: string
+          target_order_id?: string
+          target_table_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_table_merges_merged_by_fkey"
+            columns: ["merged_by"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_table_merges_merged_by_fkey"
+            columns: ["merged_by"]
+            isOneToOne: false
+            referencedRelation: "staff_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_table_merges_source_order_id_fkey"
+            columns: ["source_order_id"]
+            isOneToOne: true
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_table_merges_source_table_id_fkey"
+            columns: ["source_table_id"]
+            isOneToOne: false
+            referencedRelation: "restaurant_tables"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_table_merges_target_order_id_fkey"
+            columns: ["target_order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_table_merges_target_table_id_fkey"
+            columns: ["target_table_id"]
+            isOneToOne: false
+            referencedRelation: "restaurant_tables"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       orders: {
         Row: {
           cancel_reason: string | null
@@ -1150,6 +1229,7 @@ export type Database = {
           order_number: string | null
           shift_id: string | null
           source: Database["public"]["Enums"]["order_source"]
+          staff_debtor_id: string | null
           status: Database["public"]["Enums"]["order_status"]
           table_id: string | null
         }
@@ -1167,6 +1247,7 @@ export type Database = {
           order_number?: string | null
           shift_id?: string | null
           source?: Database["public"]["Enums"]["order_source"]
+          staff_debtor_id?: string | null
           status?: Database["public"]["Enums"]["order_status"]
           table_id?: string | null
         }
@@ -1184,6 +1265,7 @@ export type Database = {
           order_number?: string | null
           shift_id?: string | null
           source?: Database["public"]["Enums"]["order_source"]
+          staff_debtor_id?: string | null
           status?: Database["public"]["Enums"]["order_status"]
           table_id?: string | null
         }
@@ -1221,6 +1303,20 @@ export type Database = {
             columns: ["shift_id"]
             isOneToOne: false
             referencedRelation: "shifts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_staff_debtor_id_fkey"
+            columns: ["staff_debtor_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_staff_debtor_id_fkey"
+            columns: ["staff_debtor_id"]
+            isOneToOne: false
+            referencedRelation: "staff_public"
             referencedColumns: ["id"]
           },
           {
@@ -1586,6 +1682,184 @@ export type Database = {
         }
         Relationships: []
       }
+      staff_tab_charges: {
+        Row: {
+          amount: number
+          charged_at: string
+          charged_by: string | null
+          id: string
+          order_id: string
+          settled_at: string | null
+          shift_id: string
+          staff_id: string
+          status: string
+        }
+        Insert: {
+          amount: number
+          charged_at?: string
+          charged_by?: string | null
+          id?: string
+          order_id: string
+          settled_at?: string | null
+          shift_id: string
+          staff_id: string
+          status?: string
+        }
+        Update: {
+          amount?: number
+          charged_at?: string
+          charged_by?: string | null
+          id?: string
+          order_id?: string
+          settled_at?: string | null
+          shift_id?: string
+          staff_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_tab_charges_charged_by_fkey"
+            columns: ["charged_by"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_tab_charges_charged_by_fkey"
+            columns: ["charged_by"]
+            isOneToOne: false
+            referencedRelation: "staff_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_tab_charges_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: true
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_tab_charges_shift_id_fkey"
+            columns: ["shift_id"]
+            isOneToOne: false
+            referencedRelation: "shifts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_tab_charges_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_tab_charges_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_tab_settlement_items: {
+        Row: {
+          amount: number
+          charge_id: string
+          settlement_id: string
+        }
+        Insert: {
+          amount: number
+          charge_id: string
+          settlement_id: string
+        }
+        Update: {
+          amount?: number
+          charge_id?: string
+          settlement_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_tab_settlement_items_charge_id_fkey"
+            columns: ["charge_id"]
+            isOneToOne: true
+            referencedRelation: "staff_tab_charges"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_tab_settlement_items_settlement_id_fkey"
+            columns: ["settlement_id"]
+            isOneToOne: false
+            referencedRelation: "staff_tab_settlements"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_tab_settlements: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          method: string
+          received_by: string | null
+          shift_id: string
+          staff_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          method: string
+          received_by?: string | null
+          shift_id: string
+          staff_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          method?: string
+          received_by?: string | null
+          shift_id?: string
+          staff_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_tab_settlements_received_by_fkey"
+            columns: ["received_by"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_tab_settlements_received_by_fkey"
+            columns: ["received_by"]
+            isOneToOne: false
+            referencedRelation: "staff_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_tab_settlements_shift_id_fkey"
+            columns: ["shift_id"]
+            isOneToOne: false
+            referencedRelation: "shifts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_tab_settlements_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_tab_settlements_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       voids: {
         Row: {
           amount: number
@@ -1695,6 +1969,18 @@ export type Database = {
           member_id: string
           member_name: string
           points_awarded: number
+        }[]
+      }
+      combine_open_table_orders: {
+        Args: {
+          p_merged_by?: string
+          p_source_order_id: string
+          p_target_order_id: string
+        }
+        Returns: {
+          combined_guests: number
+          combined_subtotal: number
+          source_table_code: string
         }[]
       }
       create_or_get_member: {
@@ -1819,6 +2105,13 @@ export type Database = {
           balance_after: number
         }[]
       }
+      record_staff_tab_charge: {
+        Args: { p_charged_by: string; p_order_id: string }
+        Returns: {
+          amount: number
+          charge_id: string
+        }[]
+      }
       refund_bill_with_loyalty: {
         Args: {
           p_amount: number
@@ -1860,6 +2153,36 @@ export type Database = {
       set_staff_pin: {
         Args: { _admin_pin?: string; _pin: string; _staff_id: string }
         Returns: undefined
+      }
+      settle_staff_tab: {
+        Args: {
+          p_method: string
+          p_pin: string
+          p_received_by: string
+          p_staff_id: string
+        }
+        Returns: {
+          amount: number
+          settlement_id: string
+        }[]
+      }
+      staff_tab_summary: {
+        Args: never
+        Returns: {
+          oldest_charge: string
+          outstanding: number
+          staff_id: string
+          staff_name: string
+          unpaid_count: number
+        }[]
+      }
+      start_staff_tab_order: {
+        Args: { p_opened_by: string; p_pin: string; p_staff_id: string }
+        Returns: {
+          order_id: string
+          order_number: string
+          staff_name: string
+        }[]
       }
       verify_staff_pin: {
         Args: { _pin: string }
