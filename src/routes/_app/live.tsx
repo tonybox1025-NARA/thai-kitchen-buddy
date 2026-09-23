@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { thb } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
-import { Clock3, RefreshCw, Users, Utensils, Receipt } from "lucide-react";
+import { ChevronDown, Clock3, RefreshCw, Users, Utensils, Receipt } from "lucide-react";
 
 export const Route = createFileRoute("/_app/live")({ component: LivePage });
 
@@ -46,6 +46,8 @@ function LivePage() {
   const [hourly, setHourly] = useState<{ hour: number; count: number; total: number }[]>([]);
   const [topItems, setTopItems] = useState<{ name_th: string; name_en: string; qty: number }[]>([]);
   const [attendance, setAttendance] = useState<Array<AttendancePerson & AttendanceDay>>([]);
+  const [attendanceOpen, setAttendanceOpen] = useState(false);
+  const [attendanceWorkDate, setAttendanceWorkDate] = useState("");
   const [updatedAt, setUpdatedAt] = useState<Date>(new Date());
   const [loading, setLoading] = useState(true);
 
@@ -67,6 +69,7 @@ function LivePage() {
     const { data: attendanceSummary } = await supabase.functions.invoke("attendance-live-summary", { body: {} });
     const attendancePeople = attendanceSummary?.people;
     const attendanceDays = attendanceSummary?.days;
+    setAttendanceWorkDate(attendanceSummary?.work_date ?? "");
     const dayByEmployee = new Map(
       ((attendanceDays ?? []) as AttendanceDay[]).map((day) => [day.external_code, day]),
     );
@@ -219,17 +222,28 @@ function LivePage() {
       {/* Today's fingerprint attendance — read-only; payroll remains manager-reviewed. */}
       {attendance.length > 0 && (
         <Card>
-          <CardContent className="p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-sm font-semibold">
+          <CardContent className="p-0">
+            <button
+              type="button"
+              onClick={() => setAttendanceOpen((open) => !open)}
+              className="flex w-full items-center justify-between gap-3 p-4 text-left"
+              aria-expanded={attendanceOpen}
+            >
+              <div className="flex min-w-0 items-center gap-2">
                 <Clock3 className="h-4 w-4" />
-                {lang === "th" ? "ลงเวลาวันนี้" : "Attendance today"}
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold">{lang === "th" ? "ลงเวลาวันนี้" : "Attendance today"}</div>
+                  {attendanceWorkDate && <div className="text-[11px] text-muted-foreground">{attendanceWorkDate}</div>}
+                </div>
               </div>
-              <Badge variant="secondary">
-                {attendance.filter((row) => row.clock_in).length}/{attendance.length}
-              </Badge>
-            </div>
-            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary">
+                  {attendance.filter((row) => row.clock_in).length}/{attendance.length}
+                </Badge>
+                <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${attendanceOpen ? "rotate-180" : ""}`} />
+              </div>
+            </button>
+            {attendanceOpen && <div className="space-y-2 border-t px-4 pb-4 pt-3">
               {attendance.map((row) => {
                 const shift = inferredShift(row.clock_in);
                 const working = !!row.clock_in && !row.clock_out;
@@ -248,7 +262,7 @@ function LivePage() {
                   </div>
                 );
               })}
-            </div>
+            </div>}
           </CardContent>
         </Card>
       )}
