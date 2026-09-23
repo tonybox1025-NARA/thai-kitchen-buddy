@@ -40,6 +40,7 @@ type CombineOption = {
 
 type StaffChoice = { id: string; name: string; role: "admin" | "manager" | "staff"; active: boolean };
 type StaffTabSummary = { staff_id: string; staff_name: string; unpaid_count: number; outstanding: number; oldest_charge: string };
+type StaffTabCharge = { charge_id: string; staff_id: string; staff_name: string; order_number: string | null; subtotal: number; discount_amount: number; amount: number; charged_at: string };
 
 function PosPage() {
   const { t, lang } = useI18n();
@@ -63,6 +64,7 @@ function PosPage() {
   const [staffTabOpen, setStaffTabOpen] = useState(false);
   const [staffChoices, setStaffChoices] = useState<StaffChoice[]>([]);
   const [staffTabRows, setStaffTabRows] = useState<StaffTabSummary[]>([]);
+  const [staffTabCharges, setStaffTabCharges] = useState<StaffTabCharge[]>([]);
   const [staffTabBusy, setStaffTabBusy] = useState(false);
 
   const load = async () => {
@@ -232,16 +234,23 @@ function PosPage() {
   };
 
   const loadStaffTabs = async () => {
-    const [{ data: people }, { data: balances, error }] = await Promise.all([
+    const [{ data: people }, { data: balances, error }, { data: charges, error: chargesError }] = await Promise.all([
       supabase.rpc("list_staff"),
       (supabase as any).rpc("staff_tab_summary"),
+      (supabase as any).rpc("staff_tab_unpaid_details"),
     ]);
-    if (error) { toast.error(error.message); return; }
+    if (error || chargesError) { toast.error(error?.message ?? chargesError?.message ?? "Could not load staff tabs"); return; }
     setStaffChoices(((people ?? []) as StaffChoice[]).filter((person) => person.active));
     setStaffTabRows(((balances ?? []) as StaffTabSummary[]).map((row) => ({
       ...row,
       unpaid_count: Number(row.unpaid_count),
       outstanding: Number(row.outstanding),
+    })));
+    setStaffTabCharges(((charges ?? []) as StaffTabCharge[]).map((row) => ({
+      ...row,
+      subtotal: Number(row.subtotal),
+      discount_amount: Number(row.discount_amount),
+      amount: Number(row.amount),
     })));
   };
 
@@ -281,6 +290,28 @@ function PosPage() {
       return;
     }
     toast.success(`${person.staff_name} · ฿${Number(data[0].amount).toFixed(2)} paid`);
+    await loadStaffTabs();
+  };
+
+  const voidStaffTabCharge = async (charge: StaffTabCharge) => {
+    if (!staff || staffTabBusy) return;
+    const confirmed = window.confirm(
+      lang === "th"
+        ? `ลบยอดค้าง ${charge.order_number ?? ""} จำนวน ฿${charge.amount.toFixed(2)} หรือไม่?`
+        : `Remove ${charge.order_number ?? "this charge"} · ฿${charge.amount.toFixed(2)}?`,
+    );
+    if (!confirmed) return;
+    setStaffTabBusy(true);
+    const { error } = await (supabase as any).rpc("void_staff_tab_charge", {
+      p_charge_id: charge.charge_id,
+      p_voided_by: staff.id,
+    });
+    setStaffTabBusy(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(lang === "th" ? "ลบยอดค้างแล้ว" : "Staff charge removed");
     await loadStaffTabs();
   };
 
@@ -565,6 +596,22 @@ function PosPage() {
                         <div className="flex items-center justify-between gap-3">
                           <div><div className="font-bold">{row.staff_name}</div><div className="text-xs text-muted-foreground">{row.unpaid_count} {lang === "th" ? "รายการ" : "charges"}</div></div>
                           <div className="text-xl font-black">฿{row.outstanding.toFixed(2)}</div>
+                        </div>
+                        <div className="mt-3 space-y-2 border-t pt-3">
+                          {staffTabCharges.filter((charge) => charge.staff_id === row.staff_id).map((charge) => (
+                            <div key={charge.charge_id} className="flex items-center justify-between gap-2 rounded-lg bg-muted/50 px-3 py-2">
+                              <div className="min-w-0">
+                                <div className="font-medium">{charge.order_number ?? "Staff charge"} · ฿{charge.amount.toFixed(2)}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  {new Date(charge.charged_at).toLocaleString(lang === "th" ? "th-TH" : "en-GB")}
+                                  {charge.discount_amount > 0 ? ` · ${lang === "th" ? "ส่วนลด" : "discount"} ฿${charge.discount_amount.toFixed(2)}` : ""}
+                                </div>
+                              </div>
+                              <Button size="sm" variant="destructive" disabled={staffTabBusy} onClick={() => void voidStaffTabCharge(charge)}>
+                                <X className="mr-1 h-3.5 w-3.5" />{lang === "th" ? "ลบ" : "Remove"}
+                              </Button>
+                            </div>
+                          ))}
                         </div>
                         <div className="grid grid-cols-2 gap-2 mt-3">
                           <Button variant="outline" disabled={staffTabBusy} onClick={() => void settleStaffTab(row, "cash")}>{lang === "th" ? "จ่ายเงินสด" : "Pay cash"}</Button>
