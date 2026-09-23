@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.emergency-menu-price]
 verify_jwt = false
+
+[functions.attendance-live-summary]
+verify_jwt = true

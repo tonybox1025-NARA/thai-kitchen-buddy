@@ -18,13 +18,6 @@ type OpenOrder = { id: string; table_id: string | null; opened_at: string };
 type AttendancePerson = { external_code: string; employee_id: string | null; external_name: string };
 type AttendanceDay = { external_code: string; employee_id: string | null; clock_in: string | null; clock_out: string | null };
 
-function localIsoDate(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
 function inferredShift(clockIn: string | null): "14:00–01:00" | "17:00–04:00" | null {
   if (!clockIn) return null;
   const [hours, minutes] = clockIn.slice(0, 5).split(":").map(Number);
@@ -70,12 +63,10 @@ function LivePage() {
     }
     setOpenedAt(map);
 
-    // Read-only attendance summary from the existing fingerprint integration.
-    const today = localIsoDate(new Date());
-    const [{ data: attendancePeople }, { data: attendanceDays }] = await Promise.all([
-      (supabase as any).from("attendance_device_people").select("external_code,employee_id,external_name"),
-      (supabase as any).from("attendance_device_days").select("external_code,employee_id,clock_in,clock_out").eq("work_date", today),
-    ]);
+    // Read-only attendance summary proxied from the separate Manager backend.
+    const { data: attendanceSummary } = await supabase.functions.invoke("attendance-live-summary", { body: {} });
+    const attendancePeople = attendanceSummary?.people;
+    const attendanceDays = attendanceSummary?.days;
     const dayByEmployee = new Map(
       ((attendanceDays ?? []) as AttendanceDay[]).map((day) => [day.external_code, day]),
     );
