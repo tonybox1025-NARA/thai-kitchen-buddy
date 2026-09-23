@@ -58,7 +58,7 @@ export const Route = createFileRoute("/api/public/daily-summary/$date")({
             "id,subtotal,total,member_discount_amount,loyalty_discount_amount,discount_amount,vat_amount",
           )
           .in("shift_id", shiftIds)
-          .eq("status", "paid")
+          .in("status", ["paid", "partial_refund", "refunded"])
           .not("is_test", "is", true);
         const billRows = bills ?? [];
         const billIds = billRows.map((b: any) => b.id);
@@ -76,23 +76,24 @@ export const Route = createFileRoute("/api/public/daily-summary/$date")({
             (p: any) => p.amount,
           );
 
+        const refundTotal = sum(refunds ?? [], (r) => r.amount);
         return json({
           date,
           has_data: billRows.length > 0,
           bill_count: billRows.length,
           total_product_sales: sum(billRows, (b) => b.subtotal),
-          refund: sum(refunds ?? [], (r) => r.amount),
+          refund: refundTotal,
           // MB Discount = actual baht reductions, not the number of points spent.
           mb_discount:
             sum(billRows, (b) => b.member_discount_amount) +
             sum(billRows, (b) => b.loyalty_discount_amount),
           discount: sum(billRows, (b) => b.discount_amount),
           vat: sum(billRows, (b) => b.vat_amount),
-          net_sales: sum(billRows, (b) => b.total),
+          net_sales: sum(billRows, (b) => b.total) - refundTotal,
           qr_total_amount: byMethod("qr"),
           sixty_forty_amount: byMethod("gov_qr"),
           credit_amount: byMethod("card"),
-          cash_amount: byMethod("cash"),
+          cash_amount: byMethod("cash") - refundTotal,
         });
       },
     },

@@ -1459,6 +1459,10 @@ function PaymentPage() {
       <Dialog open={refundOpen} onOpenChange={setRefundOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>{t("refund")}</DialogTitle></DialogHeader>
+          <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+            <div className="font-semibold">{lang === "th" ? "คืนเป็นเงินสดเท่านั้น" : "Cash refund only"}</div>
+            <div className="mt-1 text-xs">{lang === "th" ? "ยอดนี้จะถูกหักออกจากเงินสดที่ควรมีตอนปิดกะ โดยคงรายการชำระเดิมไว้" : "This amount is deducted from expected drawer cash at closing. Original payment methods remain recorded."}</div>
+          </div>
           <Label>{t("amount")}</Label>
           <KeypadInput value={refundAmt} onChange={setRefundAmt} title={t("refund")} placeholder="0" />
           <Label>{t("refund_reason")}</Label>

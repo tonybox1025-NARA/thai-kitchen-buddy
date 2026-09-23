@@ -83,7 +83,7 @@ function cashTipsPaidOut(r: ReportData) {
 
 function calcCashSummary(cashCount: Record<number, number>, r: ReportData) {
   const cashTotal = Object.entries(cashCount).reduce((s, [d, c]) => s + Number(d) * (c || 0), 0);
-  const expected = r.openingFloat + r.byMethod.cash + r.staffTabCashCollected - cashTipsPaidOut(r);
+  const expected = r.openingFloat + r.byMethod.cash + r.staffTabCashCollected - r.refunds - cashTipsPaidOut(r);
   return { cashTotal, expected, overShort: cashTotal - expected };
 }
 
@@ -248,7 +248,7 @@ function Reports() {
   }, []);
 
   const buildReport = async (s: Shift): Promise<ReportData> => {
-    const { data: bills } = await supabase.from("bills").select("id,total,subtotal,discount_amount,member_discount_amount,vat_amount,vat_mode,order_id").eq("shift_id", s.id).eq("status", "paid").not("is_test", "is", true);
+    const { data: bills } = await supabase.from("bills").select("id,total,subtotal,discount_amount,member_discount_amount,vat_amount,vat_mode,order_id").eq("shift_id", s.id).in("status", ["paid", "partial_refund", "refunded"]).not("is_test", "is", true);
     const billIds = (bills ?? []).map((b) => b.id);
     const orderIds = (bills ?? []).map((b) => (b as any).order_id).filter(Boolean) as string[];
     const [{ data: pays }, { data: voids }, { data: refunds }, { data: cancelledOrds }, { data: orderSources }, { data: billDiscs }, { data: staffTabCharges }, { data: staffTabSettlements }] = await Promise.all([
@@ -268,7 +268,7 @@ function Reports() {
       (supabase as any).from("staff_tab_settlements").select("amount,method").eq("shift_id", s.id),
     ]);
     const gross = (bills ?? []).reduce((x, b) => x + Number(b.subtotal), 0);
-    const net = (bills ?? []).reduce((x, b) => x + Number(b.total), 0);
+    const paidTotal = (bills ?? []).reduce((x, b) => x + Number(b.total), 0);
     const totalDiscount = (bills ?? []).reduce((x, b) => x + Number(b.discount_amount), 0);
     const member = (bills ?? []).reduce((x, b) => x + Number(b.member_discount_amount), 0);
     const vatIncluded = (bills ?? []).filter((b) => b.vat_mode === "inclusive").reduce((x, b) => x + Number(b.vat_amount ?? 0), 0);
@@ -321,10 +321,11 @@ function Reports() {
     const staffTabCashCollected = (staffTabSettlements ?? []).filter((row: any) => row.method === "cash").reduce((sum: number, row: any) => sum + Number(row.amount), 0);
     const staffTabQrCollected = (staffTabSettlements ?? []).filter((row: any) => row.method === "qr").reduce((sum: number, row: any) => sum + Number(row.amount), 0);
 
+    const refundTotal = (refunds ?? []).reduce((x, v) => x + Number(v.amount), 0);
     return {
-      gross, net, discount, member, coupon, vatIncluded, vatAdded,
+      gross, net: paidTotal - refundTotal, discount, member, coupon, vatIncluded, vatAdded,
       voids: (voids ?? []).reduce((x, v) => x + Number(v.amount), 0),
-      refunds: (refunds ?? []).reduce((x, v) => x + Number(v.amount), 0),
+      refunds: refundTotal,
       byMethod, openingFloat: Number(s.opening_float), bills: (bills ?? []).length,
       tipTotal,
       cardTipTotal,
