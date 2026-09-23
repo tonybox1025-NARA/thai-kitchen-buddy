@@ -82,12 +82,16 @@ function PosPage() {
   };
 
   const loadSpecialOrders = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("orders")
       .select("id,order_number,source")
       .in("source", ["takeout", "staff_meal"])
       .eq("status", "open")
-      .order("created_at");
+      .order("opened_at", { ascending: true });
+    if (error) {
+      console.error("Could not load open takeout orders", error);
+      return;
+    }
     if (data) setSpecialOrders(data as SpecialOrder[]);
   };
 
