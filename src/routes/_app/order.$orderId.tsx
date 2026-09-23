@@ -10,7 +10,7 @@ import { KeypadInput } from "@/components/KeypadInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Minus, Trash2, ChefHat, Receipt, ArrowLeft, AlertTriangle, ArrowLeftRight, X, Printer, Eye, Layers, Bell, QrCode, Check, ShoppingBag } from "lucide-react";
+import { Plus, Minus, Trash2, ChefHat, Receipt, ArrowLeft, AlertTriangle, ArrowLeftRight, X, Printer, Eye, Layers, Bell, QrCode, Check, ShoppingBag, Tag } from "lucide-react";
 import { ManagerPinDialog } from "@/components/ManagerPinDialog";
 import { SetMenuDialog } from "@/components/SetMenuDialog";
 import { SETS, buildSetDef, setConfigCost, type SetConfig, type SetDef, type SetItemRow } from "@/lib/set-menu";
@@ -159,6 +159,9 @@ function OrderPage() {
   const [orderNumber, setOrderNumber] = useState<string | null>(null);
   const [staffDebtorName, setStaffDebtorName] = useState<string | null>(null);
   const [recordingStaffTab, setRecordingStaffTab] = useState(false);
+  const [staffDiscountOpen, setStaffDiscountOpen] = useState(false);
+  const [staffDiscountType, setStaffDiscountType] = useState<"percent" | "fixed">("percent");
+  const [staffDiscountValue, setStaffDiscountValue] = useState(0);
   const [closeTableOpen, setCloseTableOpen] = useState(false);
   const [closeReason, setCloseReason] = useState("");
   const [closePreset, setClosePreset] = useState("");
@@ -653,6 +656,8 @@ function OrderPage() {
       const { data, error } = await (supabase as any).rpc("record_staff_tab_charge", {
         p_order_id: orderId,
         p_charged_by: staff.id,
+        p_discount_type: staffDiscountValue > 0 ? staffDiscountType : null,
+        p_discount_value: staffDiscountValue,
       });
       if (error || !data?.[0]) throw error ?? new Error("Could not record staff tab");
       toast.success(`${staffDebtorName ?? "Staff"} · ฿${Number(data[0].amount).toFixed(2)} recorded`);
@@ -1164,10 +1169,24 @@ function OrderPage() {
             <Receipt className="h-4 w-4 mr-2" />{t("go_to_payment")}
           </Button>
           {orderSource === "staff_meal" && staffDebtorName && (
-            <Button className="w-full bg-purple-700 hover:bg-purple-800" size="lg" onClick={recordOnStaffTab} disabled={recordingStaffTab || liveItems.length === 0 || pendingCount > 0}>
-              <Receipt className="h-4 w-4 mr-2" />
-              {recordingStaffTab ? (lang === "th" ? "กำลังบันทึก…" : "Recording…") : (lang === "th" ? "บันทึกเป็นบัญชีพนักงาน" : "Record on staff tab")}
-            </Button>
+            <div className="space-y-2 rounded-xl border border-purple-200 bg-purple-50/50 p-3">
+              <Button className="w-full" variant="outline" size="lg" onClick={() => setStaffDiscountOpen(true)} disabled={liveItems.length === 0}>
+                <Tag className="h-4 w-4 mr-2" />
+                {staffDiscountValue > 0
+                  ? `${lang === "th" ? "ส่วนลดพนักงาน" : "Staff discount"} · ${staffDiscountType === "percent" ? `${staffDiscountValue}%` : thb(staffDiscountValue)}`
+                  : (lang === "th" ? "ใส่ส่วนลดพนักงาน" : "Apply staff discount")}
+              </Button>
+              {staffDiscountValue > 0 && (
+                <div className="flex justify-between px-1 text-sm font-semibold text-purple-800">
+                  <span>{lang === "th" ? "ยอดค้างหลังหักส่วนลด" : "Balance after discount"}</span>
+                  <span>{thb(Math.max(0, subtotal - (staffDiscountType === "percent" ? Math.round(subtotal * staffDiscountValue) / 100 : Math.min(staffDiscountValue, subtotal))))}</span>
+                </div>
+              )}
+              <Button className="w-full bg-purple-700 hover:bg-purple-800" size="lg" onClick={recordOnStaffTab} disabled={recordingStaffTab || liveItems.length === 0 || pendingCount > 0}>
+                <Receipt className="h-4 w-4 mr-2" />
+                {recordingStaffTab ? (lang === "th" ? "กำลังบันทึก…" : "Recording…") : (lang === "th" ? "บันทึกยอดค้างพนักงาน" : "Record discounted balance")}
+              </Button>
+            </div>
           )}
         </div>
       </aside>
@@ -1442,6 +1461,36 @@ function OrderPage() {
             <Button className="flex-1" onClick={() => { printBillPreview(); setBillOpen(false); }}>
               <Printer className="h-4 w-4 mr-1" />Print
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={staffDiscountOpen} onOpenChange={setStaffDiscountOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>{lang === "th" ? "ส่วนลดพนักงาน" : "Staff discount"}</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-2">
+              <Button type="button" variant={staffDiscountType === "percent" ? "default" : "outline"} onClick={() => { setStaffDiscountType("percent"); setStaffDiscountValue(0); }}>%</Button>
+              <Button type="button" variant={staffDiscountType === "fixed" ? "default" : "outline"} onClick={() => { setStaffDiscountType("fixed"); setStaffDiscountValue(0); }}>฿</Button>
+            </div>
+            <div>
+              <Label>{staffDiscountType === "percent" ? (lang === "th" ? "เปอร์เซ็นต์ส่วนลด" : "Discount percent") : (lang === "th" ? "จำนวนเงินส่วนลด" : "Discount amount")}</Label>
+              <KeypadInput
+                value={staffDiscountValue}
+                onChange={(value) => setStaffDiscountValue(staffDiscountType === "percent" ? Math.min(100, value) : Math.min(subtotal, value))}
+                title={lang === "th" ? "ใส่ส่วนลด" : "Enter discount"}
+                display={(value) => staffDiscountType === "percent" ? `${value}%` : thb(value)}
+                decimal
+              />
+            </div>
+            <div className="rounded-lg bg-muted p-3 text-sm">
+              <div className="flex justify-between"><span>{t("subtotal")}</span><span>{thb(subtotal)}</span></div>
+              <div className="mt-1 flex justify-between font-bold text-purple-700"><span>{lang === "th" ? "ยอดค้าง" : "Balance due"}</span><span>{thb(Math.max(0, subtotal - (staffDiscountType === "percent" ? Math.round(subtotal * staffDiscountValue) / 100 : Math.min(staffDiscountValue, subtotal))))}</span></div>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="ghost" onClick={() => { setStaffDiscountValue(0); setStaffDiscountOpen(false); }}>{lang === "th" ? "ไม่ใช้ส่วนลด" : "No discount"}</Button>
+            <Button onClick={() => setStaffDiscountOpen(false)}>{lang === "th" ? "ใช้ส่วนลด" : "Apply"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

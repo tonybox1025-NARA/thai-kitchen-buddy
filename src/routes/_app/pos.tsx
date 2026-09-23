@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { CountKeypad } from "@/components/CountKeypad";
-import { PinKeypad } from "@/components/PinKeypad";
 import { ManagerPinDialog } from "@/components/ManagerPinDialog";
 import { Bell, Users, X, ShoppingBag, UtensilsCrossed, Plus, QrCode, Merge } from "lucide-react";
 import { toast } from "sonner";
@@ -41,9 +40,6 @@ type CombineOption = {
 
 type StaffChoice = { id: string; name: string; role: "admin" | "manager" | "staff"; active: boolean };
 type StaffTabSummary = { staff_id: string; staff_name: string; unpaid_count: number; outstanding: number; oldest_charge: string };
-type StaffTabAction =
-  | { kind: "new"; person: StaffChoice }
-  | { kind: "settle"; person: StaffTabSummary; method: "cash" | "qr" };
 
 function PosPage() {
   const { t, lang } = useI18n();
@@ -67,8 +63,7 @@ function PosPage() {
   const [staffTabOpen, setStaffTabOpen] = useState(false);
   const [staffChoices, setStaffChoices] = useState<StaffChoice[]>([]);
   const [staffTabRows, setStaffTabRows] = useState<StaffTabSummary[]>([]);
-  const [staffTabAction, setStaffTabAction] = useState<StaffTabAction | null>(null);
-  const [staffTabError, setStaffTabError] = useState<string | null>(null);
+  const [staffTabBusy, setStaffTabBusy] = useState(false);
 
   const load = async () => {
     const [{ data }, { data: openOrders }] = await Promise.all([
@@ -253,42 +248,39 @@ function PosPage() {
   const openStaffTabs = async () => {
     if (isOffline()) { toast.error(t("err_offline")); return; }
     await loadStaffTabs();
-    setStaffTabAction(null);
-    setStaffTabError(null);
     setStaffTabOpen(true);
   };
 
-  const submitStaffTabPin = async (pin: string) => {
-    if (!staff || !staffTabAction) return;
-    setStaffTabError(null);
-    if (staffTabAction.kind === "new") {
-      const { data, error } = await (supabase as any).rpc("start_staff_tab_order", {
-        p_staff_id: staffTabAction.person.id,
-        p_pin: pin,
-        p_opened_by: staff.id,
-      });
-      if (error || !data?.[0]?.order_id) {
-        setStaffTabError(error?.message ?? "Could not start staff tab");
-        return;
-      }
-      setStaffTabOpen(false);
-      setStaffTabAction(null);
-      nav({ to: "/order/$orderId", params: { orderId: data[0].order_id } });
+  const startStaffTab = async (person: StaffChoice) => {
+    if (!staff || staffTabBusy) return;
+    setStaffTabBusy(true);
+    const { data, error } = await (supabase as any).rpc("start_staff_tab_order", {
+      p_staff_id: person.id,
+      p_opened_by: staff.id,
+    });
+    setStaffTabBusy(false);
+    if (error || !data?.[0]?.order_id) {
+      toast.error(error?.message ?? "Could not start staff tab");
       return;
     }
+    setStaffTabOpen(false);
+    nav({ to: "/order/$orderId", params: { orderId: data[0].order_id } });
+  };
 
+  const settleStaffTab = async (person: StaffTabSummary, method: "cash" | "qr") => {
+    if (!staff || staffTabBusy) return;
+    setStaffTabBusy(true);
     const { data, error } = await (supabase as any).rpc("settle_staff_tab", {
-      p_staff_id: staffTabAction.person.staff_id,
-      p_method: staffTabAction.method,
-      p_pin: pin,
+      p_staff_id: person.staff_id,
+      p_method: method,
       p_received_by: staff.id,
     });
+    setStaffTabBusy(false);
     if (error || !data?.[0]) {
-      setStaffTabError(error?.message ?? "Could not settle staff tab");
+      toast.error(error?.message ?? "Could not settle staff tab");
       return;
     }
-    toast.success(`${staffTabAction.person.staff_name} · ฿${Number(data[0].amount).toFixed(2)} paid`);
-    setStaffTabAction(null);
+    toast.success(`${person.staff_name} · ฿${Number(data[0].amount).toFixed(2)} paid`);
     await loadStaffTabs();
   };
 
@@ -556,22 +548,12 @@ function PosPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={staffTabOpen} onOpenChange={(open) => { setStaffTabOpen(open); if (!open) { setStaffTabAction(null); setStaffTabError(null); } }}>
+      <Dialog open={staffTabOpen} onOpenChange={setStaffTabOpen}>
         <DialogContent className="max-w-xl max-h-[88vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{lang === "th" ? "บัญชีค้างจ่ายพนักงาน" : "Staff tab"}</DialogTitle>
           </DialogHeader>
-          {staffTabAction ? (
-            <PinKeypad
-              title={staffTabAction.kind === "new"
-                ? `${staffTabAction.person.name} · ${lang === "th" ? "ใส่ PIN" : "Enter PIN"}`
-                : `${staffTabAction.person.staff_name} · ${staffTabAction.method.toUpperCase()}`}
-              error={staffTabError}
-              onCancel={() => { setStaffTabAction(null); setStaffTabError(null); }}
-              onSubmit={submitStaffTabPin}
-            />
-          ) : (
-            <div className="space-y-5">
+          <div className="space-y-5">
               <section>
                 <h3 className="font-semibold mb-2">{lang === "th" ? "ยอดค้างชำระ" : "Outstanding"}</h3>
                 {staffTabRows.length === 0 ? (
@@ -585,8 +567,8 @@ function PosPage() {
                           <div className="text-xl font-black">฿{row.outstanding.toFixed(2)}</div>
                         </div>
                         <div className="grid grid-cols-2 gap-2 mt-3">
-                          <Button variant="outline" onClick={() => setStaffTabAction({ kind: "settle", person: row, method: "cash" })}>{lang === "th" ? "จ่ายเงินสด" : "Pay cash"}</Button>
-                          <Button variant="outline" onClick={() => setStaffTabAction({ kind: "settle", person: row, method: "qr" })}>{lang === "th" ? "จ่าย QR" : "Pay QR"}</Button>
+                          <Button variant="outline" disabled={staffTabBusy} onClick={() => void settleStaffTab(row, "cash")}>{lang === "th" ? "จ่ายเงินสด" : "Pay cash"}</Button>
+                          <Button variant="outline" disabled={staffTabBusy} onClick={() => void settleStaffTab(row, "qr")}>{lang === "th" ? "จ่าย QR" : "Pay QR"}</Button>
                         </div>
                       </div>
                     ))}
@@ -597,12 +579,11 @@ function PosPage() {
                 <h3 className="font-semibold mb-2">{lang === "th" ? "เพิ่มรายการใหม่" : "New staff charge"}</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {staffChoices.map((person) => (
-                    <Button key={person.id} variant="outline" className="h-12" onClick={() => setStaffTabAction({ kind: "new", person })}>{person.name}</Button>
+                    <Button key={person.id} variant="outline" className="h-12" disabled={staffTabBusy} onClick={() => void startStaffTab(person)}>{person.name}</Button>
                   ))}
                 </div>
               </section>
-            </div>
-          )}
+          </div>
         </DialogContent>
       </Dialog>
 
