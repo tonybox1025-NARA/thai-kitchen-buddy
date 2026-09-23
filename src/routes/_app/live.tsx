@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { thb } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
-import { RefreshCw, Users, Utensils, Receipt } from "lucide-react";
+import { Clock3, RefreshCw, Users, Utensils, Receipt } from "lucide-react";
 
 export const Route = createFileRoute("/_app/live")({ component: LivePage });
 
@@ -15,6 +15,21 @@ type RTable = {
   guests: number;
 };
 type OpenOrder = { id: string; table_id: string | null; opened_at: string };
+type AttendancePerson = { employee_id: string; external_name: string };
+type AttendanceDay = { employee_id: string | null; clock_in: string | null; clock_out: string | null };
+
+function localIsoDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function inferredShift(clockIn: string | null): "14:00–01:00" | "17:00–04:00" | null {
+  if (!clockIn) return null;
+  const [hours, minutes] = clockIn.slice(0, 5).split(":").map(Number);
+  return hours * 60 + minutes < 15 * 60 + 30 ? "14:00–01:00" : "17:00–04:00";
+}
 
 function minutesSince(iso: string): number {
   const t = new Date(iso).getTime();
@@ -37,6 +52,7 @@ function LivePage() {
   const [hasShift, setHasShift] = useState(true);
   const [hourly, setHourly] = useState<{ hour: number; count: number; total: number }[]>([]);
   const [topItems, setTopItems] = useState<{ name_th: string; name_en: string; qty: number }[]>([]);
+  const [attendance, setAttendance] = useState<Array<AttendancePerson & AttendanceDay>>([]);
   const [updatedAt, setUpdatedAt] = useState<Date>(new Date());
   const [loading, setLoading] = useState(true);
 
@@ -53,6 +69,20 @@ function LivePage() {
       if (o.table_id && (!map.has(o.table_id) || o.opened_at < map.get(o.table_id)!)) map.set(o.table_id, o.opened_at);
     }
     setOpenedAt(map);
+
+    // Read-only attendance summary from the existing fingerprint integration.
+    const today = localIsoDate(new Date());
+    const [{ data: attendancePeople }, { data: attendanceDays }] = await Promise.all([
+      (supabase as any).from("attendance_device_people").select("employee_id,external_name").not("employee_id", "is", null),
+      (supabase as any).from("attendance_device_days").select("employee_id,clock_in,clock_out").eq("work_date", today).not("employee_id", "is", null),
+    ]);
+    const dayByEmployee = new Map(
+      ((attendanceDays ?? []) as AttendanceDay[]).map((day) => [day.employee_id, day]),
+    );
+    setAttendance(((attendancePeople ?? []) as AttendancePerson[]).map((person) => ({
+      ...person,
+      ...(dayByEmployee.get(person.employee_id) ?? { employee_id: person.employee_id, clock_in: null, clock_out: null }),
+    })).sort((a, b) => Number(!!b.clock_in) - Number(!!a.clock_in) || a.external_name.localeCompare(b.external_name)));
 
     // Current unpaid value per active table. Use live, non-voided order items so
     // this stays separate from the paid-sales headline above.
@@ -194,6 +224,43 @@ function LivePage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Today's fingerprint attendance — read-only; payroll remains manager-reviewed. */}
+      {attendance.length > 0 && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-sm font-semibold">
+                <Clock3 className="h-4 w-4" />
+                {lang === "th" ? "ลงเวลาวันนี้" : "Attendance today"}
+              </div>
+              <Badge variant="secondary">
+                {attendance.filter((row) => row.clock_in).length}/{attendance.length}
+              </Badge>
+            </div>
+            <div className="space-y-2">
+              {attendance.map((row) => {
+                const shift = inferredShift(row.clock_in);
+                const working = !!row.clock_in && !row.clock_out;
+                return (
+                  <div key={row.employee_id} className="flex items-center gap-3 rounded-lg border px-3 py-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold">{row.external_name}</div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {shift ? `${shift} · ${lang === "th" ? "อัตโนมัติ" : "Auto"}` : (lang === "th" ? "ยังไม่มีบันทึก" : "No record yet")}
+                      </div>
+                    </div>
+                    <div className="text-right text-xs tabular-nums">
+                      <div>{row.clock_in?.slice(0, 5) ?? "—"} → {row.clock_out?.slice(0, 5) ?? "—"}</div>
+                      {working && <div className="mt-0.5 font-medium text-emerald-600">{lang === "th" ? "กำลังทำงาน" : "Working"}</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Payment split */}
       {salesNet > 0 && (
