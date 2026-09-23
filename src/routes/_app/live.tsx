@@ -15,8 +15,8 @@ type RTable = {
   guests: number;
 };
 type OpenOrder = { id: string; table_id: string | null; opened_at: string };
-type AttendancePerson = { employee_id: string; external_name: string };
-type AttendanceDay = { employee_id: string | null; clock_in: string | null; clock_out: string | null };
+type AttendancePerson = { external_code: string; employee_id: string | null; external_name: string };
+type AttendanceDay = { external_code: string; employee_id: string | null; clock_in: string | null; clock_out: string | null };
 
 function localIsoDate(date: Date): string {
   const year = date.getFullYear();
@@ -73,15 +73,15 @@ function LivePage() {
     // Read-only attendance summary from the existing fingerprint integration.
     const today = localIsoDate(new Date());
     const [{ data: attendancePeople }, { data: attendanceDays }] = await Promise.all([
-      (supabase as any).from("attendance_device_people").select("employee_id,external_name").not("employee_id", "is", null),
-      (supabase as any).from("attendance_device_days").select("employee_id,clock_in,clock_out").eq("work_date", today).not("employee_id", "is", null),
+      (supabase as any).from("attendance_device_people").select("external_code,employee_id,external_name"),
+      (supabase as any).from("attendance_device_days").select("external_code,employee_id,clock_in,clock_out").eq("work_date", today),
     ]);
     const dayByEmployee = new Map(
-      ((attendanceDays ?? []) as AttendanceDay[]).map((day) => [day.employee_id, day]),
+      ((attendanceDays ?? []) as AttendanceDay[]).map((day) => [day.external_code, day]),
     );
     setAttendance(((attendancePeople ?? []) as AttendancePerson[]).map((person) => ({
       ...person,
-      ...(dayByEmployee.get(person.employee_id) ?? { employee_id: person.employee_id, clock_in: null, clock_out: null }),
+      ...(dayByEmployee.get(person.external_code) ?? { external_code: person.external_code, employee_id: person.employee_id, clock_in: null, clock_out: null }),
     })).sort((a, b) => Number(!!b.clock_in) - Number(!!a.clock_in) || a.external_name.localeCompare(b.external_name)));
 
     // Current unpaid value per active table. Use live, non-voided order items so
@@ -243,7 +243,7 @@ function LivePage() {
                 const shift = inferredShift(row.clock_in);
                 const working = !!row.clock_in && !row.clock_out;
                 return (
-                  <div key={row.employee_id} className="flex items-center gap-3 rounded-lg border px-3 py-2">
+                  <div key={row.external_code} className="flex items-center gap-3 rounded-lg border px-3 py-2">
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-semibold">{row.external_name}</div>
                       <div className="text-[11px] text-muted-foreground">
