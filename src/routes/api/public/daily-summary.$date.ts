@@ -93,7 +93,9 @@ export const Route = createFileRoute("/api/public/daily-summary/$date")({
           qr_total_amount: byMethod("qr"),
           sixty_forty_amount: byMethod("gov_qr"),
           credit_amount: byMethod("card"),
-          cash_amount: byMethod("cash") - refundTotal,
+          // Preserve what was actually received by each tender. Cash paid back
+          // is reported separately in `refund`; it is not a payment-type edit.
+          cash_amount: byMethod("cash"),
         });
       },
     },
