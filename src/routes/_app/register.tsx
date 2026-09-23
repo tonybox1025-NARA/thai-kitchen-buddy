@@ -364,6 +364,24 @@ function Register() {
     if (w) { w.document.write(html); w.document.close(); }
   };
 
+  const printOpeningKitchenCheck = async (s: Shift) => {
+    if (!canPrintDirect()) return;
+    await printDirect("kitchen", {
+      kind: "report",
+      restaurant: restaurantName || "Restaurant",
+      report_type: "OPEN",
+      business_day: s.business_day,
+      printed_at: s.opened_at ?? new Date().toISOString(),
+      sections: [{
+        title: "OPENING PRINTER CHECK",
+        rows: [
+          { label: "Kitchen printer", value: "READY", bold: true },
+          { label: "เครื่องพิมพ์ครัว", value: "พร้อม", bold: true },
+        ],
+      }],
+    });
+  };
+
   const openShift = async () => {
     const today = new Date().toISOString().slice(0, 10);
     const { data: newShift, error } = await supabase.from("shifts")
@@ -373,6 +391,7 @@ function Register() {
     setShift(newShift as Shift);
     try {
       await printOpenSlip(newShift as Shift, openCashCount);
+      await printOpeningKitchenCheck(newShift as Shift);
     } catch (printError) {
       toast.error(printError instanceof Error ? `Shift opened, but printing failed: ${printError.message}` : "Shift opened, but printing failed");
     }
