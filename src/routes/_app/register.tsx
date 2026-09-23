@@ -389,11 +389,18 @@ function Register() {
       .select("*").single();
     if (error || !newShift) { toast.error(error?.message ?? t("rep_load_failed")); return; }
     setShift(newShift as Shift);
-    try {
-      await printOpenSlip(newShift as Shift, openCashCount);
-      await printOpeningKitchenCheck(newShift as Shift);
-    } catch (printError) {
-      toast.error(printError instanceof Error ? `Shift opened, but printing failed: ${printError.message}` : "Shift opened, but printing failed");
+    const [counterResult, kitchenResult] = await Promise.allSettled([
+      printOpenSlip(newShift as Shift, openCashCount),
+      printOpeningKitchenCheck(newShift as Shift),
+    ]);
+    const failed = [
+      counterResult.status === "rejected" ? "counter" : null,
+      kitchenResult.status === "rejected" ? "kitchen" : null,
+    ].filter(Boolean);
+    if (failed.length > 0) {
+      toast.error(`Shift opened, but ${failed.join(" and ")} printer check failed. Check paper/power and use Confirm & Print again.`, { duration: 15_000 });
+    } else {
+      toast.success("Shift opened · counter and kitchen printers ready");
     }
     setOpenDlg(false); setOpenCashCount({});
     toast.success(t("rep_shift_opened"));

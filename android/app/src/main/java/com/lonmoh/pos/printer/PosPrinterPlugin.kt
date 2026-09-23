@@ -11,6 +11,10 @@ import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.net.ConnectException
+import java.net.NoRouteToHostException
+import java.net.SocketTimeoutException
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 
 /**
@@ -31,10 +35,14 @@ class PosPrinterPlugin : Plugin() {
         const val DEFAULT_PORT = 9100
         const val DEFAULT_TIMEOUT_MS = 5000
         const val DEFAULT_PROBE_TIMEOUT_MS = 2000
+        const val PRINTER_IDLE_WAKE_MS = 15 * 60 * 1000L
+        const val PRINTER_WAKE_DELAY_MS = 1000L
+        const val RETRY_DELAY_MS = 750L
     }
 
     /** Sockets block — keep them off the WebView thread. */
     private val io = Executors.newSingleThreadExecutor()
+    private val lastSuccessfulPrint = ConcurrentHashMap<String, Long>()
 
     private lateinit var sunmi: SunmiPrinter
     private lateinit var usb: UsbPrinter
@@ -67,18 +75,50 @@ class PosPrinterPlugin : Plugin() {
 
         io.execute {
             try {
-                Socket().use { socket ->
-                    socket.connect(InetSocketAddress(host, port), timeoutMs)
-                    socket.soTimeout = timeoutMs
-                    socket.getOutputStream().apply {
-                        write(payload)
-                        flush()
+                val target = "$host:$port"
+                val lastPrint = lastSuccessfulPrint[target] ?: 0L
+                if (System.currentTimeMillis() - lastPrint >= PRINTER_IDLE_WAKE_MS) {
+                    // LAN receipt printers commonly discard the first document while
+                    // waking from power-save.  Establishing a throwaway connection first
+                    // wakes the NIC/printer without risking a duplicate customer ticket.
+                    try {
+                        Socket().use { wakeSocket ->
+                            wakeSocket.connect(InetSocketAddress(host, port), timeoutMs)
+                        }
+                    } catch (_: Exception) {
+                        // Best effort only. The real send below has its own safe
+                        // connection retry and will report a useful error if still down.
+                    }
+                    Thread.sleep(PRINTER_WAKE_DELAY_MS)
+                }
+
+                fun send() {
+                    Socket().use { socket ->
+                        socket.connect(InetSocketAddress(host, port), timeoutMs)
+                        socket.soTimeout = timeoutMs
+                        socket.getOutputStream().apply {
+                            write(payload)
+                            flush()
+                        }
                     }
                 }
+
+                try {
+                    send()
+                } catch (first: Exception) {
+                    // Retry errors that prove the connection was never established.
+                    // Do not retry ambiguous write failures: that could print a duplicate.
+                    if (first !is ConnectException && first !is NoRouteToHostException && first !is SocketTimeoutException) {
+                        throw first
+                    }
+                    Thread.sleep(RETRY_DELAY_MS)
+                    send()
+                }
+                lastSuccessfulPrint[target] = System.currentTimeMillis()
                 call.resolve(
                     JSObject()
                         .put("bytes", payload.size)
-                        .put("target", "$host:$port"),
+                        .put("target", target),
                 )
             } catch (e: Exception) {
                 call.reject("Print to $host:$port failed: ${e.message}", e)
