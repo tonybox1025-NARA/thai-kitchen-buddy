@@ -234,6 +234,7 @@ function Register() {
   // Register open flow
   const [openDlg, setOpenDlg] = useState(false);
   const [openCashCount, setOpenCashCount] = useState<Record<number, number>>({});
+  const [openingShift, setOpeningShift] = useState(false);
   const [closeDlg, setCloseDlg] = useState(false);
 
   // Scenario 2: Z-report payment type adjustment
@@ -243,10 +244,12 @@ function Register() {
   const [adjLoading, setAdjLoading] = useState(false);
 
   useEffect(() => {
-    supabase.from("shifts").select("*").eq("status", "open").maybeSingle().then(({ data }) => {
-      setShift((data as Shift) ?? null);
+    supabase.from("shifts").select("*").eq("status", "open")
+      .order("opened_at", { ascending: false }).limit(1).then(({ data }) => {
+      const currentShift = data?.[0] ?? null;
+      setShift((currentShift as Shift) ?? null);
       // No register open yet → prompt to open it (count starting cash) right away.
-      if (!data) { setOpenCashCount({}); setOpenDlg(true); }
+      if (!currentShift) { setOpenCashCount({}); setOpenDlg(true); }
     });
     supabase.from("settings").select("restaurant_name,qr_time_buckets").eq("id", 1).maybeSingle().then(({ data }) => {
       setRestaurantName((data as any)?.restaurant_name ?? "");
@@ -408,6 +411,18 @@ function Register() {
   };
 
   const openShift = async () => {
+    if (openingShift) return;
+    setOpeningShift(true);
+    try {
+      // A delayed/double touch must not create a second open register shift.
+      const { data: existing } = await supabase.from("shifts").select("*")
+        .eq("status", "open").order("opened_at", { ascending: false }).limit(1);
+      if (existing?.[0]) {
+        setShift(existing[0] as Shift);
+        setOpenDlg(false);
+        toast.success(t("rep_shift_opened"));
+        return;
+      }
     const today = new Date().toISOString().slice(0, 10);
     const { data: newShift, error } = await supabase.from("shifts")
       .insert({ business_day: today, opened_by: staff?.id, opening_float: openTotal })
@@ -429,6 +444,9 @@ function Register() {
     }
     setOpenDlg(false); setOpenCashCount({});
     toast.success(t("rep_shift_opened"));
+    } finally {
+      setOpeningShift(false);
+    }
   };
 
   const runX = async () => {
@@ -603,7 +621,9 @@ function Register() {
           </div>
           <DialogFooter className="pt-2">
             <Button variant="outline" onClick={() => setOpenDlg(false)}>{t("cancel")}</Button>
-            <Button onClick={openShift}>{t("rep_open_and_print")}</Button>
+            <Button onClick={openShift} disabled={openingShift}>
+              {openingShift ? "Opening…" : t("rep_open_and_print")}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

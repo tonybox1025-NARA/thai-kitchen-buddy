@@ -159,7 +159,10 @@ function PosPage() {
   const openTableOrder = async (): Promise<string | null> => {
     if (!openTable || !staff) return null;
     if (isOffline()) { toast.error(t("err_offline")); return null; }
-    const { data: shift } = await supabase.from("shifts").select("id").eq("status", "open").maybeSingle();
+    const { data: shifts, error: shiftError } = await supabase.from("shifts").select("id")
+      .eq("status", "open").order("opened_at", { ascending: false }).limit(1);
+    const shift = shifts?.[0] ?? null;
+    if (shiftError) { toast.error(shiftError.message); return null; }
     if (!shift) {
       // No shift open — staff must open the register (count starting cash) first.
       toast.error(t("rep_open_register_first"));
@@ -206,7 +209,10 @@ function PosPage() {
     if (!staff) return;
     if (isOffline()) { toast.error(t("err_offline")); return; }
     // Requires an open register/shift.
-    const { data: shift } = await supabase.from("shifts").select("id").eq("status", "open").maybeSingle();
+    const { data: shifts, error: shiftError } = await supabase.from("shifts").select("id")
+      .eq("status", "open").order("opened_at", { ascending: false }).limit(1);
+    const shift = shifts?.[0] ?? null;
+    if (shiftError) { toast.error(shiftError.message); return; }
     if (!shift) {
       toast.error(t("rep_open_register_first"));
       nav({ to: "/register" });
