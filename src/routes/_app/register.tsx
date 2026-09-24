@@ -45,7 +45,7 @@ type ReportData = {
   staffTabDiscount: number; // discount recognized with staff sales this shift
   staffTabCashCollected: number; // old/current staff tabs repaid in cash this shift
   staffTabQrCollected: number; // old/current staff tabs repaid by QR this shift
-  discountByType: { percent: number; fixed: number; free_item: number }; // discount amount per type
+  discountByType: { percent: number; fixed: number; free_item: number; item: number }; // discount amount per type
   discountByStaff: { staffName: string; amount: number; count: number }[]; // who gave how much
   qrByBucket: QrBucketTotal[]; // QR revenue split into the user-defined time windows
 };
@@ -139,6 +139,7 @@ async function openPrintWindow(
         ...(r.discountByType.percent > 0 ? [["% Off", `- ${thb(r.discountByType.percent)}`, false, true] as [string, string, boolean, boolean]] : []),
         ...(r.discountByType.fixed > 0 ? [["Fixed amount", `- ${thb(r.discountByType.fixed)}`, false, true] as [string, string, boolean, boolean]] : []),
         ...(r.discountByType.free_item > 0 ? [["Free items", `- ${thb(r.discountByType.free_item)}`, false, true] as [string, string, boolean, boolean]] : []),
+        ...(r.discountByType.item > 0 ? [["Item discounts", `- ${thb(r.discountByType.item)}`, false, true] as [string, string, boolean, boolean]] : []),
         ...r.discountByStaff.map((s) => [`${s.staffName} (x${s.count})`, `- ${thb(s.amount)}`, false, true] as [string, string, boolean, boolean]),
       ]) }] : []),
       { title: "Cash count", rows: rows(DENOMS.filter((d) => (counts[d] ?? 0) > 0).map((d) => [`${d} THB x ${counts[d]}`, thb(d * counts[d])] as [string, string])) },
@@ -198,6 +199,7 @@ ${row("Total discounts", `- ${thb(r.discount)}`)}
 ${r.discountByType.percent > 0 ? row("  % Off", `- ${thb(r.discountByType.percent)}`) : ""}
 ${r.discountByType.fixed > 0 ? row("  Fixed amount", `- ${thb(r.discountByType.fixed)}`) : ""}
 ${r.discountByType.free_item > 0 ? row("  Free items", `- ${thb(r.discountByType.free_item)}`) : ""}
+${r.discountByType.item > 0 ? row("  Item discounts", `- ${thb(r.discountByType.item)}`) : ""}
 ${r.discountByStaff.map((s) => row(`  ${escapeHtml(s.staffName)} (×${s.count})`, `- ${thb(s.amount)}`)).join("")}
 </table>` : "<table>"}
 </table>
@@ -263,7 +265,7 @@ function Register() {
     const { data: bills } = await supabase.from("bills").select("id,total,subtotal,discount_amount,member_discount_amount,vat_amount,vat_mode,order_id").eq("shift_id", s.id).in("status", ["paid", "partial_refund", "refunded"]).not("is_test", "is", true);
     const billIds = (bills ?? []).map((b) => b.id);
     const orderIds = (bills ?? []).map((b) => (b as any).order_id).filter(Boolean) as string[];
-    const [{ data: pays }, { data: voids }, { data: refunds }, { data: cancelledOrds }, { data: orderSources }, { data: billDiscs }, { data: staffTabCharges }, { data: staffTabSettlements }] = await Promise.all([
+    const [{ data: pays }, { data: voids }, { data: refunds }, { data: cancelledOrds }, { data: orderSources }, { data: billDiscs }, { data: itemDiscs }, { data: staffTabCharges }, { data: staffTabSettlements }] = await Promise.all([
       billIds.length
         ? supabase.from("payments").select("method,amount,tip_amount,created_at").in("bill_id", billIds)
         : Promise.resolve({ data: [] as { method: string; amount: number; tip_amount: number; created_at: string }[], error: null }),
@@ -276,6 +278,9 @@ function Register() {
       billIds.length
         ? (supabase as any).from("bill_discounts").select("type,amount,applied_by,free_item_name").in("bill_id", billIds)
         : Promise.resolve({ data: [] as { type: string; amount: number; applied_by: string | null; free_item_name: string | null }[], error: null }),
+      billIds.length
+        ? (supabase as any).from("order_item_discounts").select("amount,applied_by").in("bill_id", billIds)
+        : Promise.resolve({ data: [] as { amount: number; applied_by: string | null }[], error: null }),
       (supabase as any).from("staff_tab_charges").select("subtotal,discount_amount,amount").eq("shift_id", s.id).neq("status", "voided"),
       (supabase as any).from("staff_tab_settlements").select("amount,method").eq("shift_id", s.id),
     ]);
@@ -309,8 +314,12 @@ function Register() {
     }
 
     // Aggregate discount breakdown by type and by staff
-    const discRows = (billDiscs as any[] | null) ?? [];
-    const coupon = discRows.filter((d) => d.free_item_name === "__coupon__").reduce((sum, d) => sum + Number(d.amount), 0);
+    const billDiscRows = (billDiscs as any[] | null) ?? [];
+    const discRows = [
+      ...billDiscRows,
+      ...(((itemDiscs as any[] | null) ?? []).map((row) => ({ ...row, type: "item", free_item_name: null }))),
+    ];
+    const coupon = billDiscRows.filter((d) => d.free_item_name === "__coupon__").reduce((sum, d) => sum + Number(d.amount), 0);
     const discount = Math.max(0, totalDiscount - coupon) + staffTabDiscount;
     const discApplierIds = [...new Set(discRows.map((d) => d.applied_by).filter(Boolean))] as string[];
     const { data: discStaffList } = discApplierIds.length
@@ -318,7 +327,7 @@ function Register() {
       : { data: [] as { id: string; name: string }[] };
     const discStaffMap = new Map((discStaffList ?? []).map((s) => [s.id, s.name]));
 
-    const discountByType = { percent: 0, fixed: 0, free_item: 0 };
+    const discountByType = { percent: 0, fixed: 0, free_item: 0, item: 0 };
     const discountByStaffMap = new Map<string, { staffName: string; amount: number; count: number }>();
     for (const d of discRows) {
       if (d.free_item_name === "__coupon__") continue;
@@ -1753,6 +1762,7 @@ function ReportCard({ r }: { r: ReportData }) {
               {r.discountByType.percent > 0   && <Row label="  % Discount"      value={`- ${thb(r.discountByType.percent)}`}   />}
               {r.discountByType.fixed > 0     && <Row label="  Fixed Amount"    value={`- ${thb(r.discountByType.fixed)}`}     />}
               {r.discountByType.free_item > 0 && <Row label="  Free Item"       value={`- ${thb(r.discountByType.free_item)}`} />}
+              {r.discountByType.item > 0      && <Row label="  Item Discount"  value={`- ${thb(r.discountByType.item)}`}      />}
               {r.member > 0                   && <Row label="  Member Discount" value={`- ${thb(r.member)}`}                  />}
             </div>
             <Row label="Total discounts" value={`- ${thb(r.discount + r.member)}`} bold />

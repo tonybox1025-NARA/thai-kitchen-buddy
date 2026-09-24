@@ -72,6 +72,19 @@ type BillDiscount = {
   applied_at: string;
 };
 
+type ItemDiscount = {
+  id: string;
+  bill_id: string;
+  order_item_id: string;
+  item_name_th: string | null;
+  item_name_en: string | null;
+  qty: number;
+  type: "percent" | "fixed";
+  value: number;
+  amount: number;
+  reason: string | null;
+};
+
 const DENOMS = [1000, 500, 100, 50, 20, 10, 5, 1];
 type RoundingMode = "none" | "nearest_whole" | "up_whole" | "down_whole";
 
@@ -133,6 +146,7 @@ function PaymentPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [appliedDiscount, setAppliedDiscount] = useState<BillDiscount | null>(null);
+  const [itemDiscounts, setItemDiscounts] = useState<ItemDiscount[]>([]);
   const [memberDisc, setMemberDisc] = useState(0);
   const [pointsRedeemed, setPointsRedeemed] = useState(0);
   const [tableCode, setTableCode] = useState("");
@@ -202,6 +216,14 @@ function PaymentPage() {
   const [discFixedInput, setDiscFixedInput] = useState(0);
   const [discFreeItemId, setDiscFreeItemId] = useState<string>("");
 
+  // A discount on one menu item only. It does not alter the catalog price.
+  const [itemDiscOpen, setItemDiscOpen] = useState(false);
+  const [itemDiscItemId, setItemDiscItemId] = useState("");
+  const [itemDiscQty, setItemDiscQty] = useState(1);
+  const [itemDiscType, setItemDiscType] = useState<"percent" | "fixed">("percent");
+  const [itemDiscValue, setItemDiscValue] = useState(0);
+  const [itemDiscReason, setItemDiscReason] = useState("");
+
   const load = async () => {
     // Do not let the persistence effect write its initial zero-value state over
     // a customer QR loyalty reservation while this bill is being hydrated.
@@ -229,6 +251,13 @@ function PaymentPage() {
 
       const { data: it } = await supabase.from("order_items").select("*").eq("order_id", b.order_id).neq("status", "voided");
       if (it) setItems(it as Item[]);
+
+      const { data: itemDiscRows } = await (supabase as any)
+        .from("order_item_discounts")
+        .select("*")
+        .eq("bill_id", b.id)
+        .order("created_at", { ascending: true });
+      setItemDiscounts((itemDiscRows ?? []) as ItemDiscount[]);
 
       const { data: refundRows } = await (supabase as any)
         .from("refunds")
@@ -311,7 +340,9 @@ function PaymentPage() {
 
   // ── Derived totals ──────────────────────────────────────────────────────────
   const subtotal = items.reduce((s, i) => s + i.qty * Number(i.unit_price), 0);
-  const totalDisc = appliedDiscount?.amount ?? 0;
+  const itemDiscountTotal = itemDiscounts.reduce((sum, d) => sum + Number(d.amount), 0);
+  const billDiscountTotal = Number(appliedDiscount?.amount ?? 0);
+  const totalDisc = roundMoney(billDiscountTotal + itemDiscountTotal);
   // Redemption uses fixed coupon tiers: pointsRedeemed holds the tier's point cost,
   // and the baht discount comes from that tier (not 1:1).
   const pointsDiscount = REDEEM_TIERS.find((tt) => tt.points === pointsRedeemed)?.baht ?? 0;
@@ -344,11 +375,12 @@ function PaymentPage() {
     : t("card")
   );
 
-  // Persist member discount + VAT + total to bill (discount_amount owned by applyDiscount/removeDiscount)
+  // Keep the bill summary aligned with both bill-level and item-level discounts.
   const persistBill = async () => {
     if (!bill || !billHydrated) return null;
     return (supabase as any).from("bills").update({
       subtotal,
+      discount_amount: totalDisc,
       member_discount_amount: memberDisc,
       points_redeemed: pointsRedeemed,
       service_fee_rate: settingsServiceFeeRate,
@@ -368,7 +400,7 @@ function PaymentPage() {
     }
     void persistBill();
     /* eslint-disable-next-line */
-  }, [billHydrated, memberDisc, pointsRedeemed, bill?.id, subtotal, settingsVatEnabled, settingsVatMode, settingsServiceFeeRate, settingsRoundingMode]);
+  }, [billHydrated, memberDisc, pointsRedeemed, bill?.id, subtotal, totalDisc, settingsVatEnabled, settingsVatMode, settingsServiceFeeRate, settingsRoundingMode]);
 
   // Sync QR field with remaining balance
   useEffect(() => { setQrAmt(remaining); }, [remaining]);
@@ -383,7 +415,7 @@ function PaymentPage() {
 
   // Live preview amount for the dialog
   const discPreviewAmt = (() => {
-    const maxDiscountAmount = roundMoney(subtotal * (settingsMaxDiscountPercent / 100));
+    const maxDiscountAmount = Math.max(0, roundMoney(subtotal * (settingsMaxDiscountPercent / 100)) - itemDiscountTotal);
     if (discDlgTab === "percent") return Math.min(roundMoney((subtotal * discPctInput) / 100), maxDiscountAmount);
     if (discDlgTab === "fixed" || discDlgTab === "coupon") return Math.min(discFixedInput, subtotal, maxDiscountAmount);
     const fi = items.find((i) => i.id === discFreeItemId);
@@ -391,40 +423,41 @@ function PaymentPage() {
   })();
   const discPreviewTotal = bill
     ? computeTotals(
-      Math.max(0, subtotal - discPreviewAmt - memberDisc - pointsDiscount),
+      Math.max(0, subtotal - itemDiscountTotal - discPreviewAmt - memberDisc - pointsDiscount),
       settingsVatEnabled,
       settingsVatMode,
       Number(bill.vat_rate),
       settingsServiceFeeRate,
       settingsRoundingMode,
     ).total
-    : Math.max(0, subtotal - discPreviewAmt - memberDisc - pointsDiscount);
+    : Math.max(0, subtotal - itemDiscountTotal - discPreviewAmt - memberDisc - pointsDiscount);
 
   const applyDiscount = async () => {
     if (!bill || !staff) return;
     let amount = 0;
     const extras: Record<string, unknown> = {};
+    const availableBillDiscount = Math.max(0, roundMoney(subtotal * (settingsMaxDiscountPercent / 100)) - itemDiscountTotal);
 
     if (discDlgTab === "percent") {
       if (discPctInput <= 0 || discPctInput > settingsMaxDiscountPercent) {
         toast.error(lang === "th" ? `ส่วนลดสูงสุด ${settingsMaxDiscountPercent}%` : `Maximum discount is ${settingsMaxDiscountPercent}%`);
         return;
       }
-      amount = roundMoney((subtotal * discPctInput) / 100);
+      amount = Math.min(roundMoney((subtotal * discPctInput) / 100), availableBillDiscount);
       extras.percent_value = discPctInput;
     } else if (discDlgTab === "fixed" || discDlgTab === "coupon") {
       if (discFixedInput <= 0) { toast.error(lang === "th" ? "ใส่จำนวนเงิน" : "Enter an amount"); return; }
-      amount = Math.min(discFixedInput, subtotal, roundMoney(subtotal * (settingsMaxDiscountPercent / 100)));
+      amount = Math.min(discFixedInput, subtotal, availableBillDiscount);
       extras.fixed_value = discFixedInput;
     } else {
       const fi = items.find((i) => i.id === discFreeItemId);
       if (!fi) { toast.error(lang === "th" ? "เลือกรายการ" : "Select an item"); return; }
-      amount = fi.qty * Number(fi.unit_price);
+      amount = Math.min(fi.qty * Number(fi.unit_price), availableBillDiscount);
       extras.free_item_id = fi.id;
       extras.free_item_name = lang === "th" ? fi.name_th : fi.name_en;
     }
     const maxDiscountAmount = roundMoney(subtotal * (settingsMaxDiscountPercent / 100));
-    if (amount > maxDiscountAmount) {
+    if (amount + itemDiscountTotal > maxDiscountAmount) {
       toast.error(lang === "th" ? `ส่วนลดสูงสุด ${settingsMaxDiscountPercent}%` : `Maximum discount is ${settingsMaxDiscountPercent}%`);
       return;
     }
@@ -448,7 +481,8 @@ function PaymentPage() {
     }
 
     // Recompute totals with new discount and persist to bill
-    const newAfterDisc = Math.max(0, subtotal - amount - memberDisc - pointsDiscount);
+    const combinedDiscount = roundMoney(amount + itemDiscountTotal);
+    const newAfterDisc = Math.max(0, subtotal - combinedDiscount - memberDisc - pointsDiscount);
     const { serviceFeeAmount: newService, vatAmount: newVat, roundingAdjustment: newRounding, total: newTotal } = computeTotals(
       newAfterDisc,
       settingsVatEnabled,
@@ -458,7 +492,7 @@ function PaymentPage() {
       settingsRoundingMode,
     );
     await (supabase as any).from("bills").update({
-      discount_amount: amount,
+      discount_amount: combinedDiscount,
       service_fee_rate: settingsServiceFeeRate,
       service_fee_amount: newService,
       rounding_mode: settingsRoundingMode,
@@ -475,7 +509,7 @@ function PaymentPage() {
   const removeDiscount = async () => {
     if (!bill) return;
     await (supabase as any).from("bill_discounts").delete().eq("bill_id", bill.id);
-    const newAfterDisc = Math.max(0, subtotal - memberDisc - pointsDiscount);
+    const newAfterDisc = Math.max(0, subtotal - itemDiscountTotal - memberDisc - pointsDiscount);
     const { serviceFeeAmount: newService, vatAmount: newVat, roundingAdjustment: newRounding, total: newTotal } = computeTotals(
       newAfterDisc,
       settingsVatEnabled,
@@ -485,7 +519,7 @@ function PaymentPage() {
       settingsRoundingMode,
     );
     await (supabase as any).from("bills").update({
-      discount_amount: 0,
+      discount_amount: itemDiscountTotal,
       service_fee_rate: settingsServiceFeeRate,
       service_fee_amount: newService,
       rounding_mode: settingsRoundingMode,
@@ -519,6 +553,108 @@ function PaymentPage() {
     if (d.free_item_name === "__coupon__") return `Coupon ${thb(d.fixed_value ?? d.amount)}`;
     if (d.type === "fixed")   return thb(d.fixed_value ?? 0);
     return d.free_item_name ?? (lang === "th" ? "แถมฟรี" : "Free item");
+  };
+
+  const selectedItemForDiscount = items.find((item) => item.id === itemDiscItemId) ?? null;
+  const selectedItemDiscountBase = selectedItemForDiscount
+    ? roundMoney(Math.min(itemDiscQty, selectedItemForDiscount.qty) * Number(selectedItemForDiscount.unit_price))
+    : 0;
+  const itemDiscPreviewAmt = selectedItemForDiscount
+    ? itemDiscType === "percent"
+      ? roundMoney(selectedItemDiscountBase * Math.min(itemDiscValue, 100) / 100)
+      : Math.min(roundMoney(itemDiscValue), selectedItemDiscountBase)
+    : 0;
+
+  const openItemDiscountDialog = (discount?: ItemDiscount) => {
+    const first = items[0];
+    setItemDiscItemId(discount?.order_item_id ?? first?.id ?? "");
+    setItemDiscQty(discount?.qty ?? 1);
+    setItemDiscType(discount?.type ?? "percent");
+    setItemDiscValue(Number(discount?.value ?? 0));
+    setItemDiscReason(discount?.reason ?? "");
+    setItemDiscOpen(true);
+  };
+
+  const saveItemDiscount = async () => {
+    if (!bill || !staff || !selectedItemForDiscount || itemDiscPreviewAmt <= 0) return;
+    if (itemDiscType === "percent" && itemDiscValue > 100) {
+      toast.error(lang === "th" ? "ส่วนลดรายการต้องไม่เกิน 100%" : "Item discount cannot exceed 100%");
+      return;
+    }
+    const existing = itemDiscounts.find((d) => d.order_item_id === selectedItemForDiscount.id);
+    const otherItemDiscounts = itemDiscountTotal - Number(existing?.amount ?? 0);
+    const maxDiscountAmount = roundMoney(subtotal * settingsMaxDiscountPercent / 100);
+    if (billDiscountTotal + otherItemDiscounts + itemDiscPreviewAmt > maxDiscountAmount) {
+      toast.error(lang === "th" ? `ส่วนลดรวมสูงสุด ${settingsMaxDiscountPercent}%` : `Maximum combined discount is ${settingsMaxDiscountPercent}%`);
+      return;
+    }
+    const payload = {
+      bill_id: bill.id,
+      order_item_id: selectedItemForDiscount.id,
+      item_name_th: selectedItemForDiscount.name_th,
+      item_name_en: selectedItemForDiscount.name_en,
+      qty: Math.max(1, Math.min(itemDiscQty, selectedItemForDiscount.qty)),
+      type: itemDiscType,
+      value: itemDiscValue,
+      amount: itemDiscPreviewAmt,
+      reason: itemDiscReason.trim() || null,
+      applied_by: staff.id,
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = await (supabase as any)
+      .from("order_item_discounts")
+      .upsert(payload, { onConflict: "bill_id,order_item_id" });
+    if (error) {
+      toast.error(error.message || (lang === "th" ? "บันทึกส่วนลดไม่สำเร็จ" : "Could not save item discount"));
+      return;
+    }
+    const nextItemTotal = roundMoney(otherItemDiscounts + itemDiscPreviewAmt);
+    const nextDiscountTotal = roundMoney(billDiscountTotal + nextItemTotal);
+    const nextAfterDiscount = Math.max(0, subtotal - nextDiscountTotal - memberDisc - pointsDiscount);
+    const nextTotals = computeTotals(
+      nextAfterDiscount,
+      settingsVatEnabled,
+      settingsVatMode,
+      Number(bill.vat_rate),
+      settingsServiceFeeRate,
+      settingsRoundingMode,
+    );
+    await (supabase as any).from("bills").update({
+      discount_amount: nextDiscountTotal,
+      service_fee_amount: nextTotals.serviceFeeAmount,
+      rounding_adjustment: nextTotals.roundingAdjustment,
+      vat_amount: nextTotals.vatAmount,
+      total: nextTotals.total,
+    }).eq("id", bill.id);
+    setItemDiscOpen(false);
+    await load();
+    toast.success(lang === "th" ? "ใส่ส่วนลดรายการแล้ว" : "Item discount applied");
+  };
+
+  const removeItemDiscount = async (discount: ItemDiscount) => {
+    if (!bill) return;
+    const { error } = await (supabase as any).from("order_item_discounts").delete().eq("id", discount.id);
+    if (error) { toast.error(error.message); return; }
+    const nextItemTotal = roundMoney(itemDiscountTotal - Number(discount.amount));
+    const nextDiscountTotal = roundMoney(billDiscountTotal + nextItemTotal);
+    const nextAfterDiscount = Math.max(0, subtotal - nextDiscountTotal - memberDisc - pointsDiscount);
+    const nextTotals = computeTotals(
+      nextAfterDiscount,
+      settingsVatEnabled,
+      settingsVatMode,
+      Number(bill.vat_rate),
+      settingsServiceFeeRate,
+      settingsRoundingMode,
+    );
+    await (supabase as any).from("bills").update({
+      discount_amount: nextDiscountTotal,
+      service_fee_amount: nextTotals.serviceFeeAmount,
+      rounding_adjustment: nextTotals.roundingAdjustment,
+      vat_amount: nextTotals.vatAmount,
+      total: nextTotals.total,
+    }).eq("id", bill.id);
+    await load();
+    toast.success(lang === "th" ? "ยกเลิกส่วนลดรายการแล้ว" : "Item discount removed");
   };
 
   // ── Payment helpers ─────────────────────────────────────────────────────────
@@ -759,10 +895,20 @@ function PaymentPage() {
       logoUrl: receiptLogoUrl || undefined,
       address: receiptAddress || undefined,
       promo: receiptPromo || undefined,
-      items, total, vatAmount: settingsVatEnabled && settingsVatMode === "exclusive" ? vatAmount : 0,
+      items: items.map((item) => {
+        const itemDiscount = itemDiscounts.find((discount) => discount.order_item_id === item.id);
+        return {
+          ...item,
+          discount_amount: itemDiscount?.amount ?? 0,
+          discount_label: itemDiscount
+            ? `${lang === "th" ? "ส่วนลดรายการ" : "Item discount"}${itemDiscount.reason ? `: ${itemDiscount.reason}` : ""}`
+            : undefined,
+        };
+      }),
+      total, vatAmount: settingsVatEnabled && settingsVatMode === "exclusive" ? vatAmount : 0,
       vatRate: Number(bill.vat_rate) || 7,
       vat_mode: settingsVatMode, payments: receiptPayments, language: lang,
-      discountAmount: appliedDiscount?.amount ?? 0,
+      discountAmount: totalDisc,
       memberDiscountAmount: memberDisc,
       pointsDiscountAmount: pointsDiscount,
       serviceFeeAmount,
@@ -887,6 +1033,11 @@ function PaymentPage() {
                       {appliedDiscount?.type === "free_item" && appliedDiscount.free_item_id === i.id && (
                         <span className="ml-1.5 text-xs bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded-full font-medium">{t("free")}</span>
                       )}
+                      {itemDiscounts.some((discount) => discount.order_item_id === i.id) && (
+                        <span className="ml-1.5 text-xs bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 px-1.5 py-0.5 rounded-full font-medium">
+                          {lang === "th" ? "ลดเฉพาะรายการ" : "Item discount"}
+                        </span>
+                      )}
                     </td>
                     <td className="py-1.5 text-right w-12">{i.qty}</td>
                     <td className="py-1.5 text-right w-24 tabular-nums">{thb(i.qty * Number(i.unit_price))}</td>
@@ -916,6 +1067,16 @@ function PaymentPage() {
                   <span className="shrink-0 font-medium tabular-nums">- {thb(appliedDiscount.amount)}</span>
                 </div>
               )}
+
+              {itemDiscounts.map((discount) => (
+                <div key={discount.id} className="flex items-center justify-between text-amber-700 dark:text-amber-400">
+                  <span className="font-medium truncate mr-2">
+                    {lang === "th" ? "ส่วนลดรายการ" : "Item discount"}: {lang === "th" ? discount.item_name_th || discount.item_name_en : discount.item_name_en || discount.item_name_th}
+                    {discount.reason ? ` · ${discount.reason}` : ""}
+                  </span>
+                  <span className="shrink-0 font-medium tabular-nums">- {thb(discount.amount)}</span>
+                </div>
+              ))}
 
               {memberDisc > 0 && <Row label={t("member_discount")} value={`- ${thb(memberDisc)}`} />}
               {pointsDiscount > 0 && <Row label={`${t("pay_points_used")} (${pointsRedeemed.toLocaleString()})`} value={`- ${thb(pointsDiscount)}`} />}
@@ -985,6 +1146,28 @@ function PaymentPage() {
                   <Tag className="h-4 w-4 mr-2" />{t("apply_discount")}
                 </Button>
               )}
+
+              <div className="mt-2 space-y-2">
+                {itemDiscounts.map((discount) => (
+                  <div key={discount.id} className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 px-3 py-2">
+                    <Tag className="h-4 w-4 text-amber-700 dark:text-amber-400 shrink-0" />
+                    <button type="button" className="flex-1 min-w-0 text-left" onClick={() => openItemDiscountDialog(discount)}>
+                      <p className="text-sm font-semibold text-amber-800 dark:text-amber-300 truncate">
+                        {lang === "th" ? discount.item_name_th || discount.item_name_en : discount.item_name_en || discount.item_name_th}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        - {thb(discount.amount)} · {discount.qty} {lang === "th" ? "ชิ้น" : "item(s)"}{discount.reason ? ` · ${discount.reason}` : ""}
+                      </p>
+                    </button>
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={() => void removeItemDiscount(discount)}>
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
+                <Button variant="outline" className="w-full border-dashed border-amber-400" onClick={() => openItemDiscountDialog()}>
+                  <Tag className="h-4 w-4 mr-2" />{lang === "th" ? "ลดราคาเฉพาะรายการ" : "Discount one item"}
+                </Button>
+              </div>
             </div>
 
             {/* Member discount */}
@@ -1356,6 +1539,98 @@ function PaymentPage() {
             <Button onClick={applyDiscount} disabled={discPreviewAmt <= 0}>
               <Tag className="h-4 w-4 mr-1.5" />
               {appliedDiscount ? t("change_discount") : t("apply_discount")} {discPreviewAmt > 0 ? `· - ${thb(discPreviewAmt)}` : ""}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Per-item discount dialog ───────────────────────────────────────── */}
+      <Dialog open={itemDiscOpen} onOpenChange={setItemDiscOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Tag className="h-4 w-4" />{lang === "th" ? "ลดราคาเฉพาะรายการ" : "Item discount"}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground -mt-2">
+            {lang === "th" ? "ลดเฉพาะเมนูนี้ในบิลนี้ ราคาหน้าเมนูจะไม่เปลี่ยน" : "Applies only to this item on this bill. The menu price will not change."}
+          </p>
+
+          <div className="space-y-3">
+            <div>
+              <Label>{lang === "th" ? "เลือกรายการ" : "Choose item"}</Label>
+              <Select value={itemDiscItemId} onValueChange={(value) => {
+                setItemDiscItemId(value);
+                setItemDiscQty(1);
+                const existing = itemDiscounts.find((discount) => discount.order_item_id === value);
+                if (existing) {
+                  setItemDiscQty(existing.qty);
+                  setItemDiscType(existing.type);
+                  setItemDiscValue(Number(existing.value));
+                  setItemDiscReason(existing.reason ?? "");
+                } else {
+                  setItemDiscValue(0);
+                  setItemDiscReason("");
+                }
+              }}>
+                <SelectTrigger className="mt-1"><SelectValue placeholder={lang === "th" ? "เลือกรายการ" : "Choose item"} /></SelectTrigger>
+                <SelectContent>
+                  {items.map((item) => (
+                    <SelectItem key={item.id} value={item.id}>
+                      {pickName(item, lang)} · {item.qty} × {thb(Number(item.unit_price))}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {selectedItemForDiscount && selectedItemForDiscount.qty > 1 && (
+              <div>
+                <Label>{lang === "th" ? "จำนวนที่ลดราคา" : "Discount quantity"}</Label>
+                <div className="grid grid-cols-4 gap-2 mt-1">
+                  {Array.from({ length: selectedItemForDiscount.qty }, (_, index) => index + 1).map((qty) => (
+                    <Button key={qty} type="button" variant={itemDiscQty === qty ? "default" : "outline"} onClick={() => setItemDiscQty(qty)}>{qty}</Button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <Tabs value={itemDiscType} onValueChange={(value) => { setItemDiscType(value as "percent" | "fixed"); setItemDiscValue(0); }}>
+              <TabsList className="grid grid-cols-2 w-full">
+                <TabsTrigger value="percent"><Percent className="h-3.5 w-3.5 mr-1" />%</TabsTrigger>
+                <TabsTrigger value="fixed"><DollarSign className="h-3.5 w-3.5 mr-1" />฿</TabsTrigger>
+              </TabsList>
+              <TabsContent value="percent" className="pt-2 space-y-2">
+                <KeypadInput value={itemDiscValue} onChange={(value) => setItemDiscValue(Math.min(100, value))} title={lang === "th" ? "เปอร์เซ็นต์ส่วนลด" : "Discount percent"} display={(value) => `${value}%`} placeholder="0%" />
+                <div className="flex gap-1.5 flex-wrap">
+                  {[5, 10, 15, 20, 25, 30, 50].map((value) => (
+                    <Button key={value} type="button" size="sm" variant={itemDiscValue === value ? "default" : "outline"} onClick={() => setItemDiscValue(value)}>{value}%</Button>
+                  ))}
+                </div>
+              </TabsContent>
+              <TabsContent value="fixed" className="pt-2">
+                <KeypadInput value={itemDiscValue} onChange={setItemDiscValue} title={lang === "th" ? "จำนวนเงินส่วนลด" : "Discount amount"} placeholder="0" />
+              </TabsContent>
+            </Tabs>
+
+            <div>
+              <Label>{lang === "th" ? "เหตุผล (ไม่บังคับ)" : "Reason (optional)"}</Label>
+              <Input className="mt-1" value={itemDiscReason} onChange={(event) => setItemDiscReason(event.target.value)} placeholder={lang === "th" ? "เช่น โปรวันนี้ / ระบายสต็อก" : "e.g. Today only / stock clearance"} />
+            </div>
+
+            {itemDiscPreviewAmt > 0 && (
+              <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-3 text-center">
+                <p className="text-xs text-muted-foreground">{lang === "th" ? "ส่วนลดรายการนี้" : "This item discount"}</p>
+                <p className="text-2xl font-black text-amber-700 dark:text-amber-400 tabular-nums">- {thb(itemDiscPreviewAmt)}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{lang === "th" ? "จาก" : "From"} {thb(selectedItemDiscountBase)}</p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setItemDiscOpen(false)}>{t("cancel")}</Button>
+            <Button onClick={() => void saveItemDiscount()} disabled={!selectedItemForDiscount || itemDiscPreviewAmt <= 0}>
+              {lang === "th" ? "ใช้ส่วนลด" : "Apply discount"} {itemDiscPreviewAmt > 0 ? `· - ${thb(itemDiscPreviewAmt)}` : ""}
             </Button>
           </DialogFooter>
         </DialogContent>

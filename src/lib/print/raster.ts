@@ -56,7 +56,7 @@ type Align = "left" | "center" | "right";
 
 // ── Payload shapes (mirror print_jobs.payload written by the POS) ─────────────
 
-export type ReceiptItem = { name_en?: string; name_th?: string; qty: number; unit_price: number };
+export type ReceiptItem = { name_en?: string; name_th?: string; qty: number; unit_price: number; discount_amount?: number; discount_label?: string };
 export type ReceiptPayload = {
   kind: "receipt";
   restaurant?: string;
@@ -521,12 +521,15 @@ export async function buildReceipt(p: ReceiptPayload): Promise<Uint8Array> {
     const lineTotal = (Number(it.unit_price) || 0) * qty;
     subtotal += lineTotal;
     d.row(`${qty}x  ${name}`, money(lineTotal), S.norm);
+    if ((it.discount_amount ?? 0) > 0) {
+      d.row(`  ${it.discount_label || "ส่วนลดรายการ"}`, "-" + money(it.discount_amount!), S.small);
+    }
   }
   d.rule();
 
   const shownSub = items.length > 0 ? subtotal : p.total;
   d.row("ยอดรวมก่อนส่วนลด", money(shownSub), S.norm);
-  if ((p.discountAmount ?? 0) > 0) d.row("ส่วนลด", "-" + money(p.discountAmount!), S.norm);
+  if ((p.discountAmount ?? 0) > 0) d.row("ส่วนลดรวม", "-" + money(p.discountAmount!), S.norm);
   if ((p.memberDiscountAmount ?? 0) > 0)
     d.row("ส่วนลดสมาชิก", "-" + money(p.memberDiscountAmount!), S.norm);
   if ((p.pointsDiscountAmount ?? 0) > 0)
