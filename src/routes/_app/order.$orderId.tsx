@@ -19,7 +19,8 @@ import { isFrontCounterCategory } from "@/lib/print/routing";
 import { isOffline } from "@/lib/online-status";
 import { tableLabel } from "@/lib/table";
 import { publicBaseUrl } from "@/lib/public-url";
-import { readDeviceCache, writeDeviceCache } from "@/lib/device-cache";
+import { readDeviceCache } from "@/lib/device-cache";
+import { resolveMenuImage } from "@/lib/pos-assets";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/order/$orderId")({ component: OrderPage });
@@ -121,6 +122,13 @@ function previewTotals(
 
 function MenuCardImage({ src, alt }: { src: string | null; alt: string }) {
   const [failed, setFailed] = useState(false);
+  const [localSrc, setLocalSrc] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    if (!src) { setLocalSrc(null); return; }
+    void resolveMenuImage(src).then((resolved) => { if (live) setLocalSrc(resolved); });
+    return () => { live = false; };
+  }, [src]);
   if (!src || failed) {
     return (
       <div className="w-full aspect-[4/3] bg-muted flex items-center justify-center text-5xl select-none" aria-hidden="true">
@@ -130,7 +138,7 @@ function MenuCardImage({ src, alt }: { src: string | null; alt: string }) {
   }
   return (
     <img
-      src={src}
+      src={localSrc ?? src}
       alt={alt}
       loading="lazy"
       decoding="async"
@@ -199,45 +207,9 @@ function OrderPage() {
   const [guestDialogOpen, setGuestDialogOpen] = useState(false);
   const [savingGuests, setSavingGuests] = useState(false);
 
-  const loadCatalog = async () => {
-    const [{ data: m }, { data: c }, { data: s }] = await Promise.all([
-      supabase.from("menus").select("*").eq("available", true).order("sort"),
-      supabase.from("categories").select("*").order("sort"),
-      supabase.from("settings").select("vat_enabled,vat_mode,vat_rate,service_fee_rate,rounding_mode,restaurant_name,receipt_logo_url").eq("id", 1).single(),
-    ]);
-    if (m) setMenus(m as Menu[]);
-    let nextCategories: Category[] | null = null;
-    if (c) {
-      const usedCategoryIds = new Set((m ?? []).map((menu) => menu.category_id).filter(Boolean));
-      nextCategories = (c as Category[])
-          .filter((category) => usedCategoryIds.has(category.id))
-          .sort((a, b) =>
-            (CATEGORY_PRESENTATION[a.id]?.order ?? 900 + (a.sort ?? 0))
-            - (CATEGORY_PRESENTATION[b.id]?.order ?? 900 + (b.sort ?? 0))
-            || a.name_th.localeCompare(b.name_th, "th")
-            || a.id.localeCompare(b.id),
-          );
-      setCats(nextCategories);
-      if (activeCat === "all" && nextCategories[0]) setActiveCat(nextCategories[0].id);
-    }
-    if (s) {
-      setSettingsVatEnabled((s as any).vat_enabled ?? true);
-      setSettingsVatMode((s.vat_mode as "inclusive" | "exclusive") || "inclusive");
-      setSettingsVatRate(Number(s.vat_rate) || 7);
-      setSettingsServiceFeeRate(Number((s as any).service_fee_rate ?? 0));
-      setSettingsRoundingMode(((s as any).rounding_mode as RoundingMode) || "none");
-      setRestaurantName(s.restaurant_name);
-      setReceiptLogoUrl((s as any).receipt_logo_url ?? null);
-    }
-    if (m && nextCategories && s) {
-      writeDeviceCache<CatalogCache>(CATALOG_CACHE_KEY, {
-        menus: m as Menu[], categories: nextCategories, settings: s as CatalogSettings,
-      });
-    }
-  };
-
-  // Apply cached settings synchronously on first paint. Menu/category state is
-  // also initialized from this cache above; loadCatalog then refreshes it.
+  // The app shell synchronizes the entire catalog before allowing staff into
+  // the POS. Every table therefore paints from the same device snapshot instead
+  // of repeating three catalog queries on every table transition.
   useEffect(() => {
     const s = cachedCatalog?.settings;
     if (!s) return;
@@ -285,7 +257,6 @@ function OrderPage() {
   };
 
   useEffect(() => {
-    void loadCatalog();
     void loadOrderState();
     const ch = supabase
       .channel(`order-${orderId}`)

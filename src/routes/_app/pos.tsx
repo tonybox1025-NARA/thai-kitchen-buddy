@@ -45,7 +45,6 @@ type StaffTabCharge = { charge_id: string; staff_id: string; staff_name: string;
 type TablesCache = { tables: RTable[]; openOrderByTable: Record<string, string> };
 const TABLES_CACHE_KEY = "lonmoh:pos:tables:v1";
 const SPECIAL_ORDERS_CACHE_KEY = "lonmoh:pos:special-orders:v1";
-const CATALOG_CACHE_KEY = "lonmoh:pos:catalog:v1";
 
 function PosPage() {
   const { t, lang } = useI18n();
@@ -88,18 +87,6 @@ function PosPage() {
 
   };
 
-  const warmHallCatalog = async () => {
-    const [{ data: menus }, { data: categories }, { data: settings }] = await Promise.all([
-      supabase.from("menus").select("*").eq("available", true).order("sort"),
-      supabase.from("categories").select("*").order("sort"),
-      supabase.from("settings").select("vat_enabled,vat_mode,vat_rate,service_fee_rate,rounding_mode,restaurant_name,receipt_logo_url").eq("id", 1).single(),
-    ]);
-    if (!menus || !categories || !settings) return;
-    const used = new Set(menus.map((menu) => menu.category_id).filter(Boolean));
-    const usedCategories = categories.filter((category) => used.has(category.id));
-    writeDeviceCache(CATALOG_CACHE_KEY, { menus, categories: usedCategories, settings });
-  };
-
   const loadSpecialOrders = async () => {
     const { data, error } = await supabase
       .from("orders")
@@ -119,7 +106,7 @@ function PosPage() {
   };
 
   useEffect(() => {
-    void load().then(() => warmHallCatalog());
+    void load();
     loadSpecialOrders();
     const showQrAlert = (tableCode: string) => {
       toast.success(`${t("qr_alert")} — ${t("table")} ${tableLabel(tableCode)}`);

@@ -14,6 +14,7 @@ import { installAudioUnlockListeners, unlockAudio } from "@/lib/audio-alert";
 import { useQrAlertCount } from "@/lib/qr-alert-count";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { useNativePrintQueue } from "@/lib/native-print-queue";
+import { syncPosAssets, type AssetProgress } from "@/lib/pos-assets";
 
 export const Route = createFileRoute("/_app")({ component: AppLayout });
 
@@ -22,10 +23,24 @@ function AppLayout() {
   const { t, lang } = useI18n();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const [pinErr, setPinErr] = useState<string | null>(null);
+  const [assetsReady, setAssetsReady] = useState(false);
+  const [assetProgress, setAssetProgress] = useState<AssetProgress>({ done: 0, total: 1, stage: "catalog" });
   const qrAlertCount = useQrAlertCount(Boolean(session && staff));
   useNativePrintQueue(Boolean(session && staff));
 
   useEffect(() => { installAudioUnlockListeners(); }, []);
+
+  useEffect(() => {
+    if (!session || !staff) {
+      setAssetsReady(false);
+      return;
+    }
+    let cancelled = false;
+    void syncPosAssets((progress) => { if (!cancelled) setAssetProgress(progress); })
+      .catch((error) => console.error("POS asset sync failed", error))
+      .finally(() => { if (!cancelled) setAssetsReady(true); });
+    return () => { cancelled = true; };
+  }, [session, staff]);
 
   useEffect(() => {
     if (!loading && !session) {
@@ -75,6 +90,28 @@ function AppLayout() {
               else setPinErr(t("wrong_pin"));
             }}
           />
+        </div>
+      </div>
+    );
+  }
+
+  if (!assetsReady) {
+    const percent = Math.round((assetProgress.done / Math.max(1, assetProgress.total)) * 100);
+    return (
+      <div className="min-h-screen grid place-items-center bg-background p-6">
+        <div className="w-full max-w-sm text-center space-y-4">
+          <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-muted border-t-primary" />
+          <div>
+            <p className="text-lg font-semibold">{lang === "th" ? "กำลังเตรียมระบบ POS" : "Preparing POS"}</p>
+            <p className="text-sm text-muted-foreground">
+              {assetProgress.stage === "catalog"
+                ? (lang === "th" ? "กำลังดาวน์โหลดเมนู…" : "Downloading menu…")
+                : `${assetProgress.done}/${assetProgress.total} · ${percent}%`}
+            </p>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-muted">
+            <div className="h-full bg-primary transition-[width]" style={{ width: `${percent}%` }} />
+          </div>
         </div>
       </div>
     );
