@@ -26,7 +26,7 @@ import {
   Search,
 } from "lucide-react";
 import { toast } from "sonner";
-import { SETS, SET_C_DRINKS, type SetDef, type SetConfig, type SetItem } from "@/lib/set-menu";
+import { SETS, SET_C_DRINKS, formatSetKitchenNotes, type SetDef, type SetConfig, type SetItem } from "@/lib/set-menu";
 import { walletToken } from "@/lib/wallet";
 
 export const Route = createFileRoute("/menu/$tableCode")({
@@ -921,10 +921,7 @@ function CustomerMenu() {
 
   const addSetToCart = (config: SetConfig) => {
     if (!setMenuOrigin) return;
-    const sideStr = config.sides.map((s) => s.th).join(", ");
-    const drinkStr = config.drink ? ` | ${config.drink.th}` : "";
-    const riceStr = config.rice === "rice" ? "ข้าวสวย" : "โจ๊ก";
-    const kitchenNotes = `หลัก: ${config.main.th} | ${sideStr}${drinkStr} | ${riceStr}`;
+    const kitchenNotes = formatSetKitchenNotes(config);
     setCart((prev) => [
       ...prev,
       {

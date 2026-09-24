@@ -9,6 +9,27 @@ export type SetConfig = {
   rice_cost?: number;
 };
 
+const bilingual = (th: string, en?: string) => {
+  const thai = String(th ?? "").trim();
+  const english = String(en ?? "").trim();
+  return english && english.toLocaleLowerCase() !== thai.toLocaleLowerCase()
+    ? `${thai} / ${english}`
+    : thai;
+};
+
+/** Printer-friendly Thai / English detail lines for SET items only. */
+export function formatSetKitchenNotes(config: SetConfig): string {
+  const rice = config.rice === "porridge"
+    ? "โจ๊ก / Rice porridge"
+    : "ข้าวสวย / Steamed rice";
+  return [
+    `หลัก / Main: ${bilingual(config.main.th, config.main.en)}`,
+    ...config.sides.map((side) => `เมนูรอง / Side: ${bilingual(side.th, side.en)}`),
+    ...(config.drink ? [`เครื่องดื่ม / Drink: ${bilingual(config.drink.th, config.drink.en)}`] : []),
+    `ข้าว / Rice: ${rice}`,
+  ].join("\n");
+}
+
 export type SetDef = {
   id: string;
   menu_id?: string;

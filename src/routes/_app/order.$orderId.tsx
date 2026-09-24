@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Plus, Minus, Trash2, ChefHat, Receipt, ArrowLeft, AlertTriangle, ArrowLeftRight, X, Printer, Eye, Layers, Bell, QrCode, Check, ShoppingBag, Tag } from "lucide-react";
 import { ManagerPinDialog } from "@/components/ManagerPinDialog";
 import { SetMenuDialog } from "@/components/SetMenuDialog";
-import { SETS, buildSetDef, setConfigCost, type SetConfig, type SetDef, type SetItemRow } from "@/lib/set-menu";
+import { SETS, buildSetDef, formatSetKitchenNotes, setConfigCost, type SetConfig, type SetDef, type SetItemRow } from "@/lib/set-menu";
 import { printCounter, printCounterJobs, printKitchenJobs, type CounterPrintPayload } from "@/lib/counter-printer";
 import { isFrontCounterCategory } from "@/lib/print/routing";
 import { isOffline } from "@/lib/online-status";
@@ -424,13 +424,7 @@ function OrderPage() {
   const addSetToOrder = async (config: SetConfig) => {
     const setDef = selectedSet ?? SETS.find(s => s.id === config.set_id);
     if (!setDef) return;
-    const riceNote = config.rice === "rice" ? "ข้าวสวย" : "โจ๊ก";
-    const kitchenNotes = [
-      `หลัก: ${config.main.th}`,
-      ...config.sides.map((side) => `เมนูรอง: ${side.th}`),
-      ...(config.drink ? [`เครื่องดื่ม: ${config.drink.th}`] : []),
-      `ข้าว: ${riceNote}`,
-    ].join("\n");
+    const kitchenNotes = formatSetKitchenNotes(config);
     const { error } = await (supabase as any).from("order_items").insert({
       order_id: orderId,
       menu_id: setDef.menu_id ?? null,
@@ -505,13 +499,7 @@ function OrderPage() {
       // false = Front zone (combined onto one counter FRONT ticket).
       const printToKitchen = routeToFront ? false : zone?.print_to_kitchen ?? true;
       if (sc) {
-        const riceStr = sc.rice === "rice" ? "ข้าวสวย" : "โจ๊ก";
-        const setNotes = [
-          `หลัก: ${sc.main.th}`,
-          ...sc.sides.map((side) => `เมนูรอง: ${side.th}`),
-          ...(sc.drink ? [`เครื่องดื่ม: ${sc.drink.th}`] : []),
-          `ข้าว: ${riceStr}`,
-        ].join("\n");
+        const setNotes = formatSetKitchenNotes(sc);
         const prefix = p.is_takeout ? "[ TAKEOUT ] " : "";
         return { name_my: `${prefix}${p.name_en}`, name_en: `${prefix}${p.name_en}`, name_th: `${prefix}${p.name_th}`, qty: p.qty, notes: setNotes, modifiers: null, zoneId, zoneLabel, printToKitchen };
       }

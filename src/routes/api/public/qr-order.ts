@@ -2,7 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createFileRoute } from "@tanstack/react-router";
 import type { Database } from "@/integrations/supabase/types";
 import { isFrontCounterCategory } from "@/lib/print/routing";
-import { setCostFromLabels } from "@/lib/set-menu";
+import { formatSetKitchenNotes, setCostFromLabels, type SetConfig } from "@/lib/set-menu";
 import { z } from "zod";
 
 function createPublicServerClient() {
@@ -303,21 +303,11 @@ export const Route = createFileRoute("/api/public/qr-order")({
         const rowEntries = items.map((it) => {
           const m = menuMap.get(it.menu_id)!;
           const sc = it.set_config as
-            | {
-                main?: { th: string };
-                sides?: { th: string }[];
-                drink?: { th: string };
-                rice?: string;
-              }
+            | SetConfig
             | null
             | undefined;
           const baseNotes = sc
-            ? [
-                `หลัก: ${sc.main?.th ?? "—"}`,
-                ...(sc.sides ?? []).map((side) => `เมนูรอง: ${side.th}`),
-                ...(sc.drink ? [`เครื่องดื่ม: ${sc.drink.th}`] : []),
-                `ข้าว: ${sc.rice === "porridge" ? "โจ๊ก" : "ข้าวสวย"}`,
-              ].join("\n")
+            ? formatSetKitchenNotes(sc)
             : (it.notes ?? null);
 
           // Build modifiers list from selected addon options (with quantity)
