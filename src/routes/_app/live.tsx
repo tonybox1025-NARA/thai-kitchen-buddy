@@ -34,6 +34,38 @@ function fmtDuration(min: number): string {
   return `${Math.floor(min / 60)}h ${min % 60}m`;
 }
 
+const TOP_ITEM_EXCLUDED_EN = new Set([
+  "water",
+  "rice",
+  "steamed rice",
+  "khao tom",
+  "rice soup",
+  "rice soup (khao tom)",
+  "rice soup refill",
+  "ice",
+  "ice (cup)",
+  "ice (bucket)",
+]);
+
+const TOP_ITEM_EXCLUDED_TH = new Set([
+  "น้ำเปล่า",
+  "ข้าว",
+  "ข้าวสวย",
+  "ข้าวต้ม",
+  "ข้าวต้มรีฟิล",
+  "น้ำแข็ง",
+  "น้ำแข็งแก้ว",
+  "น้ำแข็งถัง",
+]);
+
+function excludeFromTopItems(nameTh: string, nameEn: string): boolean {
+  const en = nameEn.trim().toLocaleLowerCase("en").replace(/\s+/g, " ");
+  const th = nameTh.trim().replace(/\s+/g, " ");
+  return TOP_ITEM_EXCLUDED_EN.has(en)
+    || TOP_ITEM_EXCLUDED_TH.has(th)
+    || th.startsWith("น้ำแข็ง ");
+}
+
 function LivePage() {
   const { t, lang } = useI18n();
   const [tables, setTables] = useState<RTable[]>([]);
@@ -145,12 +177,13 @@ function LivePage() {
         : { data: [] as { name_th: string; name_en: string; qty: number }[] };
       const iMap = new Map<string, { name_th: string; name_en: string; qty: number }>();
       for (const it of (oi ?? []) as { name_th: string; name_en: string; qty: number }[]) {
+        if (excludeFromTopItems(it.name_th ?? "", it.name_en ?? "")) continue;
         const key = it.name_en || it.name_th || "Item";
         const cur = iMap.get(key) ?? { name_th: it.name_th, name_en: it.name_en, qty: 0 };
         cur.qty += Number(it.qty);
         iMap.set(key, cur);
       }
-      setTopItems([...iMap.values()].sort((a, b) => b.qty - a.qty).slice(0, 5));
+      setTopItems([...iMap.values()].sort((a, b) => b.qty - a.qty).slice(0, 10));
     } else {
       setBillCount(0); setSalesNet(0); setByMethod({ cash: 0, qr: 0, gov_qr: 0, card: 0 });
       setHourly([]); setTopItems([]);
@@ -327,7 +360,7 @@ function LivePage() {
         <div>
           <h2 className="mb-2 text-sm font-semibold">{t("live_top_items")}</h2>
           <Card>
-            <CardContent className="p-2">
+            <CardContent className="max-h-72 overflow-y-auto overscroll-contain p-2 pr-1">
               {topItems.map((it, i) => (
                 <div key={it.name_en || it.name_th} className="flex items-center gap-3 px-1 py-1.5">
                   <span className="grid h-6 w-6 flex-none place-items-center rounded-full bg-primary/10 text-xs font-bold text-primary">{i + 1}</span>
