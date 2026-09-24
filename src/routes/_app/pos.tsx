@@ -15,6 +15,7 @@ import { printCounter } from "@/lib/counter-printer";
 import { isOffline } from "@/lib/online-status";
 import { tableLabel } from "@/lib/table";
 import { publicBaseUrl } from "@/lib/public-url";
+import { readDeviceCache, writeDeviceCache } from "@/lib/device-cache";
 
 export const Route = createFileRoute("/_app/pos")({ component: PosPage });
 
@@ -41,17 +42,21 @@ type CombineOption = {
 type StaffChoice = { id: string; name: string; role: "admin" | "manager" | "staff"; active: boolean };
 type StaffTabSummary = { staff_id: string; staff_name: string; unpaid_count: number; outstanding: number; oldest_charge: string };
 type StaffTabCharge = { charge_id: string; staff_id: string; staff_name: string; order_number: string | null; subtotal: number; discount_amount: number; amount: number; charged_at: string };
+type TablesCache = { tables: RTable[]; openOrderByTable: Record<string, string> };
+const TABLES_CACHE_KEY = "lonmoh:pos:tables:v1";
+const SPECIAL_ORDERS_CACHE_KEY = "lonmoh:pos:special-orders:v1";
 
 function PosPage() {
   const { t, lang } = useI18n();
   const { staff } = useAuth();
   const nav = useNavigate();
-  const [tables, setTables] = useState<RTable[]>([]);
-  const [openOrderByTable, setOpenOrderByTable] = useState<Record<string, string>>({});
+  const cachedTables = readDeviceCache<TablesCache>(TABLES_CACHE_KEY);
+  const [tables, setTables] = useState<RTable[]>(() => cachedTables?.tables ?? []);
+  const [openOrderByTable, setOpenOrderByTable] = useState<Record<string, string>>(() => cachedTables?.openOrderByTable ?? {});
   const [openTable, setOpenTable] = useState<RTable | null>(null);
   const [guests, setGuests] = useState(2);
   const [banner, setBanner] = useState<{ tableCode: string; key: number } | null>(null);
-  const [specialOrders, setSpecialOrders] = useState<SpecialOrder[]>([]);
+  const [specialOrders, setSpecialOrders] = useState<SpecialOrder[]>(() => readDeviceCache<SpecialOrder[]>(SPECIAL_ORDERS_CACHE_KEY) ?? []);
   const [takeoutOpen, setTakeoutOpen] = useState(false);
   // Table view filter: show all tables, only free ones, or only in-use ones (MERI-style).
   const [tableFilter, setTableFilter] = useState<"all" | "available" | "occupied">("all");
@@ -76,6 +81,9 @@ function PosPage() {
     const map: Record<string, string> = {};
     for (const order of openOrders ?? []) if (order.table_id && !map[order.table_id]) map[order.table_id] = order.id;
     setOpenOrderByTable(map);
+    if (data) writeDeviceCache<TablesCache>(TABLES_CACHE_KEY, {
+      tables: data as RTable[], openOrderByTable: map,
+    });
   };
 
   const loadSpecialOrders = async () => {
@@ -89,7 +97,11 @@ function PosPage() {
       console.error("Could not load open takeout orders", error);
       return;
     }
-    if (data) setSpecialOrders(data as SpecialOrder[]);
+    if (data) {
+      const next = data as SpecialOrder[];
+      setSpecialOrders(next);
+      writeDeviceCache<SpecialOrder[]>(SPECIAL_ORDERS_CACHE_KEY, next);
+    }
   };
 
   useEffect(() => {

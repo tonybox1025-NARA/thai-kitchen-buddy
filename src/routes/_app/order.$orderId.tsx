@@ -19,6 +19,7 @@ import { isFrontCounterCategory } from "@/lib/print/routing";
 import { isOffline } from "@/lib/online-status";
 import { tableLabel } from "@/lib/table";
 import { publicBaseUrl } from "@/lib/public-url";
+import { readDeviceCache, writeDeviceCache } from "@/lib/device-cache";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/order/$orderId")({ component: OrderPage });
@@ -67,6 +68,14 @@ const CATEGORY_PRESENTATION: Record<string, { order: number; en: string }> = {
 
 type Menu = { id: string; category_id: string | null; name_th: string; name_en: string; name_my: string; price: number; cost?: number; available: boolean; image_url: string | null; sort: number; is_set?: boolean };
 type Category = { id: string; name_th: string; name_en: string; name_my: string; sort: number; kitchen_zone_id?: string | null };
+
+type CatalogSettings = {
+  vat_enabled?: boolean; vat_mode?: "inclusive" | "exclusive"; vat_rate?: number;
+  service_fee_rate?: number; rounding_mode?: RoundingMode; restaurant_name: string;
+  receipt_logo_url?: string | null;
+};
+type CatalogCache = { menus: Menu[]; categories: Category[]; settings: CatalogSettings };
+const CATALOG_CACHE_KEY = "lonmoh:pos:catalog:v1";
 
 function categoryLabel(category: Category, lang: "th" | "en") {
   if (lang === "en") return CATEGORY_PRESENTATION[category.id]?.en ?? (category.name_en || category.name_th);
@@ -136,8 +145,9 @@ function OrderPage() {
   const { t, lang } = useI18n();
   const { staff } = useAuth();
   const nav = useNavigate();
-  const [menus, setMenus] = useState<Menu[]>([]);
-  const [cats, setCats] = useState<Category[]>([]);
+  const cachedCatalog = readDeviceCache<CatalogCache>(CATALOG_CACHE_KEY);
+  const [menus, setMenus] = useState<Menu[]>(() => cachedCatalog?.menus ?? []);
+  const [cats, setCats] = useState<Category[]>(() => cachedCatalog?.categories ?? []);
   const [activeCat, setActiveCat] = useState<string | "all">("all");
   const [categoryPage, setCategoryPage] = useState(0);
   const [items, setItems] = useState<Item[]>([]);
@@ -194,18 +204,18 @@ function OrderPage() {
       supabase.from("settings").select("vat_enabled,vat_mode,vat_rate,service_fee_rate,rounding_mode,restaurant_name,receipt_logo_url").eq("id", 1).single(),
     ]);
     if (m) setMenus(m as Menu[]);
+    let nextCategories: Category[] | null = null;
     if (c) {
       const usedCategoryIds = new Set((m ?? []).map((menu) => menu.category_id).filter(Boolean));
-      setCats(
-        (c as Category[])
+      nextCategories = (c as Category[])
           .filter((category) => usedCategoryIds.has(category.id))
           .sort((a, b) =>
             (CATEGORY_PRESENTATION[a.id]?.order ?? 900 + (a.sort ?? 0))
             - (CATEGORY_PRESENTATION[b.id]?.order ?? 900 + (b.sort ?? 0))
             || a.name_th.localeCompare(b.name_th, "th")
             || a.id.localeCompare(b.id),
-          ),
-      );
+          );
+      setCats(nextCategories);
     }
     if (s) {
       setSettingsVatEnabled((s as any).vat_enabled ?? true);
@@ -216,7 +226,28 @@ function OrderPage() {
       setRestaurantName(s.restaurant_name);
       setReceiptLogoUrl((s as any).receipt_logo_url ?? null);
     }
+    if (m && nextCategories && s) {
+      writeDeviceCache<CatalogCache>(CATALOG_CACHE_KEY, {
+        menus: m as Menu[], categories: nextCategories, settings: s as CatalogSettings,
+      });
+    }
   };
+
+  // Apply cached settings synchronously on first paint. Menu/category state is
+  // also initialized from this cache above; loadCatalog then refreshes it.
+  useEffect(() => {
+    const s = cachedCatalog?.settings;
+    if (!s) return;
+    setSettingsVatEnabled(s.vat_enabled ?? true);
+    setSettingsVatMode(s.vat_mode || "inclusive");
+    setSettingsVatRate(Number(s.vat_rate) || 7);
+    setSettingsServiceFeeRate(Number(s.service_fee_rate ?? 0));
+    setSettingsRoundingMode(s.rounding_mode || "none");
+    setRestaurantName(s.restaurant_name);
+    setReceiptLogoUrl(s.receipt_logo_url ?? null);
+    // Cache is a startup snapshot; the network refresh remains authoritative.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const loadOrderState = async () => {
     const [{ data: it }, { data: ord }, { data: reservedBill }] = await Promise.all([
