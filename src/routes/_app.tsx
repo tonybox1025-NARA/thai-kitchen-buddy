@@ -26,24 +26,25 @@ function AppLayout() {
   const [pinErr, setPinErr] = useState<string | null>(null);
   const [assetsReady, setAssetsReady] = useState(false);
   const [assetProgress, setAssetProgress] = useState<AssetProgress>({ done: 0, total: 1, stage: "catalog" });
-  const needsPosAssets = Capacitor.isNativePlatform()
-    && (path === "/pos" || path.startsWith("/order/"));
+  const needsPosAssets = path === "/pos" || path.startsWith("/order/");
   const qrAlertCount = useQrAlertCount(Boolean(session && staff));
   useNativePrintQueue(Boolean(session && staff));
 
   useEffect(() => { installAudioUnlockListeners(); }, []);
 
   useEffect(() => {
-    if (!session || !staff || !needsPosAssets) {
+    if (!session || !staff || !needsPosAssets || assetsReady) {
       return;
     }
-    setAssetsReady(false);
     let cancelled = false;
-    void syncPosAssets((progress) => { if (!cancelled) setAssetProgress(progress); })
+    void syncPosAssets(
+      (progress) => { if (!cancelled) setAssetProgress(progress); },
+      { preloadImages: Capacitor.isNativePlatform() },
+    )
       .catch((error) => console.error("POS asset sync failed", error))
       .finally(() => { if (!cancelled) setAssetsReady(true); });
     return () => { cancelled = true; };
-  }, [session, staff, needsPosAssets]);
+  }, [session, staff, needsPosAssets, assetsReady]);
 
   useEffect(() => {
     const section = path === "/live"

@@ -9,7 +9,14 @@ let syncedThisLaunch = false;
 
 export type AssetProgress = { done: number; total: number; stage: "catalog" | "images" };
 
-export async function syncPosAssets(onProgress?: (progress: AssetProgress) => void) {
+type SyncPosAssetOptions = {
+  preloadImages?: boolean;
+};
+
+export async function syncPosAssets(
+  onProgress?: (progress: AssetProgress) => void,
+  options: SyncPosAssetOptions = {},
+) {
   if (syncedThisLaunch) {
     onProgress?.({ done: 1, total: 1, stage: "images" });
     return;
@@ -28,6 +35,14 @@ export async function syncPosAssets(onProgress?: (progress: AssetProgress) => vo
   writeDeviceCache(CATALOG_CACHE_KEY, { menus, categories: usedCategories, settings });
 
   const urls = [...new Set(menus.map((menu) => menu.image_url).filter((url): url is string => Boolean(url)))];
+  // Browser POS only needs the small catalog snapshot. Preloading every image is
+  // reserved for the SUNMI APK, where the local cache makes table switching fast.
+  // This keeps Mac/phone web sessions responsive while still giving them menus.
+  if (options.preloadImages === false) {
+    onProgress?.({ done: 1, total: 1, stage: "images" });
+    syncedThisLaunch = true;
+    return;
+  }
   onProgress?.({ done: 0, total: Math.max(1, urls.length), stage: "images" });
   if (!("caches" in window) || urls.length === 0) {
     onProgress?.({ done: Math.max(1, urls.length), total: Math.max(1, urls.length), stage: "images" });
