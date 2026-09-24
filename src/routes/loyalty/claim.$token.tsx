@@ -67,9 +67,17 @@ function LoyaltyClaimPage() {
     setClaiming(false);
     if (!res.ok) {
       setError(data?.error ?? "Could not collect points.");
-      return;
+      return false;
     }
     setInfo(data as ClaimInfo);
+    return true;
+  };
+
+  const openWallet = async () => {
+    // Even when the register already awarded these points to a selected member,
+    // call the claim endpoint once so this phone is bound to that same member.
+    const linked = await claim();
+    if (linked) window.location.href = "/wallet";
   };
 
   if (loading) {
@@ -141,8 +149,9 @@ function LoyaltyClaimPage() {
                   <Sparkles className="h-5 w-5 mx-auto mb-1" />
                   Points saved to this phone.
                 </div>
-                <Button variant="outline" className="w-full h-12 text-base" asChild>
-                  <a href="/wallet">View my membership card</a>
+                <Button variant="outline" className="w-full h-12 text-base" onClick={openWallet} disabled={claiming}>
+                  {claiming ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                  View my membership card
                 </Button>
               </div>
             )}

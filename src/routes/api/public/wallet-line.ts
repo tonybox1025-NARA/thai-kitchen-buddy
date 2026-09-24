@@ -11,7 +11,7 @@ import { z } from "zod";
 // id. Wallet balances are never auto-merged here: a non-empty duplicate needs
 // staff review so points cannot be duplicated by reconnecting devices.
 const LINE_CHANNEL_ID = "2011108366";
-const MEMBER_COLS = "id,full_name,nickname,current_points,member_level,member_group_en,birthday,phone,created_at,line_user_id";
+const MEMBER_COLS = "id,full_name,nickname,current_points,member_level,member_group_en,birthday,phone,created_at,line_user_id,guest_token,imported_from";
 
 function createPublicServerClient() {
   const url = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
@@ -75,24 +75,44 @@ export const Route = createFileRoute("/api/public/wallet-line")({
 
         let member = current;
         if (existing && existing.id !== current.id) {
-          const { count: ledgerCount } = await sb.from("member_point_ledger")
+          const { count: currentLedgerCount } = await sb.from("member_point_ledger")
             .select("id", { count: "exact", head: true }).eq("member_id", current.id);
-          if (Number(current.current_points ?? 0) !== 0 || Number(ledgerCount ?? 0) !== 0) {
+          const { count: existingLedgerCount } = await sb.from("member_point_ledger")
+            .select("id", { count: "exact", head: true }).eq("member_id", existing.id);
+          const currentHasActivity = Number(current.current_points ?? 0) !== 0 || Number(currentLedgerCount ?? 0) !== 0;
+          const existingHasActivity = Number(existing.current_points ?? 0) !== 0 || Number(existingLedgerCount ?? 0) !== 0;
+
+          if (currentHasActivity && existingHasActivity) {
             return Response.json(
-              { error: "This device wallet has activity. Ask staff to merge it safely." },
+              { error: "Both memberships have activity. Ask staff to merge them safely." },
               { status: 409 },
             );
           }
 
-          // The token is unique, so remove only the verified empty duplicate
-          // before moving this browser/device onto the established LINE member.
-          const { error: deleteError } = await sb.from("members").delete().eq("id", current.id);
-          if (deleteError) return Response.json({ error: deleteError.message }, { status: 500 });
-          const { data: upd, error: updateError } = await sb.from("members")
-            .update({ guest_token, updated_at: new Date().toISOString() })
-            .eq("id", existing.id).select(MEMBER_COLS).single();
-          if (updateError) return Response.json({ error: updateError.message }, { status: 500 });
-          member = upd ?? existing;
+          if (currentHasActivity && !existingHasActivity) {
+            // The LINE login created an empty temporary member earlier. Keep the
+            // real register-selected wallet and move the verified LINE identity
+            // onto it.
+            await sb.from("members").update({ line_user_id: null, guest_token: null }).eq("id", existing.id);
+            const { error: deleteError } = await sb.from("members").delete().eq("id", existing.id);
+            if (deleteError) return Response.json({ error: deleteError.message }, { status: 500 });
+            const { data: upd, error: updateError } = await sb.from("members")
+              .update({ line_user_id: lineUserId, updated_at: new Date().toISOString() })
+              .eq("id", current.id).select(MEMBER_COLS).single();
+            if (updateError) return Response.json({ error: updateError.message }, { status: 500 });
+            member = upd ?? current;
+          } else {
+            // The device wallet is empty and LINE already owns a real member.
+            // Remove only the verified empty duplicate and attach this phone to
+            // the established LINE member.
+            const { error: deleteError } = await sb.from("members").delete().eq("id", current.id);
+            if (deleteError) return Response.json({ error: deleteError.message }, { status: 500 });
+            const { data: upd, error: updateError } = await sb.from("members")
+              .update({ guest_token, updated_at: new Date().toISOString() })
+              .eq("id", existing.id).select(MEMBER_COLS).single();
+            if (updateError) return Response.json({ error: updateError.message }, { status: 500 });
+            member = upd ?? existing;
+          }
         } else {
           // First link: claim this guest wallet with the LINE identity.
           const patch: Record<string, any> = { line_user_id: lineUserId, updated_at: new Date().toISOString() };
