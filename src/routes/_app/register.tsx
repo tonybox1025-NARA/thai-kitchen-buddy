@@ -235,6 +235,7 @@ function Register() {
   const [openDlg, setOpenDlg] = useState(false);
   const [openCashCount, setOpenCashCount] = useState<Record<number, number>>({});
   const [openingShift, setOpeningShift] = useState(false);
+  const [openingPrintRetry, setOpeningPrintRetry] = useState(false);
   const openingShiftRef = useRef(false);
   const [closeDlg, setCloseDlg] = useState(false);
 
@@ -411,6 +412,26 @@ function Register() {
     });
   };
 
+  const runOpeningPrintChecks = async (s: Shift) => {
+    const [counterResult, kitchenResult] = await Promise.allSettled([
+      printOpenSlip(s, openCashCount),
+      printOpeningKitchenCheck(s),
+    ]);
+    const failed = [
+      counterResult.status === "rejected" ? "counter" : null,
+      kitchenResult.status === "rejected" ? "kitchen" : null,
+    ].filter(Boolean);
+    if (failed.length > 0) {
+      setOpeningPrintRetry(true);
+      setOpenDlg(true);
+      toast.error(`Register is open, but ${failed.join(" and ")} printer check failed. Check paper/power, then tap Retry print.`, { duration: 15_000 });
+      return false;
+    }
+    setOpeningPrintRetry(false);
+    toast.success("Shift opened · counter and kitchen printers ready");
+    return true;
+  };
+
   const openShift = async () => {
     if (openingShiftRef.current) return;
     openingShiftRef.current = true;
@@ -421,7 +442,12 @@ function Register() {
         .eq("status", "open").order("opened_at", { ascending: false }).limit(1);
       if (existing?.[0]) {
         setShift(existing[0] as Shift);
+        if (openingPrintRetry) {
+          const printed = await runOpeningPrintChecks(existing[0] as Shift);
+          if (!printed) return;
+        }
         setOpenDlg(false);
+        setOpenCashCount({});
         toast.success(t("rep_shift_opened"));
         return;
       }
@@ -446,19 +472,8 @@ function Register() {
       return;
     }
     setShift(newShift as Shift);
-    const [counterResult, kitchenResult] = await Promise.allSettled([
-      printOpenSlip(newShift as Shift, openCashCount),
-      printOpeningKitchenCheck(newShift as Shift),
-    ]);
-    const failed = [
-      counterResult.status === "rejected" ? "counter" : null,
-      kitchenResult.status === "rejected" ? "kitchen" : null,
-    ].filter(Boolean);
-    if (failed.length > 0) {
-      toast.error(`Shift opened, but ${failed.join(" and ")} printer check failed. Check paper/power and use Confirm & Print again.`, { duration: 15_000 });
-    } else {
-      toast.success("Shift opened · counter and kitchen printers ready");
-    }
+    const printed = await runOpeningPrintChecks(newShift as Shift);
+    if (!printed) return;
     setOpenDlg(false); setOpenCashCount({});
     toast.success(t("rep_shift_opened"));
     } finally {
@@ -640,7 +655,7 @@ function Register() {
           <DialogFooter className="pt-2">
             <Button variant="outline" onClick={() => setOpenDlg(false)}>{t("cancel")}</Button>
             <Button onClick={openShift} disabled={openingShift}>
-              {openingShift ? "Opening…" : t("rep_open_and_print")}
+              {openingShift ? "Opening…" : openingPrintRetry ? "Retry print" : t("rep_open_and_print")}
             </Button>
           </DialogFooter>
         </DialogContent>
