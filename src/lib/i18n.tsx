@@ -499,9 +499,9 @@ const dict: Dict = {
   set_free_drink:   { th: "เครื่องดื่มฟรี 🥤",        en: "Free Drink 🥤"     },
   set_rice:         { th: "ข้าว",                    en: "Rice"              },
   set_steamed_rice: { th: "ข้าวสวย 🍚",              en: "Steamed Rice 🍚"   },
-  set_porridge:     { th: "โจ๊ก 🥣",                 en: "Porridge 🥣"       },
+  set_porridge:     { th: "ข้าวต้ม 🥣",              en: "Porridge 🥣"       },
   set_summary:      { th: "สรุปรายการ",               en: "Summary"           },
-  set_includes:     { th: "รวมข้าวสวยหรือโจ๊ก",       en: "Includes rice or porridge" },
+  set_includes:     { th: "รวมข้าวสวยหรือข้าวต้ม",    en: "Includes rice or porridge" },
   set_select_1:     { th: "เลือก 1",                 en: "Select 1"          },
   set_select_2:     { th: "เลือก 2",                 en: "Select 2"          },
   // split bill

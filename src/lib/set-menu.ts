@@ -20,7 +20,7 @@ const bilingual = (th: string, en?: string) => {
 /** Printer-friendly Thai / English detail lines for SET items only. */
 export function formatSetKitchenNotes(config: SetConfig): string {
   const rice = config.rice === "porridge"
-    ? "โจ๊ก / Rice porridge"
+    ? "ข้าวต้ม / Rice porridge"
     : "ข้าวสวย / Steamed rice";
   return [
     `หลัก / Main: ${bilingual(config.main.th, config.main.en)}`,

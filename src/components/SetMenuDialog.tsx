@@ -249,7 +249,7 @@ export function SetMenuDialog({ setDef, onClose, onConfirm }: SetMenuDialogProps
                       ? "ข้าวสวย"
                       : "Steamed Rice"
                     : lang === "th"
-                      ? "โจ๊ก"
+                      ? "ข้าวต้ม"
                       : "Porridge"}
                 </p>
               )}

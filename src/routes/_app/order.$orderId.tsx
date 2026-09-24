@@ -1071,7 +1071,7 @@ function OrderPage() {
                         {sc.drink && (
                           <div>🥤 {sc.drink.th}{lang === "en" ? ` (${sc.drink.en})` : ""} <span className="text-amber-600 font-semibold">{t("free")}</span></div>
                         )}
-                        <div>🍚 {sc.rice === "rice" ? (lang === "th" ? "ข้าวสวย" : "Steamed Rice") : (lang === "th" ? "โจ๊ก" : "Porridge")}</div>
+                        <div>🍚 {sc.rice === "rice" ? (lang === "th" ? "ข้าวสวย" : "Steamed Rice") : (lang === "th" ? "ข้าวต้ม" : "Porridge")}</div>
                       </div>
                       <div className="text-xs mt-1.5 pl-5">
                         <span className={`inline-block px-1.5 py-0.5 rounded ${i.status === "pending" ? "bg-warning/20 text-warning-foreground" : "bg-success/20 text-success-foreground"}`}>
