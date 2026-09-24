@@ -178,6 +178,9 @@ function PaymentPage() {
   const [refundOpen, setRefundOpen] = useState(false);
   const [refundReason, setRefundReason] = useState("");
   const [refundAmt, setRefundAmt] = useState(0);
+  const [refundMode, setRefundMode] = useState<"items" | "amount">("items");
+  const [refundItemQty, setRefundItemQty] = useState<Record<string, number>>({});
+  const [refundedItemQty, setRefundedItemQty] = useState<Record<string, number>>({});
   const [managerOpen, setManagerOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<"refund" | "correction" | null>(null);
 
@@ -226,6 +229,25 @@ function PaymentPage() {
 
       const { data: it } = await supabase.from("order_items").select("*").eq("order_id", b.order_id).neq("status", "voided");
       if (it) setItems(it as Item[]);
+
+      const { data: refundRows } = await (supabase as any)
+        .from("refunds")
+        .select("id")
+        .eq("bill_id", b.id);
+      const refundIds = ((refundRows ?? []) as Array<{ id: string }>).map((row) => row.id);
+      if (refundIds.length) {
+        const { data: refundItemRows } = await (supabase as any)
+          .from("refund_items")
+          .select("order_item_id,qty")
+          .in("refund_id", refundIds);
+        const refunded = ((refundItemRows ?? []) as Array<{ order_item_id: string | null; qty: number }>).reduce<Record<string, number>>((totals, row) => {
+          if (row.order_item_id) totals[row.order_item_id] = (totals[row.order_item_id] ?? 0) + Number(row.qty);
+          return totals;
+        }, {});
+        setRefundedItemQty(refunded);
+      } else {
+        setRefundedItemQty({});
+      }
 
       const { data: ord } = await supabase.from("orders").select("table_id").eq("id", b.order_id).single();
       if (ord?.table_id) {
@@ -768,29 +790,57 @@ function PaymentPage() {
   };
 
   const performRefund = () => {
-    if (!refundReason.trim() || refundAmt <= 0) return;
+    const hasSelectedItems = Object.values(refundItemQty).some((qty) => qty > 0);
+    if (!refundReason.trim()) {
+      toast.error(lang === "th" ? "กรุณาใส่เหตุผลในการคืนเงิน" : "Enter a refund reason");
+      return;
+    }
+    if (refundMode === "items" && !hasSelectedItems) {
+      toast.error(lang === "th" ? "เลือกรายการที่จะคืนเงิน" : "Select at least one item");
+      return;
+    }
+    if (refundMode === "amount" && refundAmt <= 0) return;
     if (staff?.role === "staff") { setPendingAction("refund"); setManagerOpen(true); return; }
     doRefund();
   };
   const doRefund = async () => {
     if (!bill) return;
-    const { error } = await (supabase as any).rpc("refund_bill_with_loyalty", {
-      p_bill_id: bill.id,
-      p_amount: refundAmt,
-      p_reason: refundReason,
-      p_refunded_by: staff?.id ?? null,
-    });
+    const selectedItems = Object.entries(refundItemQty)
+      .filter(([, qty]) => qty > 0)
+      .map(([order_item_id, qty]) => ({ order_item_id, qty }));
+    const { error } = refundMode === "items"
+      ? await (supabase as any).rpc("refund_bill_items_with_loyalty", {
+        p_bill_id: bill.id,
+        p_items: selectedItems,
+        p_reason: refundReason,
+        p_refunded_by: staff?.id ?? null,
+      })
+      : await (supabase as any).rpc("refund_bill_with_loyalty", {
+        p_bill_id: bill.id,
+        p_amount: refundAmt,
+        p_reason: refundReason,
+        p_refunded_by: staff?.id ?? null,
+      });
     if (error) {
       toast.error(error.message);
       return;
     }
-    setRefundOpen(false); setRefundAmt(0); setRefundReason("");
+    setRefundOpen(false); setRefundAmt(0); setRefundReason(""); setRefundItemQty({});
     await load();
     toast.success(t("pay_refunded"));
   };
 
   const paidStatus = bill?.status === "paid" || bill?.status === "partial_refund";
   const canCorrect = !!paidStatus && (staff?.role === "admin" || staff?.role === "manager");
+  const selectedRefundGross = items.reduce(
+    (sum, item) => sum + (refundItemQty[item.id] ?? 0) * Number(item.unit_price),
+    0,
+  );
+  const selectedItemRefundAmount = roundMoney(
+    bill && Number(bill.subtotal) > 0
+      ? selectedRefundGross * Number(bill.total) / Number(bill.subtotal)
+      : selectedRefundGross,
+  );
   const openCorr = () => {
     if (staff?.role === "manager") { setPendingAction("correction"); setManagerOpen(true); return; }
     setCorrChanges({}); setCorrReason(""); setCorrOpen(true);
@@ -1158,7 +1208,13 @@ function PaymentPage() {
                 <PencilLine className="h-4 w-4 mr-2" />Edit Payment Type
               </Button>
             )}
-            <Button variant="outline" className="w-full" onClick={() => { setRefundAmt(Number(bill.total)); setRefundOpen(true); }}>
+            <Button variant="outline" className="w-full" onClick={() => {
+              setRefundMode("items");
+              setRefundItemQty({});
+              setRefundAmt(Number(bill.total));
+              setRefundReason("");
+              setRefundOpen(true);
+            }}>
               <RotateCcw className="h-4 w-4 mr-2" />{t("refund")}
             </Button>
             <Button variant="ghost" className="w-full" onClick={() => nav({ to: "/pos" })}>{t("back")}</Button>
@@ -1457,7 +1513,7 @@ function PaymentPage() {
 
       {/* ── Refund dialog ────────────────────────────────────────────────────── */}
       <Dialog open={refundOpen} onOpenChange={setRefundOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{t("refund")}</DialogTitle></DialogHeader>
           <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
             <div className="font-semibold">{lang === "th" ? "คืนเป็นเงินสดเท่านั้น" : "Cash refund only"}</div>
@@ -1479,13 +1535,77 @@ function PaymentPage() {
               ))}
             </div>
           </div>
-          <Label>{lang === "th" ? "จำนวนเงินสดที่คืน" : "Cash refund amount"}</Label>
-          <KeypadInput value={refundAmt} onChange={setRefundAmt} title={t("refund")} placeholder="0" />
+          <Tabs value={refundMode} onValueChange={(value) => setRefundMode(value as "items" | "amount")}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="items">{lang === "th" ? "เลือกรายการ" : "Select items"}</TabsTrigger>
+              <TabsTrigger value="amount">{lang === "th" ? "ระบุยอดเอง" : "Custom amount"}</TabsTrigger>
+            </TabsList>
+            <TabsContent value="items" className="space-y-2 pt-2">
+              <p className="text-xs text-muted-foreground">
+                {lang === "th" ? "เลือกสินค้าและจำนวนที่ลูกค้าไม่ได้รับ" : "Select the item and quantity the customer did not receive."}
+              </p>
+              <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+                {items.map((item) => {
+                  const alreadyRefunded = refundedItemQty[item.id] ?? 0;
+                  const available = Math.max(0, Number(item.qty) - alreadyRefunded);
+                  const selected = refundItemQty[item.id] ?? 0;
+                  return (
+                    <div key={item.id} className={`flex items-center justify-between gap-3 rounded-lg border p-3 ${available === 0 ? "opacity-50" : ""}`}>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium leading-tight">{pickName(item, lang)}</div>
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          {thb(Number(item.unit_price))} · {lang === "th" ? "คืนได้" : "available"} {available}/{item.qty}
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-9 w-9 text-lg"
+                          disabled={selected <= 0}
+                          onClick={() => setRefundItemQty((prev) => ({ ...prev, [item.id]: Math.max(0, selected - 1) }))}
+                        >−</Button>
+                        <span className="w-6 text-center font-bold tabular-nums">{selected}</span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-9 w-9 text-lg"
+                          disabled={selected >= available}
+                          onClick={() => setRefundItemQty((prev) => ({ ...prev, [item.id]: Math.min(available, selected + 1) }))}
+                        >+</Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex items-center justify-between rounded-lg bg-muted p-3 font-semibold">
+                <span>{lang === "th" ? "เงินสดที่คืน" : "Cash refund"}</span>
+                <span className="tabular-nums">{thb(selectedItemRefundAmount)}</span>
+              </div>
+              {bill && Math.abs(Number(bill.total) - Number(bill.subtotal)) > 0.009 && selectedRefundGross > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {lang === "th"
+                    ? `ราคาสินค้า ${thb(selectedRefundGross)} · ปรับตามส่วนลด ภาษี และค่าบริการในบิล`
+                    : `Item price ${thb(selectedRefundGross)} · adjusted for this bill's discounts, tax, and service charge.`}
+                </p>
+              )}
+            </TabsContent>
+            <TabsContent value="amount" className="space-y-2 pt-2">
+              <Label>{lang === "th" ? "จำนวนเงินสดที่คืน" : "Cash refund amount"}</Label>
+              <KeypadInput value={refundAmt} onChange={setRefundAmt} title={t("refund")} placeholder="0" />
+            </TabsContent>
+          </Tabs>
           <Label>{t("refund_reason")}</Label>
           <Textarea value={refundReason} onChange={(e) => setRefundReason(e.target.value)} />
           <DialogFooter>
             <Button variant="outline" onClick={() => setRefundOpen(false)}>{t("cancel")}</Button>
-            <Button variant="destructive" onClick={performRefund}>{t("confirm")}</Button>
+            <Button
+              variant="destructive"
+              onClick={performRefund}
+              disabled={refundMode === "items" ? selectedItemRefundAmount <= 0 : refundAmt <= 0}
+            >{t("confirm")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
