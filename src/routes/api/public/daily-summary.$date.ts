@@ -63,11 +63,18 @@ export const Route = createFileRoute("/api/public/daily-summary/$date")({
         const billRows = bills ?? [];
         const billIds = billRows.map((b: any) => b.id);
 
-        const [{ data: pays }, { data: refunds }] = await Promise.all([
+        const [{ data: pays }, { data: refunds }, { data: staffCharges }, { data: staffSettlements }] = await Promise.all([
           billIds.length
             ? sb.from("payments").select("method,amount").in("bill_id", billIds)
             : Promise.resolve({ data: [] }),
           sb.from("refunds").select("amount").in("shift_id", shiftIds),
+          sb.from("staff_tab_charges")
+            .select("subtotal,discount_amount,amount")
+            .in("shift_id", shiftIds)
+            .neq("status", "voided"),
+          sb.from("staff_tab_settlements")
+            .select("amount,method")
+            .in("shift_id", shiftIds),
         ]);
         const payRows = pays ?? [];
         const byMethod = (m: string) =>
@@ -77,25 +84,43 @@ export const Route = createFileRoute("/api/public/daily-summary/$date")({
           );
 
         const refundTotal = sum(refunds ?? [], (r) => r.amount);
+        const staffChargeRows = staffCharges ?? [];
+        const staffSettlementRows = staffSettlements ?? [];
+        const staffSalesGross = sum(staffChargeRows, (r) => r.subtotal);
+        const staffDiscount = sum(staffChargeRows, (r) => r.discount_amount);
+        const staffCredit = sum(staffChargeRows, (r) => r.amount);
+        const staffCollectedCash = sum(
+          staffSettlementRows.filter((r: any) => r.method === "cash"),
+          (r) => r.amount,
+        );
+        const staffCollectedQr = sum(
+          staffSettlementRows.filter((r: any) => r.method === "qr"),
+          (r) => r.amount,
+        );
         return json({
           date,
-          has_data: billRows.length > 0,
+          has_data: billRows.length > 0 || staffChargeRows.length > 0 || staffSettlementRows.length > 0,
           bill_count: billRows.length,
-          total_product_sales: sum(billRows, (b) => b.subtotal),
+          total_product_sales: sum(billRows, (b) => b.subtotal) + staffSalesGross,
           refund: refundTotal,
           // MB Discount = actual baht reductions, not the number of points spent.
           mb_discount:
             sum(billRows, (b) => b.member_discount_amount) +
             sum(billRows, (b) => b.loyalty_discount_amount),
-          discount: sum(billRows, (b) => b.discount_amount),
+          discount: sum(billRows, (b) => b.discount_amount) + staffDiscount,
           vat: sum(billRows, (b) => b.vat_amount),
-          net_sales: sum(billRows, (b) => b.total) - refundTotal,
-          qr_total_amount: byMethod("qr"),
+          net_sales: sum(billRows, (b) => b.total) + staffCredit - refundTotal,
+          qr_total_amount: byMethod("qr") + staffCollectedQr,
           sixty_forty_amount: byMethod("gov_qr"),
           credit_amount: byMethod("card"),
           // Preserve what was actually received by each tender. Cash paid back
           // is reported separately in `refund`; it is not a payment-type edit.
-          cash_amount: byMethod("cash"),
+          cash_amount: byMethod("cash") + staffCollectedCash,
+          staff_sales_gross: staffSalesGross,
+          staff_discount: staffDiscount,
+          staff_credit: staffCredit,
+          staff_collected_cash: staffCollectedCash,
+          staff_collected_qr: staffCollectedQr,
         });
       },
     },

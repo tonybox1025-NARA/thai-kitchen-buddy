@@ -42,6 +42,7 @@ type ReportData = {
   takeoutTotal: number; // net sales from takeout orders
   staffMealTotal: number; // net sales from staff meal orders
   staffTabCharged: number; // employee consumption put on account this shift
+  staffTabDiscount: number; // discount recognized with staff sales this shift
   staffTabCashCollected: number; // old/current staff tabs repaid in cash this shift
   staffTabQrCollected: number; // old/current staff tabs repaid by QR this shift
   discountByType: { percent: number; fixed: number; free_item: number }; // discount amount per type
@@ -270,11 +271,14 @@ function Register() {
       billIds.length
         ? (supabase as any).from("bill_discounts").select("type,amount,applied_by,free_item_name").in("bill_id", billIds)
         : Promise.resolve({ data: [] as { type: string; amount: number; applied_by: string | null; free_item_name: string | null }[], error: null }),
-      (supabase as any).from("staff_tab_charges").select("amount").eq("shift_id", s.id).neq("status", "voided"),
+      (supabase as any).from("staff_tab_charges").select("subtotal,discount_amount,amount").eq("shift_id", s.id).neq("status", "voided"),
       (supabase as any).from("staff_tab_settlements").select("amount,method").eq("shift_id", s.id),
     ]);
-    const gross = (bills ?? []).reduce((x, b) => x + Number(b.subtotal), 0);
-    const paidTotal = (bills ?? []).reduce((x, b) => x + Number(b.total), 0);
+    const staffTabGross = (staffTabCharges ?? []).reduce((sum: number, row: any) => sum + Number(row.subtotal ?? row.amount), 0);
+    const staffTabDiscount = (staffTabCharges ?? []).reduce((sum: number, row: any) => sum + Number(row.discount_amount ?? 0), 0);
+    const gross = (bills ?? []).reduce((x, b) => x + Number(b.subtotal), 0) + staffTabGross;
+    const paidTotal = (bills ?? []).reduce((x, b) => x + Number(b.total), 0)
+      + (staffTabCharges ?? []).reduce((sum: number, row: any) => sum + Number(row.amount), 0);
     const totalDiscount = (bills ?? []).reduce((x, b) => x + Number(b.discount_amount), 0);
     const member = (bills ?? []).reduce((x, b) => x + Number(b.member_discount_amount), 0);
     const vatIncluded = (bills ?? []).filter((b) => b.vat_mode === "inclusive").reduce((x, b) => x + Number(b.vat_amount ?? 0), 0);
@@ -302,7 +306,7 @@ function Register() {
     // Aggregate discount breakdown by type and by staff
     const discRows = (billDiscs as any[] | null) ?? [];
     const coupon = discRows.filter((d) => d.free_item_name === "__coupon__").reduce((sum, d) => sum + Number(d.amount), 0);
-    const discount = Math.max(0, totalDiscount - coupon);
+    const discount = Math.max(0, totalDiscount - coupon) + staffTabDiscount;
     const discApplierIds = [...new Set(discRows.map((d) => d.applied_by).filter(Boolean))] as string[];
     const { data: discStaffList } = discApplierIds.length
       ? await supabase.from("staff").select("id,name").in("id", discApplierIds)
@@ -339,6 +343,7 @@ function Register() {
       takeoutTotal,
       staffMealTotal,
       staffTabCharged,
+      staffTabDiscount,
       staffTabCashCollected,
       staffTabQrCollected,
       discountByType,

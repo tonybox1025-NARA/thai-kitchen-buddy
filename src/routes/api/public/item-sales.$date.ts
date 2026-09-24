@@ -74,8 +74,10 @@ export const Route = createFileRoute("/api/public/item-sales/$date")({
             agg.set(key, row);
           }
           row.qty += qty;
-          // Staff consumption reduces stock but is not customer sales revenue.
-          if (!staffOrderIds.has(it.order_id)) row.revenue += qty * (Number(it.unit_price) || 0);
+          // Staff-tab items are discounted sales recognized on the consumption
+          // day. Keep their menu-price revenue here so Item Sales reconciles to
+          // Daily Sales gross; the staff discount is reported separately there.
+          row.revenue += qty * (Number(it.unit_price) || 0);
           row.cost += qty * (Number(it.unit_cost) || 0);
         }
 
