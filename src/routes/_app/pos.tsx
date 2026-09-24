@@ -46,7 +46,6 @@ type TablesCache = { tables: RTable[]; openOrderByTable: Record<string, string> 
 const TABLES_CACHE_KEY = "lonmoh:pos:tables:v1";
 const SPECIAL_ORDERS_CACHE_KEY = "lonmoh:pos:special-orders:v1";
 const CATALOG_CACHE_KEY = "lonmoh:pos:catalog:v1";
-const orderSnapshotKey = (orderId: string) => `lonmoh:pos:order:${orderId}:v1`;
 
 function PosPage() {
   const { t, lang } = useI18n();
@@ -77,7 +76,7 @@ function PosPage() {
   const load = async () => {
     const [{ data }, { data: openOrders }] = await Promise.all([
       supabase.from("restaurant_tables").select("*").order("code"),
-      supabase.from("orders").select("id,table_id,opened_at,source,order_number,staff_debtor_id,guests").eq("status", "open").not("table_id", "is", null).order("opened_at", { ascending: false }),
+      supabase.from("orders").select("id,table_id,opened_at").eq("status", "open").not("table_id", "is", null).order("opened_at", { ascending: false }),
     ]);
     if (data) setTables(data as RTable[]);
     const map: Record<string, string> = {};
@@ -87,23 +86,6 @@ function PosPage() {
       tables: data as RTable[], openOrderByTable: map,
     });
 
-    const orderIds = (openOrders ?? []).map((order) => order.id);
-    if (orderIds.length && data) {
-      const [{ data: allItems }, { data: allBills }] = await Promise.all([
-        supabase.from("order_items").select("*").in("order_id", orderIds).order("sent_at", { ascending: true, nullsFirst: true }),
-        (supabase as any).from("bills").select("order_id,points_redeemed,loyalty_discount_amount").in("order_id", orderIds),
-      ]);
-      const tableById = new Map((data as RTable[]).map((table) => [table.id, table]));
-      for (const order of openOrders ?? []) {
-        const table = order.table_id ? tableById.get(order.table_id) : null;
-        writeDeviceCache(orderSnapshotKey(order.id), {
-          items: (allItems ?? []).filter((item: any) => item.order_id === order.id),
-          order,
-          bill: (allBills ?? []).find((bill: any) => bill.order_id === order.id) ?? null,
-          table: table ? { id: table.id, code: table.code, has_qr_alert: table.has_qr_alert } : null,
-        });
-      }
-    }
   };
 
   const warmHallCatalog = async () => {
@@ -116,12 +98,6 @@ function PosPage() {
     const used = new Set(menus.map((menu) => menu.category_id).filter(Boolean));
     const usedCategories = categories.filter((category) => used.has(category.id));
     writeDeviceCache(CATALOG_CACHE_KEY, { menus, categories: usedCategories, settings });
-    for (const menu of menus) {
-      if (!menu.image_url) continue;
-      const image = new Image();
-      image.decoding = "async";
-      image.src = menu.image_url;
-    }
   };
 
   const loadSpecialOrders = async () => {
@@ -143,9 +119,8 @@ function PosPage() {
   };
 
   useEffect(() => {
-    load();
+    void load().then(() => warmHallCatalog());
     loadSpecialOrders();
-    void warmHallCatalog();
     const showQrAlert = (tableCode: string) => {
       toast.success(`${t("qr_alert")} — ${t("table")} ${tableLabel(tableCode)}`);
       playAlertBeep();

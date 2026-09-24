@@ -76,7 +76,6 @@ type CatalogSettings = {
 };
 type CatalogCache = { menus: Menu[]; categories: Category[]; settings: CatalogSettings };
 const CATALOG_CACHE_KEY = "lonmoh:pos:catalog:v1";
-const orderSnapshotKey = (orderId: string) => `lonmoh:pos:order:${orderId}:v1`;
 
 function categoryLabel(category: Category, lang: "th" | "en") {
   if (lang === "en") return CATEGORY_PRESENTATION[category.id]?.en ?? (category.name_en || category.name_th);
@@ -91,12 +90,6 @@ type Item = {
   round_source?: "pos" | "qr" | null;
   set_config?: any;
   is_takeout?: boolean;
-};
-type OrderSnapshot = {
-  items: Item[];
-  order: { table_id: string | null; source?: string; order_number?: string | null; staff_debtor_id?: string | null; guests?: number };
-  bill: { points_redeemed?: number; loyalty_discount_amount?: number } | null;
-  table: { id: string; code: string; has_qr_alert?: boolean } | null;
 };
 type AddonOption = { id: string; name: string; price: number };
 type AddonGroup = { id: string; name: string; kitchen_name: string | null; max_select: number; addon_options: AddonOption[] };
@@ -149,16 +142,17 @@ function MenuCardImage({ src, alt }: { src: string | null; alt: string }) {
 
 function OrderPage() {
   const { orderId } = Route.useParams();
-  const cachedOrder = readDeviceCache<OrderSnapshot>(orderSnapshotKey(orderId));
   const { t, lang } = useI18n();
   const { staff } = useAuth();
   const nav = useNavigate();
   const cachedCatalog = readDeviceCache<CatalogCache>(CATALOG_CACHE_KEY);
   const [menus, setMenus] = useState<Menu[]>(() => cachedCatalog?.menus ?? []);
   const [cats, setCats] = useState<Category[]>(() => cachedCatalog?.categories ?? []);
-  const [activeCat, setActiveCat] = useState<string | "all">("all");
+  // Rendering every menu image under "All" on each table transition is costly
+  // on the SUNMI. Start with one category; All remains available on demand.
+  const [activeCat, setActiveCat] = useState<string | "all">(() => cachedCatalog?.categories[0]?.id ?? "all");
   const [categoryPage, setCategoryPage] = useState(0);
-  const [items, setItems] = useState<Item[]>(() => cachedOrder?.items ?? []);
+  const [items, setItems] = useState<Item[]>([]);
   const [selected, setSelected] = useState<Menu | null>(null);
   const [qty, setQty] = useState(1);
   const [notes, setNotes] = useState("");
@@ -169,12 +163,12 @@ function OrderPage() {
   const [voidPreset, setVoidPreset] = useState<string>("");
   const [managerOpen, setManagerOpen] = useState(false);
   const [managerAction, setManagerAction] = useState<"void" | "close_table" | "move_table" | null>(null);
-  const [tableCode, setTableCode] = useState<string>(() => cachedOrder?.table ? tableLabel(cachedOrder.table.code) : "");
-  const [tableRawCode, setTableRawCode] = useState<string>(() => cachedOrder?.table?.code ?? "");
-  const [tableId, setTableId] = useState<string>(() => cachedOrder?.table?.id ?? "");
-  const [tableHasQrAlert, setTableHasQrAlert] = useState(() => Boolean(cachedOrder?.table?.has_qr_alert));
-  const [orderSource, setOrderSource] = useState<string>(() => cachedOrder?.order?.source ?? "pos");
-  const [orderNumber, setOrderNumber] = useState<string | null>(() => cachedOrder?.order?.order_number ?? null);
+  const [tableCode, setTableCode] = useState<string>("");
+  const [tableRawCode, setTableRawCode] = useState<string>("");
+  const [tableId, setTableId] = useState<string>("");
+  const [tableHasQrAlert, setTableHasQrAlert] = useState(false);
+  const [orderSource, setOrderSource] = useState<string>("pos");
+  const [orderNumber, setOrderNumber] = useState<string | null>(null);
   const [staffDebtorName, setStaffDebtorName] = useState<string | null>(null);
   const [recordingStaffTab, setRecordingStaffTab] = useState(false);
   const [staffDiscountOpen, setStaffDiscountOpen] = useState(false);
@@ -195,12 +189,12 @@ function OrderPage() {
   const [settingsVatEnabled, setSettingsVatEnabled] = useState(true);
   const [settingsServiceFeeRate, setSettingsServiceFeeRate] = useState(0);
   const [settingsRoundingMode, setSettingsRoundingMode] = useState<RoundingMode>("none");
-  const [reservedPoints, setReservedPoints] = useState(() => Math.max(0, Math.floor(Number(cachedOrder?.bill?.points_redeemed ?? 0))));
-  const [reservedPointsDiscount, setReservedPointsDiscount] = useState(() => Math.max(0, Number(cachedOrder?.bill?.loyalty_discount_amount ?? 0)));
+  const [reservedPoints, setReservedPoints] = useState(0);
+  const [reservedPointsDiscount, setReservedPointsDiscount] = useState(0);
   const [restaurantName, setRestaurantName] = useState("");
   const [receiptLogoUrl, setReceiptLogoUrl] = useState<string | null>(null);
   const [reprintingRound, setReprintingRound] = useState<number | null>(null);
-  const [guestCount, setGuestCount] = useState(() => Math.max(1, Number(cachedOrder?.order?.guests ?? 1)));
+  const [guestCount, setGuestCount] = useState(1);
   const [guestDraft, setGuestDraft] = useState(1);
   const [guestDialogOpen, setGuestDialogOpen] = useState(false);
   const [savingGuests, setSavingGuests] = useState(false);
@@ -224,6 +218,7 @@ function OrderPage() {
             || a.id.localeCompare(b.id),
           );
       setCats(nextCategories);
+      if (activeCat === "all" && nextCategories[0]) setActiveCat(nextCategories[0].id);
     }
     if (s) {
       setSettingsVatEnabled((s as any).vat_enabled ?? true);
@@ -285,12 +280,6 @@ function OrderPage() {
         setTableCode(tableLabel(tbl.code));
         setTableRawCode(tbl.code);
         setTableHasQrAlert(Boolean((tbl as any).has_qr_alert));
-        writeDeviceCache<OrderSnapshot>(orderSnapshotKey(orderId), {
-          items: (it as Item[] | null) ?? [],
-          order: ord as OrderSnapshot["order"],
-          bill: (reservedBill as OrderSnapshot["bill"]) ?? null,
-          table: { id: ord.table_id, code: tbl.code, has_qr_alert: Boolean((tbl as any).has_qr_alert) },
-        });
       }
     }
   };
@@ -1043,7 +1032,10 @@ function OrderPage() {
         {/* Menu — grouped into category sections (MERI-style header + count) */}
         <div className="p-4 space-y-6">
           {menuSections.map((sec) => (
-            <section key={sec.cat.id}>
+            <section
+              key={sec.cat.id}
+              style={{ contentVisibility: "auto", containIntrinsicSize: "700px" }}
+            >
               <div className="flex items-baseline gap-2 mb-3 border-b pb-1.5">
                 <h2 className="text-lg font-bold leading-none">{categoryLabel(sec.cat, lang)}</h2>
                 <span className="text-sm text-muted-foreground">({sec.items.length})</span>
