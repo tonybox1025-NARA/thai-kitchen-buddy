@@ -556,9 +556,10 @@ function PopupHeroImage({ src }: { src: string }) {
 // ── Main component ────────────────────────────────────────────────────────────
 function CustomerMenu() {
   const { tableCode } = Route.useParams();
-  const crewMode =
-    typeof window !== "undefined" &&
-    new URLSearchParams(window.location.search).get("crew") === "1";
+  const pageParams =
+    typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+  const crewMode = pageParams?.get("crew") === "1";
+  const boundOrderId = pageParams?.get("order_id") ?? null;
   const [lang, setLang] = useState<Lang>("th");
   const [data, setData] = useState<{
     table: { id: string; code: string };
@@ -600,11 +601,19 @@ function CustomerMenu() {
   const catBarRef = useRef<HTMLDivElement>(null);
   const tr = T[lang];
 
+  const checkoutEndpoint = (guestToken?: string) => {
+    const params = new URLSearchParams();
+    if (guestToken) params.set("guest_token", guestToken);
+    if (boundOrderId) params.set("order_id", boundOrderId);
+    const query = params.toString();
+    return `/api/public/checkout/${encodeURIComponent(tableCode)}${query ? `?${query}` : ""}`;
+  };
+
   const loadOrderHistory = async () => {
     setHistoryLoading(true);
     try {
       const response = await fetch(
-        `/api/public/qr-order?table_code=${encodeURIComponent(tableCode)}`,
+        `/api/public/qr-order?table_code=${encodeURIComponent(tableCode)}${boundOrderId ? `&order_id=${encodeURIComponent(boundOrderId)}` : ""}`,
       );
       if (!response.ok) throw new Error(await response.text());
       setOrderHistory(await response.json());
@@ -624,9 +633,7 @@ function CustomerMenu() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ guest_token: token }),
     });
-    const response = await fetch(
-      `/api/public/checkout/${encodeURIComponent(tableCode)}?guest_token=${encodeURIComponent(token)}`,
-    );
+    const response = await fetch(checkoutEndpoint(token));
     if (!response.ok) throw new Error(await response.text());
     const next = (await response.json()) as CheckoutState;
     setCheckout(next);
@@ -637,7 +644,7 @@ function CustomerMenu() {
     if (!orderHistory.order_id) return;
     setCheckoutBusy(true);
     try {
-      const response = await fetch(`/api/public/checkout/${encodeURIComponent(tableCode)}`, {
+      const response = await fetch(checkoutEndpoint(), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "request_bill" }),
@@ -655,7 +662,7 @@ function CustomerMenu() {
   const reserveReward = async (points: number) => {
     setCheckoutBusy(true);
     try {
-      const response = await fetch(`/api/public/checkout/${encodeURIComponent(tableCode)}`, {
+      const response = await fetch(checkoutEndpoint(), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "reserve_reward", guest_token: walletToken(), points }),
@@ -677,7 +684,7 @@ function CustomerMenu() {
     if (!memberPhone.trim()) return;
     setCheckoutBusy(true);
     try {
-      const response = await fetch(`/api/public/checkout/${encodeURIComponent(tableCode)}`, {
+      const response = await fetch(checkoutEndpoint(), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -702,7 +709,7 @@ function CustomerMenu() {
     if (!signupName.trim() || memberPhone.replace(/\D/g, "").length < 9) return;
     setCheckoutBusy(true);
     try {
-      const response = await fetch(`/api/public/checkout/${encodeURIComponent(tableCode)}`, {
+      const response = await fetch(checkoutEndpoint(), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -963,6 +970,7 @@ function CustomerMenu() {
         signal: ac.signal,
         body: JSON.stringify({
           table_code: tableCode,
+          order_id: boundOrderId,
           assisted_by_staff: crewMode,
           items: cart.map((c) => ({
             menu_id: c.menu_id,

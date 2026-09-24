@@ -52,8 +52,17 @@ function normalizePhone(value: string | null | undefined) {
   return digits;
 }
 
-async function tableOrder(sb: ReturnType<typeof client>, tableCode: string) {
+async function tableOrder(sb: ReturnType<typeof client>, tableCode: string, orderId?: string | null) {
   if (!sb) return null;
+  if (orderId) {
+    const { data: order } = await (sb as any).from("orders")
+      .select("id,shift_id,checkout_requested_at,table_id")
+      .eq("id", orderId).eq("status", "open").maybeSingle();
+    if (!order?.table_id) return null;
+    const { data: table } = await sb.from("restaurant_tables")
+      .select("id,code,status").eq("id", order.table_id).maybeSingle();
+    return table ? { table, order } : null;
+  }
   const { data: table } = await sb
     .from("restaurant_tables")
     .select("id,code,status")
@@ -124,7 +133,7 @@ export const Route = createFileRoute("/api/public/checkout/$tableCode")({
       GET: async ({ request, params }) => {
         const sb = client();
         if (!sb) return new Response("Checkout is temporarily unavailable", { status: 503 });
-        const found = await tableOrder(sb, params.tableCode);
+        const found = await tableOrder(sb, params.tableCode, new URL(request.url).searchParams.get("order_id"));
         if (!found?.order) return Response.json({ order: null, rewards: REWARD_TIERS });
         const bill = await ensureBill(sb, found.order);
         const guestToken = new URL(request.url).searchParams.get("guest_token");
@@ -168,7 +177,7 @@ export const Route = createFileRoute("/api/public/checkout/$tableCode")({
         const parsed = Body.safeParse(raw);
         if (!parsed.success)
           return Response.json({ error: parsed.error.flatten() }, { status: 400 });
-        const found = await tableOrder(sb, params.tableCode);
+        const found = await tableOrder(sb, params.tableCode, new URL(request.url).searchParams.get("order_id"));
         if (!found?.order) return Response.json({ error: "No open order" }, { status: 404 });
         const bill = await ensureBill(sb, found.order);
 

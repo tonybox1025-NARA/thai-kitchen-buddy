@@ -679,7 +679,7 @@ function OrderPage() {
     await printCounter({
       kind: "table_qr",
       table: tableCode,
-      url: `${publicBaseUrl()}/menu/${encodeURIComponent(tableRawCode)}`,
+      url: `${publicBaseUrl()}/menu/${encodeURIComponent(tableRawCode)}?order_id=${encodeURIComponent(orderId)}`,
       // The queue bridge prints this as native ESC/POS text. Keep it ASCII:
       // this counter printer's firmware corrupts Thai text in that mode.
       restaurant: "LONMOH",

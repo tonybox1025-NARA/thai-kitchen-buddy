@@ -27,6 +27,7 @@ function createPublicServerClient() {
 
 const Schema = z.object({
   table_code: z.string().min(1).max(20),
+  order_id: z.string().uuid().optional().nullable(),
   guests: z.number().int().min(1).max(30).optional(),
   assisted_by_staff: z.boolean().optional().default(false),
   items: z
@@ -59,7 +60,9 @@ export const Route = createFileRoute("/api/public/qr-order")({
         if (!supabase)
           return new Response("QR ordering is temporarily unavailable", { status: 503 });
 
-        const tableCode = new URL(request.url).searchParams.get("table_code")?.trim();
+        const requestUrl = new URL(request.url);
+        const tableCode = requestUrl.searchParams.get("table_code")?.trim();
+        const boundOrderId = requestUrl.searchParams.get("order_id")?.trim();
         if (!tableCode || tableCode.length > 20)
           return new Response("Invalid table code", { status: 400 });
 
@@ -71,13 +74,11 @@ export const Route = createFileRoute("/api/public/qr-order")({
         if (tableError) return new Response(`DB error: ${tableError.message}`, { status: 500 });
         if (!table) return new Response("Table not found", { status: 404 });
 
-        const { data: orders, error: orderError } = await supabase
-          .from("orders")
-          .select("id,opened_at")
-          .eq("table_id", table.id)
-          .eq("status", "open")
-          .order("opened_at", { ascending: false })
-          .limit(1);
+        let orderQuery = supabase.from("orders").select("id,opened_at").eq("status", "open");
+        orderQuery = boundOrderId
+          ? orderQuery.eq("id", boundOrderId)
+          : orderQuery.eq("table_id", table.id).order("opened_at", { ascending: false }).limit(1);
+        const { data: orders, error: orderError } = await orderQuery;
         if (orderError) return new Response(`DB error: ${orderError.message}`, { status: 500 });
         const order = orders?.[0];
         if (!order) return Response.json({ order_id: null, items: [], total: 0, count: 0 });
@@ -125,15 +126,27 @@ export const Route = createFileRoute("/api/public/qr-order")({
         const parsed = Schema.safeParse(body);
         if (!parsed.success)
           return Response.json({ error: parsed.error.flatten() }, { status: 400 });
-        const { table_code, guests, items, assisted_by_staff } = parsed.data;
+        const { table_code, order_id, guests, items, assisted_by_staff } = parsed.data;
 
-        const { data: table, error: tableErr } = await supabase
+        let { data: table, error: tableErr } = await supabase
           .from("restaurant_tables")
-          .select("id,status,guests,is_test")
+          .select("id,code,status,guests,is_test")
           .eq("code", table_code)
           .maybeSingle();
         if (tableErr) return new Response(`DB error: ${tableErr.message}`, { status: 500 });
         if (!table) return new Response("Table not found", { status: 404 });
+        let boundOrder: { id: string } | null = null;
+        if (order_id) {
+          const { data: movedOrder, error: movedOrderError } = await supabase
+            .from("orders").select("id,table_id").eq("id", order_id).eq("status", "open").maybeSingle();
+          if (movedOrderError) return new Response(`DB error: ${movedOrderError.message}`, { status: 500 });
+          if (!movedOrder?.table_id) return new Response("This table order is no longer open", { status: 409 });
+          const { data: movedTable, error: movedTableError } = await supabase
+            .from("restaurant_tables").select("id,code,status,guests,is_test").eq("id", movedOrder.table_id).single();
+          if (movedTableError || !movedTable) return new Response("Moved table not found", { status: 404 });
+          table = movedTable;
+          boundOrder = { id: movedOrder.id };
+        }
         if (table.status === "bill_requested") {
           return new Response(
             "The bill has already been requested. Please ask staff before adding items.",
@@ -236,13 +249,10 @@ export const Route = createFileRoute("/api/public/qr-order")({
         }
 
         // Find or create an open order for this table (source=qr OR pos — reuse existing open table order)
-        const { data: openOrders, error: openOrderErr } = await supabase
-          .from("orders")
-          .select("id")
-          .eq("table_id", table.id)
-          .eq("status", "open")
-          .order("opened_at", { ascending: false })
-          .limit(1);
+        const { data: openOrders, error: openOrderErr } = boundOrder
+          ? { data: [boundOrder], error: null }
+          : await supabase.from("orders").select("id").eq("table_id", table.id)
+              .eq("status", "open").order("opened_at", { ascending: false }).limit(1);
         if (openOrderErr) return new Response(`DB error: ${openOrderErr.message}`, { status: 500 });
         let order = openOrders?.[0] ?? null;
         let orderType: "new" | "added" = "new";
@@ -377,7 +387,7 @@ export const Route = createFileRoute("/api/public/qr-order")({
         type TicketLine = ReturnType<typeof stripZone>;
         const ticketPayload = {
           kind: "order_ticket",
-          table: table_code,
+          table: table.code,
           source: assisted_by_staff ? "pos" : "qr",
           order_type: orderType,
           sent_at: sentAt,

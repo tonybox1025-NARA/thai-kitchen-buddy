@@ -616,10 +616,8 @@ export async function buildKitchen(p: KitchenPayload): Promise<Uint8Array> {
     const my = it.name_my;
     const qty = Number(it.qty) || 0;
     d.text(`${qty}x  ${th}`, S.item);
-    // The counter's kitchen checklist mirrors the kitchen ticket so waitresses
-    // can match each completed dish; the FRONT ticket remains Thai-only.
-    const showBurmese = !isCounter || p.department === "KITCHEN CHECK";
-    if (my && my !== th && showBurmese) d.text(my, S.myBold);
+    // Every operational ticket needs Burmese, including FRONT/counter items.
+    if (my && my !== th) d.text(my, S.myBold);
     if (it.notes) d.text(`   ** ${it.notes} **`, S.norm);
     for (const mod of it.modifiers ?? []) {
       const q = mod.qty ?? 1;

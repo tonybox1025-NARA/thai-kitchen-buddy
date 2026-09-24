@@ -9,47 +9,43 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as AppRouteImport } from './routes/_app'
-import { Route as LoginRouteImport } from './routes/login'
 import { Route as WalletRouteImport } from './routes/wallet'
-import { Route as AppCrewRouteImport } from './routes/_app/crew'
-import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
-import { Route as AppDetailDiscountsRouteImport } from './routes/_app/detail-discounts'
-import { Route as AppDetailGrossRouteImport } from './routes/_app/detail-gross'
-import { Route as AppDetailQrRouteImport } from './routes/_app/detail-qr'
-import { Route as AppDetailTipsRouteImport } from './routes/_app/detail-tips'
-import { Route as AppDetailVoidsRouteImport } from './routes/_app/detail-voids'
-import { Route as AppLiveRouteImport } from './routes/_app/live'
-import { Route as AppLoyaltyRouteImport } from './routes/_app/loyalty'
-import { Route as AppMembersRouteImport } from './routes/_app/members'
-import { Route as AppPosRouteImport } from './routes/_app/pos'
-import { Route as AppRegisterRouteImport } from './routes/_app/register'
-import { Route as AppReportsRouteImport } from './routes/_app/reports'
-import { Route as AppSettingsRouteImport } from './routes/_app/settings'
-import { Route as AppTimeAnalysisRouteImport } from './routes/_app/time-analysis'
-import { Route as MenuTableCodeRouteImport } from './routes/menu.$tableCode'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as AppRouteImport } from './routes/_app'
+import { Route as IndexRouteImport } from './routes/index'
 import { Route as PrintTestKindRouteImport } from './routes/print-test.$kind'
-import { Route as AppOrderOrderIdRouteImport } from './routes/_app/order.$orderId'
-import { Route as AppPaymentBillIdRouteImport } from './routes/_app/payment.$billId'
-import { Route as ApiPublicQrOrderRouteImport } from './routes/api/public/qr-order'
-import { Route as ApiPublicWalletRouteImport } from './routes/api/public/wallet'
-import { Route as ApiPublicWalletLineRouteImport } from './routes/api/public/wallet-line'
-import { Route as ApiPublicWalletPhoneRouteImport } from './routes/api/public/wallet-phone'
+import { Route as MenuTableCodeRouteImport } from './routes/menu.$tableCode'
+import { Route as AppTimeAnalysisRouteImport } from './routes/_app/time-analysis'
+import { Route as AppSettingsRouteImport } from './routes/_app/settings'
+import { Route as AppReportsRouteImport } from './routes/_app/reports'
+import { Route as AppRegisterRouteImport } from './routes/_app/register'
+import { Route as AppPosRouteImport } from './routes/_app/pos'
+import { Route as AppMembersRouteImport } from './routes/_app/members'
+import { Route as AppLoyaltyRouteImport } from './routes/_app/loyalty'
+import { Route as AppLiveRouteImport } from './routes/_app/live'
+import { Route as AppDetailVoidsRouteImport } from './routes/_app/detail-voids'
+import { Route as AppDetailTipsRouteImport } from './routes/_app/detail-tips'
+import { Route as AppDetailQrRouteImport } from './routes/_app/detail-qr'
+import { Route as AppDetailGrossRouteImport } from './routes/_app/detail-gross'
+import { Route as AppDetailDiscountsRouteImport } from './routes/_app/detail-discounts'
+import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
+import { Route as AppCrewRouteImport } from './routes/_app/crew'
 import { Route as LoyaltyClaimTokenRouteImport } from './routes/loyalty/claim.$token'
-import { Route as ApiPublicCheckoutTableCodeRouteImport } from './routes/api/public/checkout.$tableCode'
-import { Route as ApiPublicDailySummaryDateRouteImport } from './routes/api/public/daily-summary.$date'
-import { Route as ApiPublicItemSalesDateRouteImport } from './routes/api/public/item-sales.$date'
-import { Route as ApiPublicLoyaltyClaimTokenRouteImport } from './routes/api/public/loyalty-claim.$token'
+import { Route as ApiPublicWalletPhoneRouteImport } from './routes/api/public/wallet-phone'
+import { Route as ApiPublicWalletLineRouteImport } from './routes/api/public/wallet-line'
+import { Route as ApiPublicWalletRouteImport } from './routes/api/public/wallet'
+import { Route as ApiPublicQrOrderRouteImport } from './routes/api/public/qr-order'
+import { Route as AppPaymentBillIdRouteImport } from './routes/_app/payment.$billId'
+import { Route as AppOrderOrderIdRouteImport } from './routes/_app/order.$orderId'
 import { Route as ApiPublicQrMenuTableCodeRouteImport } from './routes/api/public/qr-menu.$tableCode'
+import { Route as ApiPublicLoyaltyClaimTokenRouteImport } from './routes/api/public/loyalty-claim.$token'
+import { Route as ApiPublicItemSalesDateRouteImport } from './routes/api/public/item-sales.$date'
+import { Route as ApiPublicDailySummaryDateRouteImport } from './routes/api/public/daily-summary.$date'
+import { Route as ApiPublicCheckoutTableCodeRouteImport } from './routes/api/public/checkout.$tableCode'
 
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AppRoute = AppRouteImport.update({
-  id: '/_app',
+const WalletRoute = WalletRouteImport.update({
+  id: '/wallet',
+  path: '/wallet',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -57,89 +53,13 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const WalletRoute = WalletRouteImport.update({
-  id: '/wallet',
-  path: '/wallet',
+const AppRoute = AppRouteImport.update({
+  id: '/_app',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AppCrewRoute = AppCrewRouteImport.update({
-  id: '/crew',
-  path: '/crew',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppDashboardRoute = AppDashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppDetailDiscountsRoute = AppDetailDiscountsRouteImport.update({
-  id: '/detail-discounts',
-  path: '/detail-discounts',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppDetailGrossRoute = AppDetailGrossRouteImport.update({
-  id: '/detail-gross',
-  path: '/detail-gross',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppDetailQrRoute = AppDetailQrRouteImport.update({
-  id: '/detail-qr',
-  path: '/detail-qr',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppDetailTipsRoute = AppDetailTipsRouteImport.update({
-  id: '/detail-tips',
-  path: '/detail-tips',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppDetailVoidsRoute = AppDetailVoidsRouteImport.update({
-  id: '/detail-voids',
-  path: '/detail-voids',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppLiveRoute = AppLiveRouteImport.update({
-  id: '/live',
-  path: '/live',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppLoyaltyRoute = AppLoyaltyRouteImport.update({
-  id: '/loyalty',
-  path: '/loyalty',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppMembersRoute = AppMembersRouteImport.update({
-  id: '/members',
-  path: '/members',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppPosRoute = AppPosRouteImport.update({
-  id: '/pos',
-  path: '/pos',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppRegisterRoute = AppRegisterRouteImport.update({
-  id: '/register',
-  path: '/register',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppReportsRoute = AppReportsRouteImport.update({
-  id: '/reports',
-  path: '/reports',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppSettingsRoute = AppSettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppTimeAnalysisRoute = AppTimeAnalysisRouteImport.update({
-  id: '/time-analysis',
-  path: '/time-analysis',
-  getParentRoute: () => AppRoute,
-} as any)
-const MenuTableCodeRoute = MenuTableCodeRouteImport.update({
-  id: '/menu/$tableCode',
-  path: '/menu/$tableCode',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrintTestKindRoute = PrintTestKindRouteImport.update({
@@ -147,29 +67,89 @@ const PrintTestKindRoute = PrintTestKindRouteImport.update({
   path: '/print-test/$kind',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AppOrderOrderIdRoute = AppOrderOrderIdRouteImport.update({
-  id: '/order/$orderId',
-  path: '/order/$orderId',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppPaymentBillIdRoute = AppPaymentBillIdRouteImport.update({
-  id: '/payment/$billId',
-  path: '/payment/$billId',
-  getParentRoute: () => AppRoute,
-} as any)
-const ApiPublicQrOrderRoute = ApiPublicQrOrderRouteImport.update({
-  id: '/api/public/qr-order',
-  path: '/api/public/qr-order',
+const MenuTableCodeRoute = MenuTableCodeRouteImport.update({
+  id: '/menu/$tableCode',
+  path: '/menu/$tableCode',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiPublicWalletRoute = ApiPublicWalletRouteImport.update({
-  id: '/api/public/wallet',
-  path: '/api/public/wallet',
-  getParentRoute: () => rootRouteImport,
+const AppTimeAnalysisRoute = AppTimeAnalysisRouteImport.update({
+  id: '/time-analysis',
+  path: '/time-analysis',
+  getParentRoute: () => AppRoute,
 } as any)
-const ApiPublicWalletLineRoute = ApiPublicWalletLineRouteImport.update({
-  id: '/api/public/wallet-line',
-  path: '/api/public/wallet-line',
+const AppSettingsRoute = AppSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppReportsRoute = AppReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppRegisterRoute = AppRegisterRouteImport.update({
+  id: '/register',
+  path: '/register',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPosRoute = AppPosRouteImport.update({
+  id: '/pos',
+  path: '/pos',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppMembersRoute = AppMembersRouteImport.update({
+  id: '/members',
+  path: '/members',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppLoyaltyRoute = AppLoyaltyRouteImport.update({
+  id: '/loyalty',
+  path: '/loyalty',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppLiveRoute = AppLiveRouteImport.update({
+  id: '/live',
+  path: '/live',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDetailVoidsRoute = AppDetailVoidsRouteImport.update({
+  id: '/detail-voids',
+  path: '/detail-voids',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDetailTipsRoute = AppDetailTipsRouteImport.update({
+  id: '/detail-tips',
+  path: '/detail-tips',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDetailQrRoute = AppDetailQrRouteImport.update({
+  id: '/detail-qr',
+  path: '/detail-qr',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDetailGrossRoute = AppDetailGrossRouteImport.update({
+  id: '/detail-gross',
+  path: '/detail-gross',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDetailDiscountsRoute = AppDetailDiscountsRouteImport.update({
+  id: '/detail-discounts',
+  path: '/detail-discounts',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDashboardRoute = AppDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppCrewRoute = AppCrewRouteImport.update({
+  id: '/crew',
+  path: '/crew',
+  getParentRoute: () => AppRoute,
+} as any)
+const LoyaltyClaimTokenRoute = LoyaltyClaimTokenRouteImport.update({
+  id: '/loyalty/claim/$token',
+  path: '/loyalty/claim/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicWalletPhoneRoute = ApiPublicWalletPhoneRouteImport.update({
@@ -177,21 +157,41 @@ const ApiPublicWalletPhoneRoute = ApiPublicWalletPhoneRouteImport.update({
   path: '/api/public/wallet-phone',
   getParentRoute: () => rootRouteImport,
 } as any)
-const LoyaltyClaimTokenRoute = LoyaltyClaimTokenRouteImport.update({
-  id: '/loyalty/claim/$token',
-  path: '/loyalty/claim/$token',
+const ApiPublicWalletLineRoute = ApiPublicWalletLineRouteImport.update({
+  id: '/api/public/wallet-line',
+  path: '/api/public/wallet-line',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiPublicCheckoutTableCodeRoute =
-  ApiPublicCheckoutTableCodeRouteImport.update({
-    id: '/api/public/checkout/$tableCode',
-    path: '/api/public/checkout/$tableCode',
+const ApiPublicWalletRoute = ApiPublicWalletRouteImport.update({
+  id: '/api/public/wallet',
+  path: '/api/public/wallet',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicQrOrderRoute = ApiPublicQrOrderRouteImport.update({
+  id: '/api/public/qr-order',
+  path: '/api/public/qr-order',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppPaymentBillIdRoute = AppPaymentBillIdRouteImport.update({
+  id: '/payment/$billId',
+  path: '/payment/$billId',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppOrderOrderIdRoute = AppOrderOrderIdRouteImport.update({
+  id: '/order/$orderId',
+  path: '/order/$orderId',
+  getParentRoute: () => AppRoute,
+} as any)
+const ApiPublicQrMenuTableCodeRoute =
+  ApiPublicQrMenuTableCodeRouteImport.update({
+    id: '/api/public/qr-menu/$tableCode',
+    path: '/api/public/qr-menu/$tableCode',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ApiPublicDailySummaryDateRoute =
-  ApiPublicDailySummaryDateRouteImport.update({
-    id: '/api/public/daily-summary/$date',
-    path: '/api/public/daily-summary/$date',
+const ApiPublicLoyaltyClaimTokenRoute =
+  ApiPublicLoyaltyClaimTokenRouteImport.update({
+    id: '/api/public/loyalty-claim/$token',
+    path: '/api/public/loyalty-claim/$token',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiPublicItemSalesDateRoute = ApiPublicItemSalesDateRouteImport.update({
@@ -199,16 +199,16 @@ const ApiPublicItemSalesDateRoute = ApiPublicItemSalesDateRouteImport.update({
   path: '/api/public/item-sales/$date',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiPublicLoyaltyClaimTokenRoute =
-  ApiPublicLoyaltyClaimTokenRouteImport.update({
-    id: '/api/public/loyalty-claim/$token',
-    path: '/api/public/loyalty-claim/$token',
+const ApiPublicDailySummaryDateRoute =
+  ApiPublicDailySummaryDateRouteImport.update({
+    id: '/api/public/daily-summary/$date',
+    path: '/api/public/daily-summary/$date',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ApiPublicQrMenuTableCodeRoute =
-  ApiPublicQrMenuTableCodeRouteImport.update({
-    id: '/api/public/qr-menu/$tableCode',
-    path: '/api/public/qr-menu/$tableCode',
+const ApiPublicCheckoutTableCodeRoute =
+  ApiPublicCheckoutTableCodeRouteImport.update({
+    id: '/api/public/checkout/$tableCode',
+    path: '/api/public/checkout/$tableCode',
     getParentRoute: () => rootRouteImport,
   } as any)
 
@@ -443,18 +443,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_app': {
-      id: '/_app'
-      path: ''
-      fullPath: '/'
-      preLoaderRoute: typeof AppRouteImport
+    '/wallet': {
+      id: '/wallet'
+      path: '/wallet'
+      fullPath: '/wallet'
+      preLoaderRoute: typeof WalletRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -464,123 +457,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/wallet': {
-      id: '/wallet'
-      path: '/wallet'
-      fullPath: '/wallet'
-      preLoaderRoute: typeof WalletRouteImport
+    '/_app': {
+      id: '/_app'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_app/crew': {
-      id: '/_app/crew'
-      path: '/crew'
-      fullPath: '/crew'
-      preLoaderRoute: typeof AppCrewRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/dashboard': {
-      id: '/_app/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof AppDashboardRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/detail-discounts': {
-      id: '/_app/detail-discounts'
-      path: '/detail-discounts'
-      fullPath: '/detail-discounts'
-      preLoaderRoute: typeof AppDetailDiscountsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/detail-gross': {
-      id: '/_app/detail-gross'
-      path: '/detail-gross'
-      fullPath: '/detail-gross'
-      preLoaderRoute: typeof AppDetailGrossRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/detail-qr': {
-      id: '/_app/detail-qr'
-      path: '/detail-qr'
-      fullPath: '/detail-qr'
-      preLoaderRoute: typeof AppDetailQrRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/detail-tips': {
-      id: '/_app/detail-tips'
-      path: '/detail-tips'
-      fullPath: '/detail-tips'
-      preLoaderRoute: typeof AppDetailTipsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/detail-voids': {
-      id: '/_app/detail-voids'
-      path: '/detail-voids'
-      fullPath: '/detail-voids'
-      preLoaderRoute: typeof AppDetailVoidsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/live': {
-      id: '/_app/live'
-      path: '/live'
-      fullPath: '/live'
-      preLoaderRoute: typeof AppLiveRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/loyalty': {
-      id: '/_app/loyalty'
-      path: '/loyalty'
-      fullPath: '/loyalty'
-      preLoaderRoute: typeof AppLoyaltyRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/members': {
-      id: '/_app/members'
-      path: '/members'
-      fullPath: '/members'
-      preLoaderRoute: typeof AppMembersRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/pos': {
-      id: '/_app/pos'
-      path: '/pos'
-      fullPath: '/pos'
-      preLoaderRoute: typeof AppPosRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/register': {
-      id: '/_app/register'
-      path: '/register'
-      fullPath: '/register'
-      preLoaderRoute: typeof AppRegisterRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/reports': {
-      id: '/_app/reports'
-      path: '/reports'
-      fullPath: '/reports'
-      preLoaderRoute: typeof AppReportsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/settings': {
-      id: '/_app/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof AppSettingsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/time-analysis': {
-      id: '/_app/time-analysis'
-      path: '/time-analysis'
-      fullPath: '/time-analysis'
-      preLoaderRoute: typeof AppTimeAnalysisRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/menu/$tableCode': {
-      id: '/menu/$tableCode'
-      path: '/menu/$tableCode'
-      fullPath: '/menu/$tableCode'
-      preLoaderRoute: typeof MenuTableCodeRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/print-test/$kind': {
@@ -590,39 +478,123 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PrintTestKindRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_app/order/$orderId': {
-      id: '/_app/order/$orderId'
-      path: '/order/$orderId'
-      fullPath: '/order/$orderId'
-      preLoaderRoute: typeof AppOrderOrderIdRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/payment/$billId': {
-      id: '/_app/payment/$billId'
-      path: '/payment/$billId'
-      fullPath: '/payment/$billId'
-      preLoaderRoute: typeof AppPaymentBillIdRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/api/public/qr-order': {
-      id: '/api/public/qr-order'
-      path: '/api/public/qr-order'
-      fullPath: '/api/public/qr-order'
-      preLoaderRoute: typeof ApiPublicQrOrderRouteImport
+    '/menu/$tableCode': {
+      id: '/menu/$tableCode'
+      path: '/menu/$tableCode'
+      fullPath: '/menu/$tableCode'
+      preLoaderRoute: typeof MenuTableCodeRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/wallet': {
-      id: '/api/public/wallet'
-      path: '/api/public/wallet'
-      fullPath: '/api/public/wallet'
-      preLoaderRoute: typeof ApiPublicWalletRouteImport
-      parentRoute: typeof rootRouteImport
+    '/_app/time-analysis': {
+      id: '/_app/time-analysis'
+      path: '/time-analysis'
+      fullPath: '/time-analysis'
+      preLoaderRoute: typeof AppTimeAnalysisRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/api/public/wallet-line': {
-      id: '/api/public/wallet-line'
-      path: '/api/public/wallet-line'
-      fullPath: '/api/public/wallet-line'
-      preLoaderRoute: typeof ApiPublicWalletLineRouteImport
+    '/_app/settings': {
+      id: '/_app/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AppSettingsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/reports': {
+      id: '/_app/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof AppReportsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/register': {
+      id: '/_app/register'
+      path: '/register'
+      fullPath: '/register'
+      preLoaderRoute: typeof AppRegisterRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/pos': {
+      id: '/_app/pos'
+      path: '/pos'
+      fullPath: '/pos'
+      preLoaderRoute: typeof AppPosRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/members': {
+      id: '/_app/members'
+      path: '/members'
+      fullPath: '/members'
+      preLoaderRoute: typeof AppMembersRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/loyalty': {
+      id: '/_app/loyalty'
+      path: '/loyalty'
+      fullPath: '/loyalty'
+      preLoaderRoute: typeof AppLoyaltyRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/live': {
+      id: '/_app/live'
+      path: '/live'
+      fullPath: '/live'
+      preLoaderRoute: typeof AppLiveRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/detail-voids': {
+      id: '/_app/detail-voids'
+      path: '/detail-voids'
+      fullPath: '/detail-voids'
+      preLoaderRoute: typeof AppDetailVoidsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/detail-tips': {
+      id: '/_app/detail-tips'
+      path: '/detail-tips'
+      fullPath: '/detail-tips'
+      preLoaderRoute: typeof AppDetailTipsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/detail-qr': {
+      id: '/_app/detail-qr'
+      path: '/detail-qr'
+      fullPath: '/detail-qr'
+      preLoaderRoute: typeof AppDetailQrRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/detail-gross': {
+      id: '/_app/detail-gross'
+      path: '/detail-gross'
+      fullPath: '/detail-gross'
+      preLoaderRoute: typeof AppDetailGrossRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/detail-discounts': {
+      id: '/_app/detail-discounts'
+      path: '/detail-discounts'
+      fullPath: '/detail-discounts'
+      preLoaderRoute: typeof AppDetailDiscountsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/dashboard': {
+      id: '/_app/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof AppDashboardRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/crew': {
+      id: '/_app/crew'
+      path: '/crew'
+      fullPath: '/crew'
+      preLoaderRoute: typeof AppCrewRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/loyalty/claim/$token': {
+      id: '/loyalty/claim/$token'
+      path: '/loyalty/claim/$token'
+      fullPath: '/loyalty/claim/$token'
+      preLoaderRoute: typeof LoyaltyClaimTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/wallet-phone': {
@@ -632,32 +604,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicWalletPhoneRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/loyalty/claim/$token': {
-      id: '/loyalty/claim/$token'
-      path: '/loyalty/claim/$token'
-      fullPath: '/loyalty/claim/$token'
-      preLoaderRoute: typeof LoyaltyClaimTokenRouteImport
+    '/api/public/wallet-line': {
+      id: '/api/public/wallet-line'
+      path: '/api/public/wallet-line'
+      fullPath: '/api/public/wallet-line'
+      preLoaderRoute: typeof ApiPublicWalletLineRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/checkout/$tableCode': {
-      id: '/api/public/checkout/$tableCode'
-      path: '/api/public/checkout/$tableCode'
-      fullPath: '/api/public/checkout/$tableCode'
-      preLoaderRoute: typeof ApiPublicCheckoutTableCodeRouteImport
+    '/api/public/wallet': {
+      id: '/api/public/wallet'
+      path: '/api/public/wallet'
+      fullPath: '/api/public/wallet'
+      preLoaderRoute: typeof ApiPublicWalletRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/daily-summary/$date': {
-      id: '/api/public/daily-summary/$date'
-      path: '/api/public/daily-summary/$date'
-      fullPath: '/api/public/daily-summary/$date'
-      preLoaderRoute: typeof ApiPublicDailySummaryDateRouteImport
+    '/api/public/qr-order': {
+      id: '/api/public/qr-order'
+      path: '/api/public/qr-order'
+      fullPath: '/api/public/qr-order'
+      preLoaderRoute: typeof ApiPublicQrOrderRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/item-sales/$date': {
-      id: '/api/public/item-sales/$date'
-      path: '/api/public/item-sales/$date'
-      fullPath: '/api/public/item-sales/$date'
-      preLoaderRoute: typeof ApiPublicItemSalesDateRouteImport
+    '/_app/payment/$billId': {
+      id: '/_app/payment/$billId'
+      path: '/payment/$billId'
+      fullPath: '/payment/$billId'
+      preLoaderRoute: typeof AppPaymentBillIdRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/order/$orderId': {
+      id: '/_app/order/$orderId'
+      path: '/order/$orderId'
+      fullPath: '/order/$orderId'
+      preLoaderRoute: typeof AppOrderOrderIdRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/api/public/qr-menu/$tableCode': {
+      id: '/api/public/qr-menu/$tableCode'
+      path: '/api/public/qr-menu/$tableCode'
+      fullPath: '/api/public/qr-menu/$tableCode'
+      preLoaderRoute: typeof ApiPublicQrMenuTableCodeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/loyalty-claim/$token': {
@@ -667,11 +653,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicLoyaltyClaimTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/qr-menu/$tableCode': {
-      id: '/api/public/qr-menu/$tableCode'
-      path: '/api/public/qr-menu/$tableCode'
-      fullPath: '/api/public/qr-menu/$tableCode'
-      preLoaderRoute: typeof ApiPublicQrMenuTableCodeRouteImport
+    '/api/public/item-sales/$date': {
+      id: '/api/public/item-sales/$date'
+      path: '/api/public/item-sales/$date'
+      fullPath: '/api/public/item-sales/$date'
+      preLoaderRoute: typeof ApiPublicItemSalesDateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/daily-summary/$date': {
+      id: '/api/public/daily-summary/$date'
+      path: '/api/public/daily-summary/$date'
+      fullPath: '/api/public/daily-summary/$date'
+      preLoaderRoute: typeof ApiPublicDailySummaryDateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/checkout/$tableCode': {
+      id: '/api/public/checkout/$tableCode'
+      path: '/api/public/checkout/$tableCode'
+      fullPath: '/api/public/checkout/$tableCode'
+      preLoaderRoute: typeof ApiPublicCheckoutTableCodeRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
