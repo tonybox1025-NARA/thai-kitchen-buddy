@@ -17,6 +17,7 @@ type RTable = {
 type OpenOrder = { id: string; table_id: string | null; opened_at: string };
 type AttendancePerson = { external_code: string; employee_id: string | null; external_name: string };
 type AttendanceDay = { external_code: string; employee_id: string | null; clock_in: string | null; clock_out: string | null };
+type TableItemLine = { name_th: string; name_en: string; qty: number; amount: number };
 
 function inferredShift(clockIn: string | null): "14:00–01:00" | "17:00–04:00" | null {
   if (!clockIn) return null;
@@ -71,12 +72,15 @@ function LivePage() {
   const [tables, setTables] = useState<RTable[]>([]);
   const [openedAt, setOpenedAt] = useState<Map<string, string>>(new Map());
   const [tableTotals, setTableTotals] = useState<Map<string, number>>(new Map());
+  const [tableItems, setTableItems] = useState<Map<string, TableItemLine[]>>(new Map());
+  const [expandedTableId, setExpandedTableId] = useState<string | null>(null);
   const [byMethod, setByMethod] = useState<Record<string, number>>({ cash: 0, qr: 0, gov_qr: 0, card: 0 });
   const [salesNet, setSalesNet] = useState(0);
   const [billCount, setBillCount] = useState(0);
   const [hasShift, setHasShift] = useState(true);
   const [hourly, setHourly] = useState<{ hour: number; count: number; total: number }[]>([]);
   const [topItems, setTopItems] = useState<{ name_th: string; name_en: string; qty: number }[]>([]);
+  const [topItemsOpen, setTopItemsOpen] = useState(false);
   const [attendance, setAttendance] = useState<Array<AttendancePerson & AttendanceDay>>([]);
   const [attendanceOpen, setAttendanceOpen] = useState(false);
   const [attendanceWorkDate, setAttendanceWorkDate] = useState("");
@@ -119,19 +123,35 @@ function LivePage() {
         .map((o) => [o.id, o.table_id]),
     );
     const totals = new Map<string, number>();
+    const itemGroups = new Map<string, Map<string, TableItemLine>>();
     if (orderToTable.size > 0) {
       const { data: openItems } = await (supabase as any)
         .from("order_items")
-        .select("order_id,qty,unit_price")
+        .select("order_id,name_th,name_en,qty,unit_price")
         .in("order_id", [...orderToTable.keys()])
         .is("voided_at", null);
-      for (const item of (openItems ?? []) as { order_id: string; qty: number; unit_price: number }[]) {
+      for (const item of (openItems ?? []) as { order_id: string; name_th: string; name_en: string; qty: number; unit_price: number }[]) {
         const tableId = orderToTable.get(item.order_id);
         if (!tableId) continue;
-        totals.set(tableId, (totals.get(tableId) ?? 0) + Number(item.qty) * Number(item.unit_price));
+        const qty = Number(item.qty);
+        const amount = qty * Number(item.unit_price);
+        totals.set(tableId, (totals.get(tableId) ?? 0) + amount);
+        const groups = itemGroups.get(tableId) ?? new Map<string, TableItemLine>();
+        const key = `${item.name_en}\u0000${item.name_th}\u0000${item.unit_price}`;
+        const current = groups.get(key) ?? { name_th: item.name_th, name_en: item.name_en, qty: 0, amount: 0 };
+        current.qty += qty;
+        current.amount += amount;
+        groups.set(key, current);
+        itemGroups.set(tableId, groups);
       }
     }
     setTableTotals(totals);
+    setTableItems(new Map(
+      [...itemGroups.entries()].map(([tableId, groups]) => [
+        tableId,
+        [...groups.values()].sort((a, b) => b.amount - a.amount || a.name_en.localeCompare(b.name_en)),
+      ]),
+    ));
 
     // Today's paid sales for the open shift
     const currentShift = shift?.[0] ?? null;
@@ -222,9 +242,10 @@ function LivePage() {
         ...t,
         minutes: openedAt.has(t.id) ? minutesSince(openedAt.get(t.id)!) : 0,
         unpaidTotal: tableTotals.get(t.id) ?? 0,
+        items: tableItems.get(t.id) ?? [],
       }))
       .sort((a, b) => (b.status === "bill_requested" ? 1 : 0) - (a.status === "bill_requested" ? 1 : 0) || b.minutes - a.minutes),
-    [tables, openedAt, tableTotals],
+    [tables, openedAt, tableTotals, tableItems],
   );
   const occupied = active.length;
   const total = tables.length;
@@ -357,20 +378,33 @@ function LivePage() {
 
       {/* Top items today */}
       {topItems.length > 0 && (
-        <div>
-          <h2 className="mb-2 text-sm font-semibold">{t("live_top_items")}</h2>
-          <Card>
-            <CardContent className="max-h-72 overflow-y-auto overscroll-contain p-2 pr-1">
-              {topItems.map((it, i) => (
-                <div key={it.name_en || it.name_th} className="flex items-center gap-3 px-1 py-1.5">
-                  <span className="grid h-6 w-6 flex-none place-items-center rounded-full bg-primary/10 text-xs font-bold text-primary">{i + 1}</span>
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium">{lang === "th" ? (it.name_th || it.name_en) : (it.name_en || it.name_th)}</span>
-                  <span className="flex-none text-sm font-bold tabular-nums">×{it.qty}</span>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </div>
+        <Card>
+          <CardContent className="p-0">
+            <button
+              type="button"
+              onClick={() => setTopItemsOpen((open) => !open)}
+              className="flex w-full items-center justify-between gap-3 p-4 text-left"
+              aria-expanded={topItemsOpen}
+            >
+              <span className="text-sm font-semibold">{t("live_top_items")}</span>
+              <span className="flex items-center gap-2">
+                <Badge variant="secondary">{topItems.length}</Badge>
+                <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${topItemsOpen ? "rotate-180" : ""}`} />
+              </span>
+            </button>
+            {topItemsOpen && (
+              <div className="max-h-72 overflow-y-auto overscroll-contain border-t p-2 pr-1">
+                {topItems.map((it, i) => (
+                  <div key={it.name_en || it.name_th} className="flex items-center gap-3 px-1 py-1.5">
+                    <span className="grid h-6 w-6 flex-none place-items-center rounded-full bg-primary/10 text-xs font-bold text-primary">{i + 1}</span>
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{lang === "th" ? (it.name_th || it.name_en) : (it.name_en || it.name_th)}</span>
+                    <span className="flex-none text-sm font-bold tabular-nums">×{it.qty}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* Active tables */}
@@ -391,22 +425,47 @@ function LivePage() {
           <div className="space-y-2">
             {active.map((tbl) => (
               <Card key={tbl.id} className={tbl.status === "bill_requested" ? "border-destructive/50" : ""}>
-                <CardContent className="p-3 flex items-center gap-3">
-                  <div className="grid h-11 w-11 flex-none place-items-center rounded-lg bg-primary/10 text-lg font-bold text-primary">{tbl.code}</div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold">{t("table")} {tbl.code}</span>
-                      {tbl.status === "bill_requested" && <Badge variant="destructive" className="text-[10px]">{t("bill_requested")}</Badge>}
+                <CardContent className="p-0">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedTableId((id) => id === tbl.id ? null : tbl.id)}
+                    className="flex w-full items-center gap-3 p-3 text-left"
+                    aria-expanded={expandedTableId === tbl.id}
+                  >
+                    <div className="grid h-11 w-11 flex-none place-items-center rounded-lg bg-primary/10 text-lg font-bold text-primary">{tbl.code}</div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">{t("table")} {tbl.code}</span>
+                        {tbl.status === "bill_requested" && <Badge variant="destructive" className="text-[10px]">{t("bill_requested")}</Badge>}
+                      </div>
+                      <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
+                        <span className="flex items-center gap-1"><Users className="h-3 w-3" />{tbl.guests || "?"}</span>
+                        {tbl.minutes > 0 && <span>· {fmtDuration(tbl.minutes)}</span>}
+                      </div>
                     </div>
-                    <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
-                      <span className="flex items-center gap-1"><Users className="h-3 w-3" />{tbl.guests || "?"}</span>
-                      {tbl.minutes > 0 && <span>· {fmtDuration(tbl.minutes)}</span>}
+                    <div className="flex flex-none items-center gap-2 text-right">
+                      <div>
+                        <div className="text-[10px] text-muted-foreground">{t("live_table_total")}</div>
+                        <div className="text-base font-bold tabular-nums">{thb(tbl.unpaidTotal)}</div>
+                      </div>
+                      <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${expandedTableId === tbl.id ? "rotate-180" : ""}`} />
                     </div>
-                  </div>
-                  <div className="flex-none text-right">
-                    <div className="text-[10px] text-muted-foreground">{t("live_table_total")}</div>
-                    <div className="text-base font-bold tabular-nums">{thb(tbl.unpaidTotal)}</div>
-                  </div>
+                  </button>
+                  {expandedTableId === tbl.id && (
+                    <div className="space-y-2 border-t px-3 py-3">
+                      {tbl.items.length > 0 ? tbl.items.map((item) => (
+                        <div key={`${item.name_en}-${item.name_th}-${item.amount}`} className="flex items-start gap-3 text-sm">
+                          <span className="flex-none font-semibold tabular-nums">{item.qty}×</span>
+                          <span className="min-w-0 flex-1">{lang === "th" ? (item.name_th || item.name_en) : (item.name_en || item.name_th)}</span>
+                          <span className="flex-none font-medium tabular-nums">{thb(item.amount)}</span>
+                        </div>
+                      )) : (
+                        <div className="py-1 text-center text-xs text-muted-foreground">
+                          {lang === "th" ? "ยังไม่มีรายการอาหาร" : "No order items yet"}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             ))}
