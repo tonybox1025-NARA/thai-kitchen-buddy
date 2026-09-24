@@ -71,6 +71,10 @@ function PosPage() {
   const [staffTabRows, setStaffTabRows] = useState<StaffTabSummary[]>([]);
   const [staffTabCharges, setStaffTabCharges] = useState<StaffTabCharge[]>([]);
   const [staffTabBusy, setStaffTabBusy] = useState(false);
+  const [pendingStaffSettlement, setPendingStaffSettlement] = useState<{
+    person: StaffTabSummary;
+    method: "cash" | "qr";
+  } | null>(null);
 
   const load = async () => {
     const [{ data }, { data: openOrders }] = await Promise.all([
@@ -308,6 +312,7 @@ function PosPage() {
       toast.error(error?.message ?? "Could not settle staff tab");
       return;
     }
+    setPendingStaffSettlement(null);
     toast.success(`${person.staff_name} · ฿${Number(data[0].amount).toFixed(2)} paid`);
     await loadStaffTabs();
   };
@@ -633,8 +638,8 @@ function PosPage() {
                           ))}
                         </div>
                         <div className="grid grid-cols-2 gap-2 mt-3">
-                          <Button variant="outline" disabled={staffTabBusy} onClick={() => void settleStaffTab(row, "cash")}>{lang === "th" ? "จ่ายเงินสด" : "Pay cash"}</Button>
-                          <Button variant="outline" disabled={staffTabBusy} onClick={() => void settleStaffTab(row, "qr")}>{lang === "th" ? "จ่าย QR" : "Pay QR"}</Button>
+                          <Button variant="outline" disabled={staffTabBusy} onClick={() => setPendingStaffSettlement({ person: row, method: "cash" })}>{lang === "th" ? "จ่ายเงินสด" : "Pay cash"}</Button>
+                          <Button variant="outline" disabled={staffTabBusy} onClick={() => setPendingStaffSettlement({ person: row, method: "qr" })}>{lang === "th" ? "จ่าย QR" : "Pay QR"}</Button>
                         </div>
                       </div>
                     ))}
@@ -650,6 +655,46 @@ function PosPage() {
                 </div>
               </section>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(pendingStaffSettlement)}
+        onOpenChange={(open) => { if (!open && !staffTabBusy) setPendingStaffSettlement(null); }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{lang === "th" ? "ยืนยันการชำระเงิน" : "Confirm staff payment"}</DialogTitle>
+          </DialogHeader>
+          {pendingStaffSettlement && (
+            <div className="space-y-4">
+              <div className="rounded-xl border bg-muted/40 p-4 text-center">
+                <div className="text-lg font-bold">{pendingStaffSettlement.person.staff_name}</div>
+                <div className="mt-2 text-3xl font-black">฿{pendingStaffSettlement.person.outstanding.toFixed(2)}</div>
+                <div className="mt-1 text-sm font-semibold uppercase text-muted-foreground">
+                  {pendingStaffSettlement.method === "cash" ? (lang === "th" ? "เงินสด" : "Cash") : "QR"}
+                </div>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {lang === "th"
+                  ? "ระบบจะปิดยอดค้างชำระทั้งหมดของพนักงานคนนี้"
+                  : "This will mark all outstanding charges for this employee as paid."}
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <Button variant="outline" disabled={staffTabBusy} onClick={() => setPendingStaffSettlement(null)}>
+                  {lang === "th" ? "ยกเลิก" : "Cancel"}
+                </Button>
+                <Button
+                  disabled={staffTabBusy}
+                  onClick={() => void settleStaffTab(pendingStaffSettlement.person, pendingStaffSettlement.method)}
+                >
+                  {staffTabBusy
+                    ? (lang === "th" ? "กำลังบันทึก…" : "Recording…")
+                    : (lang === "th" ? "ยืนยันการชำระ" : "Confirm payment")}
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
