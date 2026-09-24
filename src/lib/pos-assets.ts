@@ -18,7 +18,7 @@ export async function syncPosAssets(onProgress?: (progress: AssetProgress) => vo
   const [{ data: menus, error: menuError }, { data: categories, error: categoryError }, { data: settings, error: settingsError }] = await Promise.all([
     supabase.from("menus").select("*").eq("available", true).order("sort"),
     supabase.from("categories").select("*").order("sort"),
-    supabase.from("settings").select("vat_enabled,vat_mode,vat_rate,service_fee_rate,rounding_mode,restaurant_name,receipt_logo_url").eq("id", 1).single(),
+    supabase.from("settings").select("vat_enabled,vat_mode,vat_rate,service_fee_rate,rounding_mode,max_discount_percent,restaurant_name,receipt_logo_url").eq("id", 1).single(),
   ]);
   const error = menuError ?? categoryError ?? settingsError;
   if (error || !menus || !categories || !settings) throw error ?? new Error("Menu sync failed");

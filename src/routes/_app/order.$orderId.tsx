@@ -73,6 +73,7 @@ type Category = { id: string; name_th: string; name_en: string; name_my: string;
 type CatalogSettings = {
   vat_enabled?: boolean; vat_mode?: "inclusive" | "exclusive"; vat_rate?: number;
   service_fee_rate?: number; rounding_mode?: RoundingMode; restaurant_name: string;
+  max_discount_percent?: number;
   receipt_logo_url?: string | null;
 };
 type CatalogCache = { menus: Menu[]; categories: Category[]; settings: CatalogSettings };
@@ -91,6 +92,11 @@ type Item = {
   round_source?: "pos" | "qr" | null;
   set_config?: any;
   is_takeout?: boolean;
+};
+type ItemDiscount = {
+  id: string; bill_id: string; order_item_id: string;
+  item_name_th: string | null; item_name_en: string | null;
+  qty: number; type: "percent" | "fixed"; value: number; amount: number; reason: string | null;
 };
 type AddonOption = { id: string; name: string; price: number };
 type AddonGroup = { id: string; name: string; kitchen_name: string | null; max_select: number; addon_options: AddonOption[] };
@@ -197,6 +203,7 @@ function OrderPage() {
   const [settingsVatEnabled, setSettingsVatEnabled] = useState(true);
   const [settingsServiceFeeRate, setSettingsServiceFeeRate] = useState(0);
   const [settingsRoundingMode, setSettingsRoundingMode] = useState<RoundingMode>("none");
+  const [settingsMaxDiscountPercent, setSettingsMaxDiscountPercent] = useState(100);
   const [reservedPoints, setReservedPoints] = useState(0);
   const [reservedPointsDiscount, setReservedPointsDiscount] = useState(0);
   const [restaurantName, setRestaurantName] = useState("");
@@ -206,6 +213,14 @@ function OrderPage() {
   const [guestDraft, setGuestDraft] = useState(1);
   const [guestDialogOpen, setGuestDialogOpen] = useState(false);
   const [savingGuests, setSavingGuests] = useState(false);
+  const [currentBillId, setCurrentBillId] = useState<string | null>(null);
+  const [itemDiscounts, setItemDiscounts] = useState<ItemDiscount[]>([]);
+  const [itemDiscOpen, setItemDiscOpen] = useState(false);
+  const [itemDiscItemId, setItemDiscItemId] = useState("");
+  const [itemDiscQty, setItemDiscQty] = useState(1);
+  const [itemDiscType, setItemDiscType] = useState<"percent" | "fixed">("percent");
+  const [itemDiscValue, setItemDiscValue] = useState(0);
+  const [itemDiscReason, setItemDiscReason] = useState("");
 
   // The app shell synchronizes the entire catalog before allowing staff into
   // the POS. Every table therefore paints from the same device snapshot instead
@@ -218,6 +233,7 @@ function OrderPage() {
     setSettingsVatRate(Number(s.vat_rate) || 7);
     setSettingsServiceFeeRate(Number(s.service_fee_rate ?? 0));
     setSettingsRoundingMode(s.rounding_mode || "none");
+    setSettingsMaxDiscountPercent(Number(s.max_discount_percent ?? 100));
     setRestaurantName(s.restaurant_name);
     setReceiptLogoUrl(s.receipt_logo_url ?? null);
     // Cache is a startup snapshot; the network refresh remains authoritative.
@@ -228,11 +244,19 @@ function OrderPage() {
     const [{ data: it }, { data: ord }, { data: reservedBill }] = await Promise.all([
       supabase.from("order_items").select("*").eq("order_id", orderId).order("sent_at", { ascending: true, nullsFirst: true }),
       supabase.from("orders").select("table_id,source,order_number,staff_debtor_id,guests").eq("id", orderId).single(),
-      (supabase as any).from("bills").select("points_redeemed,loyalty_discount_amount").eq("order_id", orderId).maybeSingle(),
+      (supabase as any).from("bills").select("id,points_redeemed,loyalty_discount_amount").eq("order_id", orderId).maybeSingle(),
     ]);
     if (it) setItems(it as Item[]);
     setReservedPoints(Math.max(0, Math.floor(Number((reservedBill as any)?.points_redeemed ?? 0))));
     setReservedPointsDiscount(Math.max(0, Number((reservedBill as any)?.loyalty_discount_amount ?? 0)));
+    const billId = (reservedBill as any)?.id ?? null;
+    setCurrentBillId(billId);
+    if (billId) {
+      const { data: discounts } = await (supabase as any).from("order_item_discounts").select("*").eq("bill_id", billId).order("created_at");
+      setItemDiscounts((discounts ?? []) as ItemDiscount[]);
+    } else {
+      setItemDiscounts([]);
+    }
     if (ord) {
       setGuestCount(Math.max(1, Number((ord as any).guests ?? 1)));
       setOrderSource((ord as any).source ?? "pos");
@@ -457,6 +481,10 @@ function OrderPage() {
 
   const adjustQty = async (item: Item, delta: number) => {
     if (item.status !== "pending") return;
+    if (itemDiscounts.some((discount) => discount.order_item_id === item.id)) {
+      toast.error(lang === "th" ? "ลบส่วนลดรายการก่อนเปลี่ยนจำนวน" : "Remove the item discount before changing quantity");
+      return;
+    }
     const newQty = item.qty + delta;
     if (newQty <= 0) {
       await supabase.from("order_items").delete().eq("id", item.id);
@@ -615,16 +643,14 @@ function OrderPage() {
       order_item_id: voidItem.id, reason: voidReason, voided_by: staff?.id,
       amount: voidItem.qty * voidItem.unit_price,
     });
+    await (supabase as any).from("order_item_discounts").delete().eq("order_item_id", voidItem.id);
     setVoidItem(null); setVoidReason(""); setVoidPreset("");
     toast.success(t("voided"));
   };
 
-  const goToPayment = async () => {
+  const ensureBill = async () => {
     const live = items.filter((i) => i.status !== "voided");
-    if (live.length === 0) { toast.error(t("empty_order")); return; }
-    const pending = live.some((i) => i.status === "pending");
-    if (pending) { toast.error(t("send_to_kitchen") + " first"); return; }
-    // Get/create bill
+    if (live.length === 0) return null;
     let { data: bill } = await supabase.from("bills").select("id").eq("order_id", orderId).maybeSingle();
     if (!bill) {
       const { data: settings } = await supabase.from("settings").select("vat_mode,vat_rate").eq("id", 1).single();
@@ -636,9 +662,21 @@ function OrderPage() {
         is_test: (ord as any)?.is_test ?? false,
       }).select("id").single();
       bill = nb;
-      if (ord?.table_id) await supabase.from("restaurant_tables").update({ status: "bill_requested" }).eq("id", ord.table_id);
     }
-    if (bill) nav({ to: "/payment/$billId", params: { billId: bill.id } });
+    if (bill?.id) setCurrentBillId(bill.id);
+    return bill?.id ?? null;
+  };
+
+  const goToPayment = async () => {
+    const live = items.filter((i) => i.status !== "voided");
+    if (live.length === 0) { toast.error(t("empty_order")); return; }
+    const pending = live.some((i) => i.status === "pending");
+    if (pending) { toast.error(t("send_to_kitchen") + " first"); return; }
+    const billId = await ensureBill();
+    if (billId) {
+      if (tableId) await supabase.from("restaurant_tables").update({ status: "bill_requested" }).eq("id", tableId);
+      nav({ to: "/payment/$billId", params: { billId } });
+    }
   };
 
   const recordOnStaffTab = async () => {
@@ -810,6 +848,97 @@ function OrderPage() {
   const liveItems = items.filter((i) => i.status !== "voided");
   const pendingCount = liveItems.filter((i) => i.status === "pending").length;
   const subtotal = liveItems.reduce((s, i) => s + i.qty * Number(i.unit_price), 0);
+  const itemDiscountTotal = roundMoney(itemDiscounts.reduce((sum, discount) => sum + Number(discount.amount), 0));
+  const selectedItemForDiscount = liveItems.find((item) => item.id === itemDiscItemId) ?? null;
+  const selectedItemDiscountBase = selectedItemForDiscount
+    ? roundMoney(Math.min(itemDiscQty, selectedItemForDiscount.qty) * Number(selectedItemForDiscount.unit_price))
+    : 0;
+  const itemDiscPreviewAmount = selectedItemForDiscount
+    ? itemDiscType === "percent"
+      ? roundMoney(selectedItemDiscountBase * Math.min(100, itemDiscValue) / 100)
+      : Math.min(roundMoney(itemDiscValue), selectedItemDiscountBase)
+    : 0;
+
+  const openItemDiscount = async (item: Item) => {
+    const billId = currentBillId ?? await ensureBill();
+    if (!billId) { toast.error(t("empty_order")); return; }
+    const existing = itemDiscounts.find((discount) => discount.order_item_id === item.id);
+    setItemDiscItemId(item.id);
+    setItemDiscQty(existing?.qty ?? 1);
+    setItemDiscType(existing?.type ?? "percent");
+    setItemDiscValue(Number(existing?.value ?? 0));
+    setItemDiscReason(existing?.reason ?? "");
+    setItemDiscOpen(true);
+  };
+
+  const saveItemDiscount = async () => {
+    const billId = currentBillId ?? await ensureBill();
+    if (!billId || !staff || !selectedItemForDiscount || itemDiscPreviewAmount <= 0) return;
+    const existing = itemDiscounts.find((discount) => discount.order_item_id === selectedItemForDiscount.id);
+    const nextItemDiscountTotal = roundMoney(itemDiscountTotal - Number(existing?.amount ?? 0) + itemDiscPreviewAmount);
+    const maxDiscount = roundMoney(subtotal * settingsMaxDiscountPercent / 100);
+    if (nextItemDiscountTotal > maxDiscount) {
+      toast.error(lang === "th" ? `ส่วนลดรวมสูงสุด ${settingsMaxDiscountPercent}%` : `Maximum combined discount is ${settingsMaxDiscountPercent}%`);
+      return;
+    }
+    const { error } = await (supabase as any).from("order_item_discounts").upsert({
+      bill_id: billId,
+      order_item_id: selectedItemForDiscount.id,
+      item_name_th: selectedItemForDiscount.name_th,
+      item_name_en: selectedItemForDiscount.name_en,
+      qty: Math.max(1, Math.min(itemDiscQty, selectedItemForDiscount.qty)),
+      type: itemDiscType,
+      value: itemDiscValue,
+      amount: itemDiscPreviewAmount,
+      reason: itemDiscReason.trim() || null,
+      applied_by: staff.id,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "bill_id,order_item_id" });
+    if (error) { toast.error(error.message); return; }
+
+    const { data: billDiscountRows } = await (supabase as any).from("bill_discounts").select("amount").eq("bill_id", billId);
+    const billLevelDiscount = roundMoney((billDiscountRows ?? []).reduce((sum: number, row: any) => sum + Number(row.amount), 0));
+    const nextDiscountTotal = roundMoney(nextItemDiscountTotal + billLevelDiscount);
+    const nextAfterDiscount = Math.max(0, subtotal - nextDiscountTotal - reservedPointsDiscount);
+    const nextTotals = previewTotals(nextAfterDiscount, settingsVatEnabled, settingsVatMode, settingsVatRate, settingsServiceFeeRate, settingsRoundingMode);
+    await (supabase as any).from("bills").update({
+      subtotal,
+      discount_amount: nextDiscountTotal,
+      service_fee_rate: settingsServiceFeeRate,
+      service_fee_amount: nextTotals.serviceFeeAmount,
+      rounding_mode: settingsRoundingMode,
+      rounding_adjustment: nextTotals.roundingAdjustment,
+      vat_amount: nextTotals.vatAmount,
+      total: nextTotals.total,
+    }).eq("id", billId);
+    setItemDiscOpen(false);
+    await loadOrderState();
+    toast.success(lang === "th" ? "ใส่ส่วนลดรายการแล้ว" : "Item discount applied");
+  };
+
+  const removeItemDiscount = async () => {
+    if (!currentBillId || !selectedItemForDiscount) return;
+    const existing = itemDiscounts.find((discount) => discount.order_item_id === selectedItemForDiscount.id);
+    if (!existing) return;
+    const { error } = await (supabase as any).from("order_item_discounts").delete().eq("id", existing.id);
+    if (error) { toast.error(error.message); return; }
+    const nextItemDiscountTotal = Math.max(0, roundMoney(itemDiscountTotal - Number(existing.amount)));
+    const { data: billDiscountRows } = await (supabase as any).from("bill_discounts").select("amount").eq("bill_id", currentBillId);
+    const billLevelDiscount = roundMoney((billDiscountRows ?? []).reduce((sum: number, row: any) => sum + Number(row.amount), 0));
+    const nextDiscountTotal = roundMoney(nextItemDiscountTotal + billLevelDiscount);
+    const nextAfterDiscount = Math.max(0, subtotal - nextDiscountTotal - reservedPointsDiscount);
+    const nextTotals = previewTotals(nextAfterDiscount, settingsVatEnabled, settingsVatMode, settingsVatRate, settingsServiceFeeRate, settingsRoundingMode);
+    await (supabase as any).from("bills").update({
+      discount_amount: nextDiscountTotal,
+      service_fee_amount: nextTotals.serviceFeeAmount,
+      rounding_adjustment: nextTotals.roundingAdjustment,
+      vat_amount: nextTotals.vatAmount,
+      total: nextTotals.total,
+    }).eq("id", currentBillId);
+    setItemDiscOpen(false);
+    await loadOrderState();
+    toast.success(lang === "th" ? "ยกเลิกส่วนลดรายการแล้ว" : "Item discount removed");
+  };
   const sentRounds = useMemo(() => {
     const grouped = new Map<number, Item[]>();
     for (const item of items) {
@@ -896,7 +1025,7 @@ function OrderPage() {
   // Bill preview must include a reward reserved from the customer QR before the
   // cashier enters the payment screen. This mirrors payment-screen totals so
   // the first paper bill brought to the table is already correct.
-  const billAfterDiscount = Math.max(0, subtotal - reservedPointsDiscount);
+  const billAfterDiscount = Math.max(0, subtotal - itemDiscountTotal - reservedPointsDiscount);
   const { serviceFeeAmount: billServiceFeeAmount, vatAmount: billVatAmount, roundingAdjustment: billRoundingAdjustment, total: billTotal } = previewTotals(
     billAfterDiscount, settingsVatEnabled, settingsVatMode, settingsVatRate,
     settingsServiceFeeRate, settingsRoundingMode,
@@ -907,7 +1036,17 @@ function OrderPage() {
     await printCounter({
       kind: "receipt", table: tableCode, restaurant: restaurantName,
       logoUrl: receiptLogoUrl || undefined,
-      items: liveItems, total: billTotal,
+      items: liveItems.map((item) => {
+        const discount = itemDiscounts.find((row) => row.order_item_id === item.id);
+        return {
+          ...item,
+          discount_amount: discount?.amount ?? 0,
+          discount_label: discount
+            ? `${lang === "th" ? "ส่วนลดรายการ" : "Item discount"}${discount.reason ? `: ${discount.reason}` : ""}`
+            : undefined,
+        };
+      }), total: billTotal,
+      discountAmount: itemDiscountTotal,
       pointsDiscountAmount: reservedPointsDiscount,
       serviceFeeAmount: billServiceFeeAmount,
       roundingAdjustment: billRoundingAdjustment,
@@ -1086,6 +1225,11 @@ function OrderPage() {
                           {i.status === "pending" ? t("pending") : t("sent")}
                         </span>
                       </div>
+                      {itemDiscounts.find((discount) => discount.order_item_id === i.id) && (
+                        <div className="mt-1.5 ml-5 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                          {lang === "th" ? "ส่วนลดรายการ" : "Item discount"} −{thb(itemDiscounts.find((discount) => discount.order_item_id === i.id)!.amount)}
+                        </div>
+                      )}
                     </div>
                     <div className="text-right shrink-0">
                       <div className="font-bold text-amber-700 dark:text-amber-300">{thb(Number(i.unit_price))}</div>
@@ -1093,6 +1237,9 @@ function OrderPage() {
                   </div>
                   {i.status === "pending" && (
                     <div className="flex items-center justify-end gap-2 mt-2">
+                      <Button size="sm" variant="outline" className="border-amber-400 text-amber-800" onClick={() => void openItemDiscount(i)}>
+                        <Tag className="h-3 w-3 mr-1" />{lang === "th" ? "ลดราคา" : "Discount"}
+                      </Button>
                       <Button size="sm" variant={i.is_takeout ? "default" : "outline"} className={i.is_takeout ? "bg-blue-600 hover:bg-blue-700" : ""} onClick={() => void toggleItemTakeout(i)}>
                         <ShoppingBag className="h-3 w-3 mr-1" />TAKEOUT
                       </Button>
@@ -1102,7 +1249,10 @@ function OrderPage() {
                     </div>
                   )}
                   {i.status === "sent" && (
-                    <div className="flex justify-end mt-2">
+                    <div className="flex justify-end gap-2 mt-2">
+                      <Button size="sm" variant="outline" className="border-amber-400 text-amber-800" onClick={() => void openItemDiscount(i)}>
+                        <Tag className="h-3 w-3 mr-1" />{lang === "th" ? "ลดราคา" : "Discount"}
+                      </Button>
                       <Button size="sm" variant="ghost" className="text-destructive" onClick={() => requestVoid(i)}>
                         <Trash2 className="h-3 w-3 mr-1" />VOID
                       </Button>
@@ -1136,6 +1286,11 @@ function OrderPage() {
                         {i.status === "pending" ? t("pending") : t("sent")}
                       </span>
                     </div>
+                    {itemDiscounts.find((discount) => discount.order_item_id === i.id) && (
+                      <div className="mt-1 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                        {lang === "th" ? "ส่วนลดรายการ" : "Item discount"} −{thb(itemDiscounts.find((discount) => discount.order_item_id === i.id)!.amount)}
+                      </div>
+                    )}
                   </div>
                   <div className="text-right shrink-0">
                     <div className="font-semibold">{thb(i.qty * Number(i.unit_price))}</div>
@@ -1150,13 +1305,19 @@ function OrderPage() {
                     <Button size="sm" variant={i.is_takeout ? "default" : "outline"} className={i.is_takeout ? "bg-blue-600 hover:bg-blue-700" : ""} onClick={() => void toggleItemTakeout(i)}>
                       <ShoppingBag className="h-3 w-3 mr-1" />TAKEOUT
                     </Button>
+                    <Button size="sm" variant="outline" className="border-amber-400 text-amber-800" onClick={() => void openItemDiscount(i)}>
+                      <Tag className="h-3 w-3 mr-1" />{lang === "th" ? "ลดราคา" : "Discount"}
+                    </Button>
                     <Button size="sm" variant="ghost" className="ml-auto text-destructive" onClick={() => requestVoid(i)}>
                       <Trash2 className="h-3 w-3 mr-1" />VOID
                     </Button>
                   </div>
                 )}
                 {i.status === "sent" && (
-                  <div className="flex justify-end mt-2">
+                  <div className="flex justify-end gap-2 mt-2">
+                    <Button size="sm" variant="outline" className="border-amber-400 text-amber-800" onClick={() => void openItemDiscount(i)}>
+                      <Tag className="h-3 w-3 mr-1" />{lang === "th" ? "ลดราคา" : "Discount"}
+                    </Button>
                     <Button size="sm" variant="ghost" className="text-destructive" onClick={() => requestVoid(i)}>
                       <Trash2 className="h-3 w-3 mr-1" />VOID
                     </Button>
@@ -1171,6 +1332,11 @@ function OrderPage() {
           <div className="flex justify-between text-lg font-bold">
             <span>{t("subtotal")}</span><span>{thb(subtotal)}</span>
           </div>
+          {itemDiscountTotal > 0 && (
+            <div className="flex justify-between text-sm font-semibold text-amber-700 dark:text-amber-300">
+              <span>{lang === "th" ? "ส่วนลดรายการ" : "Item discounts"}</span><span>−{thb(itemDiscountTotal)}</span>
+            </div>
+          )}
           <Button
             className={`w-full transition-all ${pendingCount > 0 ? "bg-amber-500 text-amber-950 shadow-lg ring-2 ring-amber-300 hover:bg-amber-600" : ""}`}
             size="lg"
@@ -1481,9 +1647,17 @@ function OrderPage() {
           </p>
           <div className="space-y-1 max-h-56 overflow-y-auto text-sm border rounded-lg p-3 bg-muted/30">
             {liveItems.map((i) => (
-              <div key={i.id} className="flex justify-between">
-                <span className="truncate mr-2">{pickName(i, lang)} <span className="text-muted-foreground">×{i.qty}</span></span>
-                <span className="shrink-0 tabular-nums">{thb(i.qty * Number(i.unit_price))}</span>
+              <div key={i.id}>
+                <div className="flex justify-between">
+                  <span className="truncate mr-2">{pickName(i, lang)} <span className="text-muted-foreground">×{i.qty}</span></span>
+                  <span className="shrink-0 tabular-nums">{thb(i.qty * Number(i.unit_price))}</span>
+                </div>
+                {itemDiscounts.find((discount) => discount.order_item_id === i.id) && (
+                  <div className="flex justify-between pl-3 text-xs font-medium text-amber-700">
+                    <span>{lang === "th" ? "ส่วนลดรายการ" : "Item discount"}</span>
+                    <span>−{thb(itemDiscounts.find((discount) => discount.order_item_id === i.id)!.amount)}</span>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -1494,6 +1668,11 @@ function OrderPage() {
             {reservedPointsDiscount > 0 && (
               <div className="flex justify-between text-green-700 font-medium">
                 <span>{reservedPoints.toLocaleString()} points</span><span className="tabular-nums">−{thb(reservedPointsDiscount)}</span>
+              </div>
+            )}
+            {itemDiscountTotal > 0 && (
+              <div className="flex justify-between text-amber-700 font-medium">
+                <span>{lang === "th" ? "ส่วนลดรายการรวม" : "Item discounts"}</span><span className="tabular-nums">−{thb(itemDiscountTotal)}</span>
               </div>
             )}
             {billServiceFeeAmount > 0 && (
@@ -1517,6 +1696,76 @@ function OrderPage() {
             <Button className="flex-1" onClick={() => { printBillPreview(); setBillOpen(false); }}>
               <Printer className="h-4 w-4 mr-1" />Print
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Apply a discount before printing the bill for the customer. */}
+      <Dialog open={itemDiscOpen} onOpenChange={setItemDiscOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Tag className="h-4 w-4" />{lang === "th" ? "ลดราคาเฉพาะรายการ" : "Item discount"}
+            </DialogTitle>
+          </DialogHeader>
+          {selectedItemForDiscount && (
+            <div className="space-y-3">
+              <div className="rounded-lg border bg-muted/40 p-3">
+                <div className="font-semibold">{pickName(selectedItemForDiscount, lang)}</div>
+                <div className="text-xs text-muted-foreground">{selectedItemForDiscount.qty} × {thb(selectedItemForDiscount.unit_price)}</div>
+              </div>
+
+              {selectedItemForDiscount.qty > 1 && (
+                <div>
+                  <Label>{lang === "th" ? "จำนวนที่ลดราคา" : "Discount quantity"}</Label>
+                  <div className="grid grid-cols-4 gap-2 mt-1">
+                    {Array.from({ length: selectedItemForDiscount.qty }, (_, index) => index + 1).map((value) => (
+                      <Button key={value} type="button" variant={itemDiscQty === value ? "default" : "outline"} onClick={() => setItemDiscQty(value)}>{value}</Button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-2">
+                <Button type="button" variant={itemDiscType === "percent" ? "default" : "outline"} onClick={() => { setItemDiscType("percent"); setItemDiscValue(0); }}>%</Button>
+                <Button type="button" variant={itemDiscType === "fixed" ? "default" : "outline"} onClick={() => { setItemDiscType("fixed"); setItemDiscValue(0); }}>฿</Button>
+              </div>
+
+              <KeypadInput
+                value={itemDiscValue}
+                onChange={(value) => setItemDiscValue(itemDiscType === "percent" ? Math.min(100, value) : value)}
+                title={itemDiscType === "percent" ? (lang === "th" ? "เปอร์เซ็นต์ส่วนลด" : "Discount percent") : (lang === "th" ? "จำนวนเงินส่วนลด" : "Discount amount")}
+                display={itemDiscType === "percent" ? (value) => `${value}%` : undefined}
+                placeholder="0"
+              />
+
+              {itemDiscType === "percent" && (
+                <div className="flex gap-1.5 flex-wrap">
+                  {[5, 10, 15, 20, 25, 30, 50].map((value) => (
+                    <Button key={value} size="sm" type="button" variant={itemDiscValue === value ? "default" : "outline"} onClick={() => setItemDiscValue(value)}>{value}%</Button>
+                  ))}
+                </div>
+              )}
+
+              <div>
+                <Label>{lang === "th" ? "เหตุผล (ไม่บังคับ)" : "Reason (optional)"}</Label>
+                <Input className="mt-1" value={itemDiscReason} onChange={(event) => setItemDiscReason(event.target.value)} placeholder={lang === "th" ? "เช่น โปรวันนี้ / ระบายสต็อก" : "e.g. Today only / stock clearance"} />
+              </div>
+
+              {itemDiscPreviewAmount > 0 && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-center dark:bg-amber-950/30">
+                  <div className="text-xs text-muted-foreground">{lang === "th" ? "ส่วนลดรายการนี้" : "This item discount"}</div>
+                  <div className="text-2xl font-black text-amber-700 dark:text-amber-300">−{thb(itemDiscPreviewAmount)}</div>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter className="gap-2 sm:gap-2">
+            {itemDiscounts.some((discount) => discount.order_item_id === itemDiscItemId) && (
+              <Button variant="destructive" onClick={() => void removeItemDiscount()}>{lang === "th" ? "ลบส่วนลด" : "Remove"}</Button>
+            )}
+            <Button variant="outline" onClick={() => setItemDiscOpen(false)}>{t("cancel")}</Button>
+            <Button onClick={() => void saveItemDiscount()} disabled={itemDiscPreviewAmount <= 0}>{lang === "th" ? "ใช้ส่วนลด" : "Apply"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1563,12 +1812,23 @@ function OrderPage() {
           </p>
           <div className="w-full max-w-xs space-y-2 mb-8">
             {liveItems.map((i) => (
-              <div key={i.id} className="flex justify-between text-lg">
-                <span className="truncate mr-2">{pickName(i, lang)} <span className="text-muted-foreground text-base">×{i.qty}</span></span>
-                <span className="shrink-0 tabular-nums">{thb(i.qty * Number(i.unit_price))}</span>
+              <div key={i.id}>
+                <div className="flex justify-between text-lg">
+                  <span className="truncate mr-2">{pickName(i, lang)} <span className="text-muted-foreground text-base">×{i.qty}</span></span>
+                  <span className="shrink-0 tabular-nums">{thb(i.qty * Number(i.unit_price))}</span>
+                </div>
+                {itemDiscounts.find((discount) => discount.order_item_id === i.id) && (
+                  <div className="flex justify-between pl-4 text-base font-semibold text-amber-700">
+                    <span>{lang === "th" ? "ส่วนลดรายการ" : "Item discount"}</span>
+                    <span>−{thb(itemDiscounts.find((discount) => discount.order_item_id === i.id)!.amount)}</span>
+                  </div>
+                )}
               </div>
             ))}
           </div>
+          {itemDiscountTotal > 0 && (
+            <p className="text-amber-700 text-lg mb-1">{lang === "th" ? "ส่วนลดรายการรวม" : "Item discounts"}: −{thb(itemDiscountTotal)}</p>
+          )}
           {reservedPointsDiscount > 0 && (
             <p className="text-green-700 text-lg mb-1">{reservedPoints.toLocaleString()} points: −{thb(reservedPointsDiscount)}</p>
           )}
