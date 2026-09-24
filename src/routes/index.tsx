@@ -22,7 +22,9 @@ function IndexPage() {
     // Morning open: if no register/shift is open yet, land on the Register (open
     // + count starting cash) instead of the tables page; otherwise go to tables.
     void (async () => {
-      const { data: shift } = await supabase.from("shifts").select("id").eq("status", "open").maybeSingle();
+      const { data: shifts } = await supabase.from("shifts").select("id").eq("status", "open")
+        .order("opened_at", { ascending: false }).limit(1);
+      const shift = shifts?.[0] ?? null;
       void navigate({ to: shift ? "/pos" : "/register", replace: true });
     })();
   }, [loading, session, navigate]);

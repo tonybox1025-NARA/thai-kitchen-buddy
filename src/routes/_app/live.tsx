@@ -56,7 +56,7 @@ function LivePage() {
     const [{ data: tbls }, { data: openOrders }, { data: shift }] = await Promise.all([
       supabase.from("restaurant_tables").select("id,code,capacity,status,guests").not("is_test", "is", true).order("code"),
       supabase.from("orders").select("id,table_id,opened_at").eq("status", "open").not("table_id", "is", null).not("is_test", "is", true),
-      supabase.from("shifts").select("id").eq("status", "open").maybeSingle(),
+      supabase.from("shifts").select("id").eq("status", "open").order("opened_at", { ascending: false }).limit(1),
     ]);
     setTables((tbls ?? []) as RTable[]);
     const map = new Map<string, string>();
@@ -102,7 +102,7 @@ function LivePage() {
     setTableTotals(totals);
 
     // Today's paid sales for the open shift
-    setHasShift(!!shift);
+    setHasShift(!!shift?.[0]);
     if (shift?.id) {
       const { data: bills } = await supabase.from("bills").select("id,total,paid_at").eq("status", "paid").eq("shift_id", shift.id).not("is_test", "is", true);
       const ids = (bills ?? []).map((b) => b.id);

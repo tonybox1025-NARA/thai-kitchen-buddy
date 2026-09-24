@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { escapeHtml } from "@/lib/escape-html";
@@ -230,6 +230,8 @@ function Reports() {
   // Register open flow
   const [openDlg, setOpenDlg] = useState(false);
   const [openCashCount, setOpenCashCount] = useState<Record<number, number>>({});
+  const [openingShift, setOpeningShift] = useState(false);
+  const openingShiftRef = useRef(false);
   const [closeDlg, setCloseDlg] = useState(false);
 
   // Scenario 2: Z-report payment type adjustment
@@ -239,8 +241,9 @@ function Reports() {
   const [adjLoading, setAdjLoading] = useState(false);
 
   useEffect(() => {
-    supabase.from("shifts").select("*").eq("status", "open").maybeSingle().then(({ data }) => {
-      setShift((data as Shift) ?? null);
+    supabase.from("shifts").select("*").eq("status", "open")
+      .order("opened_at", { ascending: false }).limit(1).then(({ data }) => {
+      setShift((data?.[0] as Shift) ?? null);
     });
     supabase.from("settings").select("restaurant_name,qr_time_buckets").eq("id", 1).maybeSingle().then(({ data }) => {
       setRestaurantName((data as any)?.restaurant_name ?? "");
@@ -402,11 +405,36 @@ function Reports() {
   };
 
   const openShift = async () => {
+    if (openingShiftRef.current) return;
+    openingShiftRef.current = true;
+    setOpeningShift(true);
+    try {
+    const { data: existing } = await supabase.from("shifts").select("*")
+      .eq("status", "open").order("opened_at", { ascending: false }).limit(1);
+    if (existing?.[0]) {
+      setShift(existing[0] as Shift);
+      setOpenDlg(false);
+      toast.success(t("rep_shift_opened"));
+      return;
+    }
     const today = new Date().toISOString().slice(0, 10);
     const { data: newShift, error } = await supabase.from("shifts")
       .insert({ business_day: today, opened_by: staff?.id, opening_float: openTotal })
       .select("*").single();
-    if (error || !newShift) { toast.error(error?.message ?? t("rep_load_failed")); return; }
+    if (error || !newShift) {
+      if ((error as any)?.code === "23505") {
+        const { data: raced } = await supabase.from("shifts").select("*")
+          .eq("status", "open").order("opened_at", { ascending: false }).limit(1);
+        if (raced?.[0]) {
+          setShift(raced[0] as Shift);
+          setOpenDlg(false);
+          toast.success(t("rep_shift_opened"));
+          return;
+        }
+      }
+      toast.error(error?.message ?? t("rep_load_failed"));
+      return;
+    }
     setShift(newShift as Shift);
     const [counterResult, kitchenResult] = await Promise.allSettled([
       printOpenSlip(newShift as Shift, openCashCount),
@@ -423,6 +451,10 @@ function Reports() {
     }
     setOpenDlg(false); setOpenCashCount({});
     toast.success(t("rep_shift_opened"));
+    } finally {
+      openingShiftRef.current = false;
+      setOpeningShift(false);
+    }
   };
 
   const runX = async () => {
@@ -600,7 +632,9 @@ function Reports() {
           </div>
           <DialogFooter className="pt-2">
             <Button variant="outline" onClick={() => setOpenDlg(false)}>{t("cancel")}</Button>
-            <Button onClick={openShift}>{t("rep_open_and_print")}</Button>
+            <Button onClick={openShift} disabled={openingShift}>
+              {openingShift ? "Opening…" : t("rep_open_and_print")}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

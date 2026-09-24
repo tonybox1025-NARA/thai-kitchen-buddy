@@ -19,8 +19,9 @@ export function ShiftStatusButton() {
       .from("shifts")
       .select("id,business_day,status")
       .eq("status", "open")
-      .maybeSingle();
-    setShift((data as Shift) ?? null);
+      .order("opened_at", { ascending: false })
+      .limit(1);
+    setShift((data?.[0] as Shift) ?? null);
   };
 
   useEffect(() => {

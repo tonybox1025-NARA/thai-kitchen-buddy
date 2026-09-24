@@ -250,11 +250,13 @@ function CrewPage() {
   const confirmOpenTable = async () => {
     if (!openingTable || !staff || guestCount < 1 || opening) return;
     setOpening(true);
-    const { data: shift, error: shiftError } = await supabase
+    const { data: shifts, error: shiftError } = await supabase
       .from("shifts")
       .select("id")
       .eq("status", "open")
-      .maybeSingle();
+      .order("opened_at", { ascending: false })
+      .limit(1);
+    const shift = shifts?.[0] ?? null;
     if (shiftError || !shift) {
       toast.error(shiftError?.message || c.openRegisterFirst);
       setOpening(false);

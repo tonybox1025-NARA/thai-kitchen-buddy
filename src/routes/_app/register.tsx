@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { escapeHtml } from "@/lib/escape-html";
@@ -235,6 +235,7 @@ function Register() {
   const [openDlg, setOpenDlg] = useState(false);
   const [openCashCount, setOpenCashCount] = useState<Record<number, number>>({});
   const [openingShift, setOpeningShift] = useState(false);
+  const openingShiftRef = useRef(false);
   const [closeDlg, setCloseDlg] = useState(false);
 
   // Scenario 2: Z-report payment type adjustment
@@ -411,7 +412,8 @@ function Register() {
   };
 
   const openShift = async () => {
-    if (openingShift) return;
+    if (openingShiftRef.current) return;
+    openingShiftRef.current = true;
     setOpeningShift(true);
     try {
       // A delayed/double touch must not create a second open register shift.
@@ -427,7 +429,22 @@ function Register() {
     const { data: newShift, error } = await supabase.from("shifts")
       .insert({ business_day: today, opened_by: staff?.id, opening_float: openTotal })
       .select("*").single();
-    if (error || !newShift) { toast.error(error?.message ?? t("rep_load_failed")); return; }
+    if (error || !newShift) {
+      // Another device may have won the database race after our pre-check.
+      // Treat the already-open shift as success instead of asking staff to count again.
+      if ((error as any)?.code === "23505") {
+        const { data: raced } = await supabase.from("shifts").select("*")
+          .eq("status", "open").order("opened_at", { ascending: false }).limit(1);
+        if (raced?.[0]) {
+          setShift(raced[0] as Shift);
+          setOpenDlg(false);
+          toast.success(t("rep_shift_opened"));
+          return;
+        }
+      }
+      toast.error(error?.message ?? t("rep_load_failed"));
+      return;
+    }
     setShift(newShift as Shift);
     const [counterResult, kitchenResult] = await Promise.allSettled([
       printOpenSlip(newShift as Shift, openCashCount),
@@ -445,6 +462,7 @@ function Register() {
     setOpenDlg(false); setOpenCashCount({});
     toast.success(t("rep_shift_opened"));
     } finally {
+      openingShiftRef.current = false;
       setOpeningShift(false);
     }
   };
