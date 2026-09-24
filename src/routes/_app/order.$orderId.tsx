@@ -10,7 +10,7 @@ import { KeypadInput } from "@/components/KeypadInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Minus, Trash2, ChefHat, Receipt, ArrowLeft, AlertTriangle, ArrowLeftRight, X, Printer, Eye, Layers, Bell, QrCode, Check, ShoppingBag, Tag } from "lucide-react";
+import { Plus, Minus, Trash2, ChefHat, Receipt, ArrowLeft, AlertTriangle, ArrowLeftRight, X, Printer, Eye, Layers, Bell, QrCode, Check, ShoppingBag, Tag, Users } from "lucide-react";
 import { ManagerPinDialog } from "@/components/ManagerPinDialog";
 import { SetMenuDialog } from "@/components/SetMenuDialog";
 import { SETS, buildSetDef, formatSetKitchenNotes, setConfigCost, type SetConfig, type SetDef, type SetItemRow } from "@/lib/set-menu";
@@ -182,6 +182,10 @@ function OrderPage() {
   const [restaurantName, setRestaurantName] = useState("");
   const [receiptLogoUrl, setReceiptLogoUrl] = useState<string | null>(null);
   const [reprintingRound, setReprintingRound] = useState<number | null>(null);
+  const [guestCount, setGuestCount] = useState(1);
+  const [guestDraft, setGuestDraft] = useState(1);
+  const [guestDialogOpen, setGuestDialogOpen] = useState(false);
+  const [savingGuests, setSavingGuests] = useState(false);
 
   const loadCatalog = async () => {
     const [{ data: m }, { data: c }, { data: s }] = await Promise.all([
@@ -217,13 +221,14 @@ function OrderPage() {
   const loadOrderState = async () => {
     const [{ data: it }, { data: ord }, { data: reservedBill }] = await Promise.all([
       supabase.from("order_items").select("*").eq("order_id", orderId).order("sent_at", { ascending: true, nullsFirst: true }),
-      supabase.from("orders").select("table_id,source,order_number,staff_debtor_id").eq("id", orderId).single(),
+      supabase.from("orders").select("table_id,source,order_number,staff_debtor_id,guests").eq("id", orderId).single(),
       (supabase as any).from("bills").select("points_redeemed,loyalty_discount_amount").eq("order_id", orderId).maybeSingle(),
     ]);
     if (it) setItems(it as Item[]);
     setReservedPoints(Math.max(0, Math.floor(Number((reservedBill as any)?.points_redeemed ?? 0))));
     setReservedPointsDiscount(Math.max(0, Number((reservedBill as any)?.loyalty_discount_amount ?? 0)));
     if (ord) {
+      setGuestCount(Math.max(1, Number((ord as any).guests ?? 1)));
       setOrderSource((ord as any).source ?? "pos");
       setOrderNumber((ord as any).order_number ?? null);
       if ((ord as any).staff_debtor_id) {
@@ -683,6 +688,30 @@ function OrderPage() {
     toast.success(`QR printed · ${t("table")} ${tableCode}`);
   };
 
+  const openGuestDialog = () => {
+    setGuestDraft(guestCount);
+    setGuestDialogOpen(true);
+  };
+
+  const saveGuestCount = async () => {
+    if (!tableId || guestDraft < 1 || savingGuests) return;
+    setSavingGuests(true);
+    try {
+      const [{ error: orderError }, { error: tableError }] = await Promise.all([
+        supabase.from("orders").update({ guests: guestDraft }).eq("id", orderId),
+        supabase.from("restaurant_tables").update({ guests: guestDraft }).eq("id", tableId),
+      ]);
+      if (orderError || tableError) throw orderError ?? tableError;
+      setGuestCount(guestDraft);
+      setGuestDialogOpen(false);
+      toast.success(lang === "th" ? `แก้จำนวนลูกค้าเป็น ${guestDraft} คนแล้ว` : `Guest count updated to ${guestDraft}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not update guest count");
+    } finally {
+      setSavingGuests(false);
+    }
+  };
+
   const openCloseTable = () => {
     if (staff?.role === "staff") { setManagerAction("close_table"); setManagerOpen(true); return; }
     setCloseTableOpen(true);
@@ -911,6 +940,11 @@ function OrderPage() {
                 </span>
               )}
             </h1>
+          )}
+          {(orderSource === "pos" || orderSource === "qr") && (
+            <Button size="sm" variant="outline" onClick={openGuestDialog}>
+              <Users className="h-4 w-4 mr-1" />{guestCount}
+            </Button>
           )}
           <div className="ml-auto flex gap-2">
             {(orderSource === "pos" || orderSource === "qr") && (
@@ -1400,6 +1434,32 @@ function OrderPage() {
           setManagerAction(null);
         }}
       />
+
+      <Dialog open={guestDialogOpen} onOpenChange={setGuestDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{lang === "th" ? "แก้จำนวนลูกค้า" : "Change guest count"}</DialogTitle>
+          </DialogHeader>
+          <div className="flex items-center justify-center gap-5 py-6">
+            <Button size="lg" variant="outline" onClick={() => setGuestDraft((value) => Math.max(1, value - 1))} disabled={guestDraft <= 1}>
+              <Minus className="h-6 w-6" />
+            </Button>
+            <div className="min-w-20 text-center text-4xl font-bold tabular-nums">{guestDraft}</div>
+            <Button size="lg" variant="outline" onClick={() => setGuestDraft((value) => Math.min(30, value + 1))} disabled={guestDraft >= 30}>
+              <Plus className="h-6 w-6" />
+            </Button>
+          </div>
+          <p className="text-center text-sm text-muted-foreground">
+            {lang === "th" ? "QR เดิมยังใช้ได้ ไม่ต้องพิมพ์ใหม่" : "The existing QR remains valid; no reprint is needed."}
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setGuestDialogOpen(false)}>{t("cancel")}</Button>
+            <Button onClick={saveGuestCount} disabled={savingGuests || guestDraft < 1}>
+              {savingGuests ? "…" : (lang === "th" ? "บันทึก" : "Save")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Bill preview dialog */}
       <Dialog open={billOpen} onOpenChange={setBillOpen}>
