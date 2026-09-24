@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Capacitor } from "@capacitor/core";
 
 export const Route = createFileRoute("/")({
   component: IndexPage,
@@ -19,6 +20,15 @@ function IndexPage() {
 
   useEffect(() => {
     if (loading || !session) return;
+    const standalone = typeof window !== "undefined"
+      && window.matchMedia("(display-mode: standalone)").matches;
+    if (!Capacitor.isNativePlatform() && standalone) {
+      const saved = window.localStorage.getItem("lonmoh:last-app-section");
+      if (saved === "/live" || saved === "/crew" || saved === "/pos") {
+        void navigate({ to: saved, replace: true });
+        return;
+      }
+    }
     // Morning open: if no register/shift is open yet, land on the Register (open
     // + count starting cash) instead of the tables page; otherwise go to tables.
     void (async () => {

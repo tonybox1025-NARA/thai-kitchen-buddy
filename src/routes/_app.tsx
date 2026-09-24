@@ -15,6 +15,7 @@ import { useQrAlertCount } from "@/lib/qr-alert-count";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { useNativePrintQueue } from "@/lib/native-print-queue";
 import { syncPosAssets, type AssetProgress } from "@/lib/pos-assets";
+import { Capacitor } from "@capacitor/core";
 
 export const Route = createFileRoute("/_app")({ component: AppLayout });
 
@@ -25,22 +26,35 @@ function AppLayout() {
   const [pinErr, setPinErr] = useState<string | null>(null);
   const [assetsReady, setAssetsReady] = useState(false);
   const [assetProgress, setAssetProgress] = useState<AssetProgress>({ done: 0, total: 1, stage: "catalog" });
+  const needsPosAssets = Capacitor.isNativePlatform()
+    && (path === "/pos" || path.startsWith("/order/"));
   const qrAlertCount = useQrAlertCount(Boolean(session && staff));
   useNativePrintQueue(Boolean(session && staff));
 
   useEffect(() => { installAudioUnlockListeners(); }, []);
 
   useEffect(() => {
-    if (!session || !staff) {
-      setAssetsReady(false);
+    if (!session || !staff || !needsPosAssets) {
       return;
     }
+    setAssetsReady(false);
     let cancelled = false;
     void syncPosAssets((progress) => { if (!cancelled) setAssetProgress(progress); })
       .catch((error) => console.error("POS asset sync failed", error))
       .finally(() => { if (!cancelled) setAssetsReady(true); });
     return () => { cancelled = true; };
-  }, [session, staff]);
+  }, [session, staff, needsPosAssets]);
+
+  useEffect(() => {
+    const section = path === "/live"
+      ? "/live"
+      : path.startsWith("/crew")
+        ? "/crew"
+        : path === "/pos" || path.startsWith("/order/") || path.startsWith("/payment/")
+          ? "/pos"
+          : null;
+    if (section) window.localStorage.setItem("lonmoh:last-app-section", section);
+  }, [path]);
 
   useEffect(() => {
     if (!loading && !session) {
@@ -95,7 +109,7 @@ function AppLayout() {
     );
   }
 
-  if (!assetsReady) {
+  if (needsPosAssets && !assetsReady) {
     const percent = Math.round((assetProgress.done / Math.max(1, assetProgress.total)) * 100);
     return (
       <div className="min-h-screen grid place-items-center bg-background p-6">

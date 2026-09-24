@@ -5,10 +5,15 @@ const CATALOG_CACHE_KEY = "lonmoh:pos:catalog:v1";
 const IMAGE_CACHE = "lonmoh-pos-menu-images-v1";
 const objectUrls = new Map<string, string>();
 const resolving = new Map<string, Promise<string>>();
+let syncedThisLaunch = false;
 
 export type AssetProgress = { done: number; total: number; stage: "catalog" | "images" };
 
 export async function syncPosAssets(onProgress?: (progress: AssetProgress) => void) {
+  if (syncedThisLaunch) {
+    onProgress?.({ done: 1, total: 1, stage: "images" });
+    return;
+  }
   onProgress?.({ done: 0, total: 1, stage: "catalog" });
   const [{ data: menus, error: menuError }, { data: categories, error: categoryError }, { data: settings, error: settingsError }] = await Promise.all([
     supabase.from("menus").select("*").eq("available", true).order("sort"),
@@ -26,6 +31,7 @@ export async function syncPosAssets(onProgress?: (progress: AssetProgress) => vo
   onProgress?.({ done: 0, total: Math.max(1, urls.length), stage: "images" });
   if (!("caches" in window) || urls.length === 0) {
     onProgress?.({ done: Math.max(1, urls.length), total: Math.max(1, urls.length), stage: "images" });
+    syncedThisLaunch = true;
     return;
   }
 
@@ -51,6 +57,7 @@ export async function syncPosAssets(onProgress?: (progress: AssetProgress) => vo
     }
   };
   await Promise.all(Array.from({ length: Math.min(4, urls.length) }, () => worker()));
+  syncedThisLaunch = true;
 }
 
 export function resolveMenuImage(src: string): Promise<string> {

@@ -102,12 +102,20 @@ function LivePage() {
     setTableTotals(totals);
 
     // Today's paid sales for the open shift
-    setHasShift(!!shift?.[0]);
-    if (shift?.id) {
-      const { data: bills } = await supabase.from("bills").select("id,total,paid_at").eq("status", "paid").eq("shift_id", shift.id).not("is_test", "is", true);
+    const currentShift = shift?.[0] ?? null;
+    setHasShift(!!currentShift);
+    if (currentShift?.id) {
+      const [{ data: bills }, { data: refunds }, { data: staffCharges }] = await Promise.all([
+        supabase.from("bills").select("id,total,paid_at").in("status", ["paid", "partial_refund", "refunded"]).eq("shift_id", currentShift.id).not("is_test", "is", true),
+        supabase.from("refunds").select("amount").eq("shift_id", currentShift.id),
+        (supabase as any).from("staff_tab_charges").select("amount").eq("shift_id", currentShift.id).neq("status", "voided"),
+      ]);
       const ids = (bills ?? []).map((b) => b.id);
       setBillCount((bills ?? []).length);
-      setSalesNet((bills ?? []).reduce((s, b) => s + Number(b.total), 0));
+      const customerSales = (bills ?? []).reduce((s, b) => s + Number(b.total), 0);
+      const staffSales = (staffCharges ?? []).reduce((s: number, row: any) => s + Number(row.amount), 0);
+      const refunded = (refunds ?? []).reduce((s, row) => s + Number(row.amount), 0);
+      setSalesNet(customerSales + staffSales - refunded);
 
       // Hourly customer flow (by bill paid_at, local hour)
       const hMap = new Map<number, { count: number; total: number }>();
@@ -124,7 +132,7 @@ function LivePage() {
         ids.length
           ? supabase.from("payments").select("method,amount").in("bill_id", ids)
           : Promise.resolve({ data: [] as { method: string; amount: number }[] }),
-        supabase.from("orders").select("id").eq("shift_id", shift.id).not("is_test", "is", true),
+        supabase.from("orders").select("id").eq("shift_id", currentShift.id).not("is_test", "is", true),
       ]);
       const m: Record<string, number> = { cash: 0, qr: 0, gov_qr: 0, card: 0 };
       for (const p of pays ?? []) m[p.method] = (m[p.method] ?? 0) + Number(p.amount);
@@ -161,7 +169,17 @@ function LivePage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "order_items" }, () => void load())
       .subscribe();
     const poll = setInterval(() => void load(), 20000); // refresh durations + safety net
-    return () => { supabase.removeChannel(ch); clearInterval(poll); };
+    const refresh = () => {
+      if (document.visibilityState === "visible") void load();
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      supabase.removeChannel(ch);
+      clearInterval(poll);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
   }, []);
 
   const active = useMemo(

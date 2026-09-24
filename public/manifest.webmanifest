@@ -2,9 +2,9 @@
   "name": "POS LIVE",
   "short_name": "POS LIVE",
   "id": "/live",
-  "start_url": "/live",
+  "start_url": "/",
   "launch_handler": {
-    "client_mode": "navigate-new"
+    "client_mode": "focus-existing"
   },
   "scope": "/",
   "display": "standalone",
