@@ -134,6 +134,16 @@ function makeClaimToken() {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+function makePaymentRequestKey() {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 function PaymentPage() {
   const { billId } = Route.useParams();
   const { t, lang } = useI18n();
@@ -187,6 +197,8 @@ function PaymentPage() {
   const [cashOpen, setCashOpen] = useState(false);
   const [cashCount, setCashCount] = useState<Record<number, number>>({});
   const [cashAmount, setCashAmount] = useState(0);
+  const paymentBusyRef = useRef(false);
+  const [paymentBusy, setPaymentBusy] = useState(false);
 
   // Refund
   const [refundOpen, setRefundOpen] = useState(false);
@@ -658,53 +670,82 @@ function PaymentPage() {
   };
 
   // ── Payment helpers ─────────────────────────────────────────────────────────
-  const addPayment = async (method: Payment["method"], amount: number, extras: Record<string, unknown> = {}) => {
-    if (!bill || amount <= 0) return;
-    if (isOffline()) { toast.error(t("err_offline")); return; }
-    // Persist the exact total shown to the cashier before recording money. The
-    // atomic finalizer validates payment coverage against this database value.
-    const syncedBill = await persistBill();
-    if (syncedBill?.error) {
-      toast.error(syncedBill.error.message || "Could not sync the bill total");
-      return;
-    }
-    const { data: inserted, error } = await supabase.from("payments")
-      .insert({ bill_id: bill.id, method, amount, ...extras })
-      .select("id,method,amount,cash_received,change_due,tip_amount,reference")
-      .single();
-    if (error) { toast.error(error.message); return; }
-    if (paid + amount + 0.001 >= total) {
-      const completed = await finalize(inserted as Payment);
-      if (!completed && inserted?.id) {
-        const { error: rollbackError } = await supabase.from("payments").delete().eq("id", inserted.id);
-        if (rollbackError) toast.error(`Payment rollback failed: ${rollbackError.message}`);
+  const addPayment = async (method: Payment["method"], amount: number, extras: Record<string, unknown> = {}): Promise<boolean> => {
+    if (!bill || amount <= 0 || paymentBusyRef.current) return false;
+    if (isOffline()) { toast.error(t("err_offline")); return false; }
+
+    paymentBusyRef.current = true;
+    setPaymentBusy(true);
+    try {
+      // Persist the exact total shown to the cashier before recording money.
+      const syncedBill = await persistBill();
+      if (syncedBill?.error) {
+        toast.error(syncedBill.error.message || "Could not sync the bill total");
+        return false;
+      }
+
+      // The database locks this bill while checking its live paid balance. A
+      // second tap, another device, or a network retry cannot over-collect it.
+      const { data: recorded, error } = await (supabase as any).rpc("record_bill_payment", {
+        p_bill_id: bill.id,
+        p_method: method,
+        p_amount: amount,
+        p_request_key: makePaymentRequestKey(),
+        p_cash_received: extras.cash_received ?? null,
+        p_change_due: extras.change_due ?? null,
+        p_cash_breakdown: extras.cash_breakdown ?? null,
+        p_reference: extras.reference ?? null,
+        p_tip_amount: extras.tip_amount ?? 0,
+      });
+      if (error) {
+        const duplicateBlocked = String(error.message ?? "").includes("Duplicate payment blocked")
+          || String(error.message ?? "").includes("already closed");
+        toast.error(duplicateBlocked
+          ? (lang === "th" ? "บล็อกการชำระเงินซ้ำแล้ว กรุณาตรวจสอบยอดบิล" : "Duplicate payment blocked. Check the bill balance.")
+          : error.message);
+        await load();
+        return false;
+      }
+
+      const row = (Array.isArray(recorded) ? recorded[0] : recorded) as any;
+      const inserted: Payment = {
+        id: row.payment_id,
+        method: row.method,
+        amount: Number(row.amount),
+        cash_received: row.cash_received == null ? null : Number(row.cash_received),
+        change_due: row.change_due == null ? null : Number(row.change_due),
+        tip_amount: Number(row.tip_amount ?? 0),
+        reference: row.reference ?? null,
+      };
+
+      if (row.fully_paid) {
+        const completed = await finalize(inserted);
+        if (!completed && inserted.id) {
+          const { error: rollbackError } = await supabase.from("payments").delete().eq("id", inserted.id);
+          if (rollbackError) toast.error(`Payment rollback failed: ${rollbackError.message}`);
+          await load();
+          return false;
+        }
+      } else {
         await load();
       }
-      if (completed && method === "cash") {
+
+      if (method === "cash") {
         try {
           await openCashDrawer();
         } catch (drawerError) {
           toast.error(
             drawerError instanceof Error
-              ? `Payment completed, but cash drawer did not open: ${drawerError.message}`
-              : "Payment completed, but cash drawer did not open.",
+              ? `Payment saved, but cash drawer did not open: ${drawerError.message}`
+              : "Payment saved, but cash drawer did not open.",
           );
         }
       }
-      return;
+      return true;
+    } finally {
+      paymentBusyRef.current = false;
+      setPaymentBusy(false);
     }
-    if (method === "cash") {
-      try {
-        await openCashDrawer();
-      } catch (drawerError) {
-        toast.error(
-          drawerError instanceof Error
-            ? `Cash payment saved, but cash drawer did not open: ${drawerError.message}`
-            : "Cash payment saved, but cash drawer did not open.",
-        );
-      }
-    }
-    await load();
   };
 
   const completeZeroTotal = async () => {
@@ -931,8 +972,8 @@ function PaymentPage() {
   const change = Math.max(0, cashTotal - cashAmount);
   const submitCash = async () => {
     if (cashTotal < cashAmount) { toast.error(t("pay_not_enough_cash")); return; }
-    await addPayment("cash", cashAmount, { cash_received: cashTotal, change_due: change, cash_breakdown: cashCount });
-    setCashOpen(false);
+    const saved = await addPayment("cash", cashAmount, { cash_received: cashTotal, change_due: change, cash_breakdown: cashCount });
+    if (saved) setCashOpen(false);
   };
 
   const performRefund = () => {
@@ -1239,7 +1280,7 @@ function PaymentPage() {
               variant="outline"
               className="w-full mb-4 border-dashed gap-2 text-sm"
               onClick={() => setSplitOpen(true)}
-              disabled={remaining <= 0}
+              disabled={remaining <= 0 || paymentBusy}
             >
               <Scissors className="h-4 w-4" />{t("split_bill")}
             </Button>
@@ -1297,7 +1338,7 @@ function PaymentPage() {
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="cash" className="pt-3">
-                <Button className="w-full" size="lg" onClick={openCash} disabled={remaining <= 0}>
+                <Button className="w-full" size="lg" onClick={openCash} disabled={remaining <= 0 || paymentBusy}>
                   {t("cash")} · {thb(remaining)}
                 </Button>
               </TabsContent>
@@ -1321,9 +1362,9 @@ function PaymentPage() {
                     <span className="font-semibold">{thb(qrAmt + qrTip)}</span>
                   </div>
                 )}
-                <Button className="w-full" size="lg" disabled={remaining <= 0 || qrAmt <= 0}
-                  onClick={() => { addPayment("qr", qrAmt, { tip_amount: qrTip }); setQrTip(0); }}>
-                  {t("qr_transfer")}{qrTip > 0 ? ` + Tip ${thb(qrTip)}` : ""}
+                <Button className="w-full" size="lg" disabled={paymentBusy || remaining <= 0 || qrAmt <= 0}
+                  onClick={async () => { if (await addPayment("qr", qrAmt, { tip_amount: qrTip })) setQrTip(0); }}>
+                  {paymentBusy ? "…" : <>{t("qr_transfer")}{qrTip > 0 ? ` + Tip ${thb(qrTip)}` : ""}</>}
                 </Button>
               </TabsContent>
               {govQrEnabled && (
@@ -1336,9 +1377,9 @@ function PaymentPage() {
                     <span>{t("pay_balance_remaining")}</span>
                     <span className="font-semibold">{thb(Math.max(0, remaining - govQrAmt))}</span>
                   </div>
-                  <Button className="w-full" size="lg" disabled={remaining <= 0 || govQrAmt <= 0}
+                  <Button className="w-full" size="lg" disabled={paymentBusy || remaining <= 0 || govQrAmt <= 0}
                     onClick={() => addPayment("gov_qr", govQrAmt, { reference: govQrLabel })}>
-                    {govQrLabel} · {thb(govQrAmt)}
+                    {paymentBusy ? "…" : `${govQrLabel} · ${thb(govQrAmt)}`}
                   </Button>
                   {remaining - govQrAmt > 0 && (
                     <p className="text-xs text-muted-foreground">Pay the balance of {thb(remaining - govQrAmt)} with cash or card next.</p>
@@ -1365,9 +1406,9 @@ function PaymentPage() {
                     <span className="font-semibold">{thb(cardAmt + cardTip)}</span>
                   </div>
                 )}
-                <Button className="w-full" size="lg" disabled={remaining <= 0 || cardAmt <= 0}
-                  onClick={() => { addPayment("card", cardAmt, { tip_amount: cardTip }); setCardTip(0); }}>
-                  {t("card")} · {thb(cardAmt)}{cardTip > 0 ? ` + Tip ${thb(cardTip)}` : ""}
+                <Button className="w-full" size="lg" disabled={paymentBusy || remaining <= 0 || cardAmt <= 0}
+                  onClick={async () => { if (await addPayment("card", cardAmt, { tip_amount: cardTip })) setCardTip(0); }}>
+                  {paymentBusy ? "…" : <>{t("card")} · {thb(cardAmt)}{cardTip > 0 ? ` + Tip ${thb(cardTip)}` : ""}</>}
                 </Button>
               </TabsContent>
             </Tabs>
@@ -1781,7 +1822,7 @@ function PaymentPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCashOpen(false)}>{t("cancel")}</Button>
-            <Button onClick={submitCash} disabled={cashTotal < cashAmount}>{t("confirm")}</Button>
+            <Button onClick={submitCash} disabled={paymentBusy || cashTotal < cashAmount}>{paymentBusy ? "…" : t("confirm")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1999,7 +2040,7 @@ function SplitBillDialog({
   open: boolean; onClose: () => void;
   items: Item[]; billTotal: number; remaining: number;
   lang: "th" | "en"; t: (k: string) => string;
-  onAddPayment: (m: PayMethod, amount: number, extras?: Record<string, unknown>) => Promise<void>;
+  onAddPayment: (m: PayMethod, amount: number, extras?: Record<string, unknown>) => Promise<boolean>;
   paidStatus: boolean;
   govQrEnabled: boolean;
   govQrLabel: string;
@@ -2065,17 +2106,19 @@ function SplitBillDialog({
     if (processing || currentAmount <= 0) return;
     setProcessing(true);
     try {
+      let saved = false;
       if (payMethod === "cash") {
         if (cashReceived < currentAmount) { toast.error(lang === "th" ? "เงินไม่พอ" : "Not enough cash"); return; }
-        await onAddPayment("cash", currentAmount, { cash_received: cashReceived, change_due: cashChange });
+        saved = await onAddPayment("cash", currentAmount, { cash_received: cashReceived, change_due: cashChange });
       } else if (payMethod === "qr") {
-        await onAddPayment("qr", currentAmount, { tip_amount: qrTip });
-        setQrTip(0);
+        saved = await onAddPayment("qr", currentAmount, { tip_amount: qrTip });
+        if (saved) setQrTip(0);
       } else if (payMethod === "gov_qr") {
-        await onAddPayment("gov_qr", currentAmount, { reference: govQrLabel });
+        saved = await onAddPayment("gov_qr", currentAmount, { reference: govQrLabel });
       } else {
-        await onAddPayment("card", currentAmount);
+        saved = await onAddPayment("card", currentAmount);
       }
+      if (!saved) return;
       if (step === "even_pay") {
         setPaidCount((c) => c + 1);
       } else if (step === "item_pay") {

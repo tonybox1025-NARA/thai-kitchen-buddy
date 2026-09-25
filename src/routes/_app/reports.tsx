@@ -49,6 +49,7 @@ type ReportData = {
   discountByType: { percent: number; fixed: number; free_item: number; item: number }; // discount amount per type
   discountByStaff: { staffName: string; amount: number; count: number }[]; // who gave how much
   qrByBucket: QrBucketTotal[]; // QR revenue split into the user-defined time windows
+  paymentIssues: { billId: string; expected: number; paid: number }[];
 };
 
 type AdjPay = {
@@ -259,8 +260,8 @@ function Reports() {
     const orderIds = (bills ?? []).map((b) => (b as any).order_id).filter(Boolean) as string[];
     const [{ data: pays }, { data: voids }, { data: refunds }, { data: cancelledOrds }, { data: orderSources }, { data: billDiscs }, { data: itemDiscs }, { data: staffTabCharges }, { data: staffTabSettlements }] = await Promise.all([
       billIds.length
-        ? supabase.from("payments").select("method,amount,tip_amount,created_at").in("bill_id", billIds)
-        : Promise.resolve({ data: [] as { method: string; amount: number; tip_amount: number; created_at: string }[], error: null }),
+        ? supabase.from("payments").select("bill_id,method,amount,tip_amount,created_at").in("bill_id", billIds)
+        : Promise.resolve({ data: [] as { bill_id: string; method: string; amount: number; tip_amount: number; created_at: string }[], error: null }),
       supabase.from("voids").select("amount").eq("shift_id", s.id),
       supabase.from("refunds").select("amount").eq("shift_id", s.id),
       supabase.from("orders").select("id").eq("shift_id", s.id).eq("status", "cancelled").not("is_test", "is", true),
@@ -338,6 +339,17 @@ function Reports() {
     const staffTabQrCollected = (staffTabSettlements ?? []).filter((row: any) => row.method === "qr").reduce((sum: number, row: any) => sum + Number(row.amount), 0);
 
     const refundTotal = (refunds ?? []).reduce((x, v) => x + Number(v.amount), 0);
+    const paidByBill = new Map<string, number>();
+    for (const payment of pays ?? []) {
+      paidByBill.set(payment.bill_id, (paidByBill.get(payment.bill_id) ?? 0) + Number(payment.amount));
+    }
+    const paymentIssues = (bills ?? [])
+      .map((paidBill) => ({
+        billId: paidBill.id,
+        expected: Number(paidBill.total),
+        paid: paidByBill.get(paidBill.id) ?? 0,
+      }))
+      .filter((issue) => Math.abs(issue.paid - issue.expected) > 0.001);
     return {
       gross, net: paidTotal - refundTotal, discount, member, coupon, vatIncluded, vatAdded,
       voids: (voids ?? []).reduce((x, v) => x + Number(v.amount), 0),
@@ -355,6 +367,7 @@ function Reports() {
       discountByType,
       discountByStaff,
       qrByBucket,
+      paymentIssues,
     };
   };
 
@@ -497,6 +510,10 @@ function Reports() {
 
   const doZ = async () => {
     if (!shift || !report) return;
+    if (report.paymentIssues.length > 0) {
+      toast.error("Z close blocked: payment totals do not match their bills.", { duration: 15_000 });
+      return;
+    }
     const { cashTotal, expected, overShort } = calcCashSummary(cashCount, report);
     await supabase.from("shifts").update({
       closed_at: new Date().toISOString(), closed_by: staff?.id, status: "closed",
@@ -717,7 +734,7 @@ function Reports() {
           )}
           <DialogFooter className="pt-2">
             <Button variant="outline" onClick={() => setZDlg(false)}>{t("cancel")}</Button>
-            <Button onClick={async () => {
+            <Button disabled={(report?.paymentIssues.length ?? 0) > 0} onClick={async () => {
               try {
                 if (report && shift) await openPrintWindow("Z", report, shift, cashCount, restaurantName);
                 await submitZ();
@@ -1937,6 +1954,20 @@ function ReportCard({ r }: { r: ReportData }) {
   return (
     <Card>
       <CardContent className="py-4 space-y-1 text-sm">
+        {r.paymentIssues.length > 0 && (
+          <div className="mb-3 rounded-lg border-2 border-destructive bg-destructive/10 p-3 text-destructive">
+            <p className="font-bold">⚠ PAYMENT CHECK FAILED — Z CLOSE BLOCKED</p>
+            <p className="mt-1 text-xs">A bill and its saved payments do not match. Correct these records before closing.</p>
+            <div className="mt-2 space-y-1 text-xs font-medium tabular-nums">
+              {r.paymentIssues.map((issue) => (
+                <div key={issue.billId} className="flex justify-between gap-3">
+                  <span>Bill …{issue.billId.slice(-8)}</span>
+                  <span>Bill {thb(issue.expected)} · Paid {thb(issue.paid)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         <Row label="Gross sales" value={thb(r.gross)} />
         {/* Discount breakdown — simplified: by type + member, then grand total */}
         {(r.discount > 0 || r.member > 0) ? (
