@@ -2,6 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { buildEscPos, toBase64, type PrintPayload } from "@/lib/print/raster";
 import { PosPrinter, isNativeApp } from "@/lib/print/native-printer";
+import { aggregateReceiptItems } from "@/lib/print/aggregate-receipt-items";
 
 const COUNTER_BRIDGE_URL = "http://127.0.0.1:9001/print/counter";
 const COUNTER_BRIDGE_IMAGE_URL = "http://127.0.0.1:9001/print/counter-img";
@@ -11,6 +12,11 @@ export type PrinterName = "counter" | "kitchen";
 export type CounterPrintPayload = Record<string, unknown> & {
   kind: "receipt" | "order_ticket" | "table_qr" | "report";
 };
+
+function preparePrintPayload(payload: CounterPrintPayload): CounterPrintPayload {
+  if (payload.kind !== "receipt") return payload;
+  return { ...payload, items: aggregateReceiptItems(payload.items) };
+}
 
 /**
  * How print jobs reach paper.
@@ -106,9 +112,10 @@ export function invalidatePrinterIps() {
 
 /** Today's path: hand the job to print_jobs for the bridge to print. */
 export async function queuePrintJob(printer: PrinterName, payload: CounterPrintPayload) {
+  const prepared = preparePrintPayload(payload);
   const { error } = await supabase.from("print_jobs").insert({
     printer,
-    payload: payload as Json,
+    payload: prepared as Json,
   });
   if (error) throw error;
   return { ok: true as const, via: "print_jobs" as const };
@@ -116,7 +123,8 @@ export async function queuePrintJob(printer: PrinterName, payload: CounterPrintP
 
 /** Compose ESC/POS in the app and write it to the printer over the native bridge. */
 export async function printDirect(printer: PrinterName, payload: CounterPrintPayload) {
-  const data = toBase64(await buildEscPos(payload as unknown as PrintPayload, printer));
+  const prepared = preparePrintPayload(payload);
+  const data = toBase64(await buildEscPos(prepared as unknown as PrintPayload, printer));
 
   // The kitchen printer is on the LAN; only the counter can be cabled over USB.
   if (printer === "counter" && getCounterLink() === "usb") {
@@ -215,7 +223,9 @@ export async function printKitchenJobs(
 
   const { error } = await supabase
     .from("print_jobs")
-    .insert(jobs.map((j) => ({ printer: j.printer, payload: j.payload as Json })));
+    .insert(
+      jobs.map((j) => ({ printer: j.printer, payload: preparePrintPayload(j.payload) as Json })),
+    );
   if (error) throw error;
 }
 
@@ -229,7 +239,9 @@ export async function printCounterJobs(payloads: CounterPrintPayload[]) {
 
   if (getPrintTransport() === "direct" && canPrintDirect()) {
     const documents = await Promise.all(
-      payloads.map((payload) => buildEscPos(payload as unknown as PrintPayload, "counter")),
+      payloads.map((payload) =>
+        buildEscPos(preparePrintPayload(payload) as unknown as PrintPayload, "counter"),
+      ),
     );
     const byteLength = documents.reduce((total, document) => total + document.length, 0);
     const batch = new Uint8Array(byteLength);
@@ -261,7 +273,10 @@ export async function printCounterJobs(payloads: CounterPrintPayload[]) {
   }
 
   const { error } = await supabase.from("print_jobs").insert(
-    payloads.map((payload) => ({ printer: "counter" as const, payload: payload as Json })),
+    payloads.map((payload) => ({
+      printer: "counter" as const,
+      payload: preparePrintPayload(payload) as Json,
+    })),
   );
   if (error) throw error;
 }
