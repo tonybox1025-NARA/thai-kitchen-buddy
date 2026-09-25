@@ -64,6 +64,37 @@ type BillRow = {
   payments: { method: string; amount: number }[];
 };
 
+type ClosedShift = Shift & {
+  cash_count: Record<string, number> | null;
+  totals: Record<string, unknown> | null;
+};
+
+function historicalReport(raw: Record<string, unknown>): ReportData {
+  const byMethod = (raw.byMethod ?? {}) as Record<string, number>;
+  const discountByType = (raw.discountByType ?? {}) as Partial<ReportData["discountByType"]>;
+  return {
+    gross: Number(raw.gross ?? 0), net: Number(raw.net ?? 0), discount: Number(raw.discount ?? 0),
+    member: Number(raw.member ?? 0), coupon: Number(raw.coupon ?? 0),
+    vatIncluded: Number(raw.vatIncluded ?? 0), vatAdded: Number(raw.vatAdded ?? 0),
+    voids: Number(raw.voids ?? 0), refunds: Number(raw.refunds ?? 0),
+    byMethod: { cash: 0, qr: 0, card: 0, gov_qr: 0, ...byMethod },
+    openingFloat: Number(raw.openingFloat ?? 0), bills: Number(raw.bills ?? 0),
+    tipTotal: Number(raw.tipTotal ?? 0), cardTipTotal: Number(raw.cardTipTotal ?? 0),
+    cancelledCount: Number(raw.cancelledCount ?? 0), takeoutTotal: Number(raw.takeoutTotal ?? 0),
+    staffMealTotal: Number(raw.staffMealTotal ?? 0), staffTabCharged: Number(raw.staffTabCharged ?? 0),
+    staffTabDiscount: Number(raw.staffTabDiscount ?? 0),
+    staffTabCashCollected: Number(raw.staffTabCashCollected ?? 0),
+    staffTabQrCollected: Number(raw.staffTabQrCollected ?? 0),
+    discountByType: {
+      percent: Number(discountByType.percent ?? 0), fixed: Number(discountByType.fixed ?? 0),
+      free_item: Number(discountByType.free_item ?? 0), item: Number(discountByType.item ?? 0),
+    },
+    discountByStaff: (raw.discountByStaff as ReportData["discountByStaff"] | undefined) ?? [],
+    qrByBucket: (raw.qrByBucket as QrBucketTotal[] | undefined) ?? [],
+    paymentIssues: (raw.paymentIssues as ReportData["paymentIssues"] | undefined) ?? [],
+  };
+}
+
 // Tips are collected electronically (QR / card) but handed to staff in cash, so
 // they leave the drawer and reduce the expected cash.
 function cashTipsPaidOut(r: ReportData) {
@@ -575,6 +606,7 @@ function Reports() {
             <>
               <TabsTrigger value="cancelled">{t("rep_cancelled")}</TabsTrigger>
               <TabsTrigger value="loyalty_audit">{t("rep_loyalty_audit")}</TabsTrigger>
+              <TabsTrigger value="z_history">Z Report History</TabsTrigger>
             </>
           )}
         </TabsList>
@@ -594,6 +626,9 @@ function Reports() {
             </TabsContent>
             <TabsContent value="loyalty_audit" className="mt-4">
               <LoyaltyAuditTab />
+            </TabsContent>
+            <TabsContent value="z_history" className="mt-4">
+              <ZReportHistoryTab restaurantName={restaurantName} />
             </TabsContent>
           </>
         )}
@@ -786,6 +821,89 @@ function Reports() {
         onApproved={() => { if (pendingZ) doZ(); setPendingZ(false); }}
       />
     </div>
+  );
+}
+
+function ZReportHistoryTab({ restaurantName }: { restaurantName: string }) {
+  const [rows, setRows] = useState<ClosedShift[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [printingId, setPrintingId] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.from("shifts")
+        .select("id,business_day,opened_at,closed_at,opening_float,status,cash_count,totals")
+        .eq("status", "closed").order("business_day", { ascending: false }).limit(120);
+      if (error) throw error;
+      setRows((data ?? []) as unknown as ClosedShift[]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not load Z report history");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { void load(); }, []);
+
+  const reprint = async (shift: ClosedShift) => {
+    if (!shift.totals) { toast.error("This shift does not have a saved Z report snapshot"); return; }
+    setPrintingId(shift.id);
+    try {
+      const report = historicalReport(shift.totals);
+      const counts = Object.fromEntries(
+        Object.entries(shift.cash_count ?? {}).map(([denom, count]) => [Number(denom), Number(count)]),
+      ) as Record<number, number>;
+      await openPrintWindow("Z", report, shift, counts, restaurantName);
+      toast.success(`Z report ${shift.business_day} sent to printer`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not print Z report");
+    } finally {
+      setPrintingId(null);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex-row items-center justify-between gap-3">
+        <div>
+          <CardTitle>Z Report History</CardTitle>
+          <p className="mt-1 text-sm text-muted-foreground">Saved closing snapshots. Reprinting does not change sales or reopen a shift.</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={load} disabled={loading}>Refresh</Button>
+      </CardHeader>
+      <CardContent>
+        {loading ? <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p> : rows.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">No closed Z reports found.</p>
+        ) : (
+          <div className="space-y-2">
+            {rows.map((shift) => {
+              const totals = shift.totals ? historicalReport(shift.totals) : null;
+              const saved = shift.totals as Record<string, unknown> | null;
+              return (
+                <div key={shift.id} className="flex items-center justify-between gap-4 rounded-lg border p-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold">Business day {shift.business_day}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Closed {shift.closed_at ? new Date(shift.closed_at).toLocaleString() : "—"}
+                    </p>
+                    <div className="mt-1 flex flex-wrap gap-x-4 text-sm tabular-nums">
+                      <span>Net sales <b>{thb(totals?.net ?? 0)}</b></span>
+                      <span>Expected {thb(Number(saved?.expected ?? 0))}</span>
+                      <span>Counted {thb(Number(saved?.cashTotal ?? 0))}</span>
+                      <span>Over / Short {thb(Number(saved?.overShort ?? 0))}</span>
+                    </div>
+                  </div>
+                  <Button onClick={() => reprint(shift)} disabled={!shift.totals || printingId === shift.id}>
+                    <Printer className="mr-2 h-4 w-4" />{printingId === shift.id ? "Printing…" : "Reprint Z"}
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

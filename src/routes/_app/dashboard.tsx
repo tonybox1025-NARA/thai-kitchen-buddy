@@ -83,7 +83,7 @@ function Dashboard() {
     const grossProfit = gross - totalCost;
     const costPct     = gross > 0 ? (totalCost  / gross) * 100 : 0;
     const marginPct   = gross > 0 ? (grossProfit / gross) * 100 : 0;
-    return { gross, net, discounts, byMethod, count: bills.length, tipTotal, qrGross: byMethod.qr + byMethod.gov_qr + tipTotal, vatIncluded, vatAdded, vatTotal, grossProfit, costPct, marginPct };
+    return { gross, net, discounts, byMethod, count: bills.length, tipTotal, vatIncluded, vatAdded, vatTotal, grossProfit, costPct, marginPct };
   }, [bills, payments, totalCost]);
 
   // Encode range into query string for detail pages
@@ -155,7 +155,7 @@ function Dashboard() {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-3 gap-4">
             <StatCard title={t("cash")}        value={thb(stats.byMethod.cash)} />
-            <StatLink title={t("qr_transfer")} value={thb(stats.qrGross)} to={`/detail-qr${rangeQ}`} />
+            <StatLink title={t("qr_transfer")} value={thb(stats.byMethod.qr)} to={`/detail-qr${rangeQ}`} />
             <StatCard title={t("card")}        value={thb(stats.byMethod.card)} />
           </div>
           {stats.byMethod.gov_qr > 0 && (

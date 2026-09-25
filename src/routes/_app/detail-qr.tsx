@@ -58,7 +58,7 @@ function QrSalesDetail() {
 
         const [{ data: pays }, { data: orders }] = await Promise.all([
           supabase.from("payments").select("id,bill_id,amount,tip_amount,created_at")
-            .in("method", ["qr", "gov_qr"]).in("bill_id", billIds).order("created_at",{ascending:false}),
+            .eq("method", "qr").in("bill_id", billIds).order("created_at",{ascending:false}),
           supabase.from("orders").select("id,table_id,source,order_number").in("id", orderIds),
         ]);
 
