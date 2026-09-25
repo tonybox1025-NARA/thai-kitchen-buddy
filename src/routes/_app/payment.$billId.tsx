@@ -36,9 +36,10 @@ const REDEEM_TIERS = [
 type Bill = {
   id: string; order_id: string; subtotal: number; discount_amount: number;
   member_id: string | null;
-  member_discount_amount: number; vat_mode: "inclusive" | "exclusive"; vat_rate: number;
+  member_discount_amount: number; loyalty_discount_amount: number; points_redeemed: number;
+  vat_mode: "inclusive" | "exclusive"; vat_rate: number;
   service_fee_rate: number; service_fee_amount: number; rounding_mode: RoundingMode; rounding_adjustment: number;
-  vat_amount: number; total: number; status: string; paid_at: string | null;
+  vat_amount: number; total: number; status: string; paid_at: string | null; is_test: boolean;
 };
 type Item = { id: string; name_th: string; name_en: string; qty: number; unit_price: number; status: string };
 type PaymentMethod = "qr" | "cash" | "card" | "gov_qr";
@@ -199,6 +200,7 @@ function PaymentPage() {
   const [cashAmount, setCashAmount] = useState(0);
   const paymentBusyRef = useRef(false);
   const [paymentBusy, setPaymentBusy] = useState(false);
+  const [reprintingReceipt, setReprintingReceipt] = useState(false);
 
   // Refund
   const [refundOpen, setRefundOpen] = useState(false);
@@ -964,6 +966,53 @@ function PaymentPage() {
     return true;
   };
 
+  const reprintPaidReceipt = async () => {
+    if (!bill || reprintingReceipt) return;
+    if (isOffline()) { toast.error(t("err_offline")); return; }
+    setReprintingReceipt(true);
+    try {
+      const { data: loyaltyClaim } = await supabase
+        .from("loyalty_claim_tokens")
+        .select("token,claim_points")
+        .eq("bill_id", bill.id)
+        .maybeSingle();
+
+      await printCounter({
+        kind: "receipt", bill_id: bill.id, restaurant: restName, table: tableCode,
+        logoUrl: receiptLogoUrl || undefined,
+        address: receiptAddress || undefined,
+        promo: receiptPromo || undefined,
+        items: items.map((item) => {
+          const itemDiscount = itemDiscounts.find((discount) => discount.order_item_id === item.id);
+          return {
+            ...item,
+            discount_amount: itemDiscount?.amount ?? 0,
+            discount_label: itemDiscount
+              ? `${lang === "th" ? "ส่วนลดรายการ" : "Item discount"}${itemDiscount.reason ? `: ${itemDiscount.reason}` : ""}`
+              : undefined,
+          };
+        }),
+        total: Number(bill.total),
+        vatAmount: bill.vat_mode === "exclusive" ? Number(bill.vat_amount ?? 0) : 0,
+        vatRate: Number(bill.vat_rate) || 7,
+        vat_mode: bill.vat_mode, payments, language: lang,
+        discountAmount: Number(bill.discount_amount ?? 0),
+        memberDiscountAmount: Number(bill.member_discount_amount ?? 0),
+        pointsDiscountAmount: Number(bill.loyalty_discount_amount ?? 0),
+        serviceFeeAmount: Number(bill.service_fee_amount ?? 0),
+        roundingAdjustment: Number(bill.rounding_adjustment ?? 0),
+        loyaltyClaimUrl: loyaltyClaim?.token ? `${publicBaseUrl()}/loyalty/claim/${loyaltyClaim.token}` : undefined,
+        loyaltyClaimCode: loyaltyClaim?.token,
+        loyaltyEarnPoints: loyaltyClaim ? Number(loyaltyClaim.claim_points ?? 0) : undefined,
+      });
+      toast.success(lang === "th" ? "พิมพ์ใบเสร็จซ้ำแล้ว" : "Receipt reprinted");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Receipt reprint failed");
+    } finally {
+      setReprintingReceipt(false);
+    }
+  };
+
   const openCash = () => { setCashCount({}); setCashAmount(remaining); setCashOpen(true); };
   // Tap a denomination to add one; the "−" badge removes one (fixes an over-tap).
   const addDenom = (d: number, delta: number) =>
@@ -1426,7 +1475,10 @@ function PaymentPage() {
                 </p>
               )}
             </div>
-            <Button className="w-full" onClick={() => window.print()}><Printer className="h-4 w-4 mr-2" />{t("print_receipt")}</Button>
+            <Button className="w-full" onClick={reprintPaidReceipt} disabled={reprintingReceipt}>
+              <Printer className="h-4 w-4 mr-2" />
+              {reprintingReceipt ? (lang === "th" ? "กำลังพิมพ์…" : "Printing…") : (lang === "th" ? "พิมพ์ใบเสร็จซ้ำ" : "Reprint Receipt")}
+            </Button>
             {canCorrect && (
               <Button variant="outline" className="w-full border-amber-400 text-amber-700 hover:bg-amber-50 dark:text-amber-400" onClick={openCorr}>
                 <PencilLine className="h-4 w-4 mr-2" />Edit Payment Type
