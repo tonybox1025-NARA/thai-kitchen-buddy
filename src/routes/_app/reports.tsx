@@ -23,7 +23,6 @@ import type { DateRange } from "react-day-picker";
 import { PencilLine, ArrowRight, CalendarIcon, Download, XCircle, Printer } from "lucide-react";
 import { bucketizeQr, parseBuckets, type QrBucketTotal, type QrTimeBucket } from "@/lib/qr-buckets";
 import { canPrintDirect, printDirect } from "@/lib/counter-printer";
-import { KeypadInput } from "@/components/KeypadInput";
 
 export const Route = createFileRoute("/_app/reports")({ component: Reports });
 
@@ -1858,7 +1857,24 @@ function CancelledOrderCard({ order: o, expanded, onToggle, showDate }: {
 
 function DenomGrid({ cashCount, onChange }: { cashCount: Record<number, number>; onChange: (c: Record<number, number>) => void }) {
   const { t } = useI18n();
+  const [editingDenom, setEditingDenom] = useState<number | null>(null);
+  const [rawCount, setRawCount] = useState("");
   const label = (d: number) => (d < 1 ? `${d.toFixed(2)}฿` : `${d}฿`);
+  const openCountPad = (d: number) => {
+    const current = cashCount[d] ?? 0;
+    setEditingDenom(d);
+    setRawCount(current > 0 ? String(current) : "");
+  };
+  const pressCountKey = (key: string) => {
+    setRawCount((current) => (current + key).replace(/^0+(?=\d)/, "").slice(0, 5));
+  };
+  const saveCount = () => {
+    if (editingDenom == null) return;
+    const parsed = Number(rawCount || 0);
+    const next = Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
+    onChange({ ...cashCount, [editingDenom]: next });
+    setEditingDenom(null);
+  };
   const cell = (d: number) => {
     const count = cashCount[d] ?? 0;
     const isDirectEntry = d === 20 || COINS.includes(d);
@@ -1876,14 +1892,11 @@ function DenomGrid({ cashCount, onChange }: { cashCount: Record<number, number>;
             className="h-12 w-12 flex-shrink-0 rounded-lg border bg-muted text-2xl font-bold flex items-center justify-center hover:bg-accent active:scale-95 transition-all select-none"
           >−</button>
           {isDirectEntry ? (
-            <KeypadInput
-              value={count}
-              onChange={setCount}
-              title={`${label(d)} ${t("qty")}`}
-              placeholder="0"
-              display={String}
-              className="h-12 min-w-0 flex-1 justify-center px-1 text-2xl"
-            />
+            <button
+              type="button"
+              onClick={() => openCountPad(d)}
+              className="h-12 min-w-0 flex-1 rounded-md border bg-background px-1 text-center text-2xl font-bold tabular-nums active:bg-accent"
+            >{count}</button>
           ) : (
             <div className="flex-1 text-center text-2xl font-bold tabular-nums">{count}</div>
           )}
@@ -1901,6 +1914,29 @@ function DenomGrid({ cashCount, onChange }: { cashCount: Record<number, number>;
   };
   return (
     <div className="space-y-4">
+      {editingDenom != null && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-xs rounded-2xl border bg-background p-4 shadow-2xl">
+            <div className="mb-3 text-center text-lg font-semibold">{label(editingDenom)} {t("qty")}</div>
+            <div className="mb-3 flex h-14 items-center justify-end rounded-lg border bg-muted/30 px-4 text-3xl font-bold tabular-nums">
+              {rawCount || "0"}
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((key) => (
+                <Button key={key} type="button" variant="outline" className="h-14 text-xl font-semibold" onClick={() => pressCountKey(key)}>{key}</Button>
+              ))}
+              <Button type="button" variant="outline" className="h-14 text-xl font-semibold" onClick={() => pressCountKey("00")}>00</Button>
+              <Button type="button" variant="outline" className="h-14 text-xl font-semibold" onClick={() => pressCountKey("0")}>0</Button>
+              <Button type="button" variant="outline" className="h-14 text-xl font-semibold" onClick={() => setRawCount((current) => current.slice(0, -1))}>⌫</Button>
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              <Button type="button" variant="ghost" onClick={() => setRawCount("")}>Clear</Button>
+              <Button type="button" variant="outline" onClick={() => setEditingDenom(null)}>Cancel</Button>
+              <Button type="button" onClick={saveCount}>Done</Button>
+            </div>
+          </div>
+        </div>
+      )}
       <div>
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">💵 {t("denom_bills")}</p>
         <div className="grid grid-cols-2 gap-3">{BILLS.map(cell)}</div>
