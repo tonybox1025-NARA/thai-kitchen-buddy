@@ -1860,19 +1860,39 @@ function DenomGrid({ cashCount, onChange }: { cashCount: Record<number, number>;
   const label = (d: number) => (d < 1 ? `${d.toFixed(2)}฿` : `${d}฿`);
   const cell = (d: number) => {
     const count = cashCount[d] ?? 0;
+    const isCoin = COINS.includes(d);
+    const setCount = (next: number) => {
+      const safeCount = Number.isFinite(next) ? Math.max(0, Math.floor(next)) : 0;
+      onChange({ ...cashCount, [d]: safeCount });
+    };
     return (
       <div key={d} className="rounded-xl border bg-card p-3">
         <div className="text-sm font-semibold text-muted-foreground mb-2">{label(d)}</div>
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => onChange({ ...cashCount, [d]: Math.max(0, count - 1) })}
+            onClick={() => setCount(count - 1)}
             className="h-12 w-12 flex-shrink-0 rounded-lg border bg-muted text-2xl font-bold flex items-center justify-center hover:bg-accent active:scale-95 transition-all select-none"
           >−</button>
-          <div className="flex-1 text-center text-2xl font-bold tabular-nums">{count}</div>
+          {isCoin ? (
+            <Input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              step={1}
+              value={count}
+              aria-label={`${label(d)} coin count`}
+              onFocus={(event) => event.currentTarget.select()}
+              onChange={(event) => setCount(Number(event.target.value))}
+              onWheel={(event) => event.currentTarget.blur()}
+              className="h-12 min-w-0 flex-1 px-1 text-center text-2xl font-bold tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            />
+          ) : (
+            <div className="flex-1 text-center text-2xl font-bold tabular-nums">{count}</div>
+          )}
           <button
             type="button"
-            onClick={() => onChange({ ...cashCount, [d]: count + 1 })}
+            onClick={() => setCount(count + 1)}
             className="h-12 w-12 flex-shrink-0 rounded-lg border bg-muted text-2xl font-bold flex items-center justify-center hover:bg-accent active:scale-95 transition-all select-none"
           >+</button>
         </div>
