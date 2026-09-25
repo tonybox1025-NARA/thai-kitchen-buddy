@@ -1857,29 +1857,7 @@ function CancelledOrderCard({ order: o, expanded, onToggle, showDate }: {
 
 function DenomGrid({ cashCount, onChange }: { cashCount: Record<number, number>; onChange: (c: Record<number, number>) => void }) {
   const { t } = useI18n();
-  const [editingDenom, setEditingDenom] = useState<number | null>(null);
-  const [rawCount, setRawCount] = useState("");
-  const countPadRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (editingDenom == null) return;
-    requestAnimationFrame(() => countPadRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }));
-  }, [editingDenom]);
   const label = (d: number) => (d < 1 ? `${d.toFixed(2)}฿` : `${d}฿`);
-  const openCountPad = (d: number) => {
-    const current = cashCount[d] ?? 0;
-    setEditingDenom(d);
-    setRawCount(current > 0 ? String(current) : "");
-  };
-  const pressCountKey = (key: string) => {
-    setRawCount((current) => (current + key).replace(/^0+(?=\d)/, "").slice(0, 5));
-  };
-  const saveCount = () => {
-    if (editingDenom == null) return;
-    const parsed = Number(rawCount || 0);
-    const next = Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
-    onChange({ ...cashCount, [editingDenom]: next });
-    setEditingDenom(null);
-  };
   const cell = (d: number) => {
     const count = cashCount[d] ?? 0;
     const isDirectEntry = d === 20 || COINS.includes(d);
@@ -1897,11 +1875,19 @@ function DenomGrid({ cashCount, onChange }: { cashCount: Record<number, number>;
             className="h-12 w-12 flex-shrink-0 rounded-lg border bg-muted text-2xl font-bold flex items-center justify-center hover:bg-accent active:scale-95 transition-all select-none"
           >−</button>
           {isDirectEntry ? (
-            <button
-              type="button"
-              onClick={() => openCountPad(d)}
-              className="h-12 min-w-0 flex-1 rounded-lg border-2 border-primary/50 bg-primary/5 px-1 text-center text-2xl font-bold tabular-nums active:bg-primary/15"
-            >{count}</button>
+            <input
+              type="number"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              min={0}
+              max={99999}
+              step={1}
+              value={count}
+              onFocus={(event) => event.currentTarget.select()}
+              onChange={(event) => setCount(Number(event.currentTarget.value || 0))}
+              aria-label={`${label(d)} quantity`}
+              className="h-12 min-w-0 flex-1 rounded-lg border-2 border-primary/60 bg-primary/5 px-1 text-center text-2xl font-bold tabular-nums outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
+            />
           ) : (
             <div className="flex-1 text-center text-2xl font-bold tabular-nums">{count}</div>
           )}
@@ -1923,27 +1909,6 @@ function DenomGrid({ cashCount, onChange }: { cashCount: Record<number, number>;
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">💵 {t("denom_bills")}</p>
         <div className="grid grid-cols-2 gap-3">{BILLS.map(cell)}</div>
       </div>
-      {editingDenom != null && (
-        <div ref={countPadRef} className="rounded-2xl border-2 border-primary bg-background p-4 shadow-lg">
-          <div className="mb-3 text-center text-lg font-semibold">{label(editingDenom)} {t("qty")}</div>
-          <div className="mb-3 flex h-14 items-center justify-end rounded-lg border bg-muted/30 px-4 text-3xl font-bold tabular-nums">
-            {rawCount || "0"}
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((key) => (
-              <Button key={key} type="button" variant="outline" className="h-14 text-xl font-semibold" onClick={() => pressCountKey(key)}>{key}</Button>
-            ))}
-            <Button type="button" variant="outline" className="h-14 text-xl font-semibold" onClick={() => pressCountKey("00")}>00</Button>
-            <Button type="button" variant="outline" className="h-14 text-xl font-semibold" onClick={() => pressCountKey("0")}>0</Button>
-            <Button type="button" variant="outline" className="h-14 text-xl font-semibold" onClick={() => setRawCount((current) => current.slice(0, -1))}>⌫</Button>
-          </div>
-          <div className="mt-3 grid grid-cols-3 gap-2">
-            <Button type="button" variant="ghost" onClick={() => setRawCount("")}>Clear</Button>
-            <Button type="button" variant="outline" onClick={() => setEditingDenom(null)}>Cancel</Button>
-            <Button type="button" onClick={saveCount}>Done</Button>
-          </div>
-        </div>
-      )}
       <div className="border-t pt-4">
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">🪙 {t("denom_coins")}</p>
         <div className="grid grid-cols-2 gap-3">{COINS.map(cell)}</div>
