@@ -64,19 +64,6 @@ type BillRow = {
   payments: { method: string; amount: number }[];
 };
 
-function getQrGrossReceived(r: ReportData) {
-  return r.byMethod.qr + r.tipTotal;
-}
-
-function getNetQrSales(r: ReportData) {
-  return r.byMethod.qr;
-}
-
-// What the merchant receives via the card terminal = card sales + card tips.
-function getCardGrossReceived(r: ReportData) {
-  return r.byMethod.card + (r.cardTipTotal ?? 0);
-}
-
 // Tips are collected electronically (QR / card) but handed to staff in cash, so
 // they leave the drawer and reduce the expected cash.
 function cashTipsPaidOut(r: ReportData) {
@@ -99,10 +86,6 @@ async function openPrintWindow(
   const { cashTotal, expected, overShort } = calcCashSummary(counts, r);
   const row = (l: string, v: string, b = false) =>
     `<tr${b ? ' style="font-weight:700"' : ""}><td>${l}</td><td style="text-align:right">${v}</td></tr>`;
-  // Informational sub-line: indented label, amount pulled left — shows a breakdown of the
-  // line above without being part of the totals column.
-  const subRow = (l: string, v: string) =>
-    `<tr><td colspan="2" style="padding-left:20px;color:#555;font-size:12px"><span style="display:inline-block;min-width:130px">${l}</span>${v}</td></tr>`;
   const denomRows = DENOMS.filter((d) => (counts[d] ?? 0) > 0)
     .map((d) => row(`${d}฿ × ${counts[d]}`, thb(d * counts[d])))
     .join("") || `<tr><td colspan="2" style="color:#888">No denominations entered</td></tr>`;
@@ -117,12 +100,9 @@ async function openPrintWindow(
         ...(r.vatAdded > 0 ? [["VAT (7%) added", thb(r.vatAdded)] as [string, string]] : []), ["Net sales", thb(r.net), true],
       ]) },
       { title: "Payments", rows: rows([
-        ["QR PAYMENT", thb(getQrGrossReceived(r))],
-        ...(r.qrByBucket ?? []).map((b) => [b.label, thb(b.gross), false, true] as [string, string, boolean, boolean]),
-        ...(r.byMethod.gov_qr > 0 ? [["60/40 PAYMENT", thb(r.byMethod.gov_qr)] as [string, string]] : []),
-        ...(r.tipTotal > 0 ? [["Tips collected (QR)", thb(r.tipTotal), false, true] as [string, string, boolean, boolean], ["Tips paid out (cash)", `- ${thb(r.tipTotal)}`, false, true] as [string, string, boolean, boolean], ["Net QR sales", thb(getNetQrSales(r)), true] as [string, string, boolean]] : []),
-        ["Credit card", thb(getCardGrossReceived(r))],
-        ...(r.cardTipTotal > 0 ? [["Tips collected (card)", thb(r.cardTipTotal), false, true] as [string, string, boolean, boolean], ["Tips paid out (cash)", `- ${thb(r.cardTipTotal)}`, false, true] as [string, string, boolean, boolean], ["Net card sales", thb(r.byMethod.card), true] as [string, string, boolean]] : []),
+        ["QR PAYMENT", thb(r.byMethod.qr)],
+        ["60/40 PAYMENT", thb(r.byMethod.gov_qr)],
+        ["Credit card", thb(r.byMethod.card)],
         ["Cash", thb(r.byMethod.cash)],
       ]) },
       { title: "Other", rows: rows([
@@ -134,20 +114,13 @@ async function openPrintWindow(
         ...(r.staffTabCashCollected > 0 ? [["Staff tab collected (cash)", thb(r.staffTabCashCollected)] as [string, string]] : []),
         ...(r.staffTabQrCollected > 0 ? [["Staff tab collected (QR)", thb(r.staffTabQrCollected)] as [string, string]] : []),
       ]) },
-      ...(r.discount > 0 ? [{ title: "Discount breakdown", rows: rows([
-        ["Total discounts", `- ${thb(r.discount)}`],
-        ...(r.discountByType.percent > 0 ? [["% Off", `- ${thb(r.discountByType.percent)}`, false, true] as [string, string, boolean, boolean]] : []),
-        ...(r.discountByType.fixed > 0 ? [["Fixed amount", `- ${thb(r.discountByType.fixed)}`, false, true] as [string, string, boolean, boolean]] : []),
-        ...(r.discountByType.free_item > 0 ? [["Free items", `- ${thb(r.discountByType.free_item)}`, false, true] as [string, string, boolean, boolean]] : []),
-        ...(r.discountByType.item > 0 ? [["Item discounts", `- ${thb(r.discountByType.item)}`, false, true] as [string, string, boolean, boolean]] : []),
-        ...r.discountByStaff.map((s) => [`${s.staffName} (x${s.count})`, `- ${thb(s.amount)}`, false, true] as [string, string, boolean, boolean]),
-      ]) }] : []),
       { title: "Cash count", rows: rows(DENOMS.filter((d) => (counts[d] ?? 0) > 0).map((d) => [`${d} THB x ${counts[d]}`, thb(d * counts[d])] as [string, string])) },
       { title: "Cash drawer", rows: rows([
-        ["Opening float", thb(r.openingFloat)], ["Cash sales", thb(r.byMethod.cash)],
+        ["Expected", thb(expected), true],
+        ["Opening float", thb(r.openingFloat)], ["Cash sales", thb(r.byMethod.cash), true],
         ...(r.staffTabCashCollected > 0 ? [["Staff tab cash collected", thb(r.staffTabCashCollected)] as [string, string]] : []),
         ...(cashTipsPaidOut(r) > 0 ? [["Tips paid out (cash)", `- ${thb(cashTipsPaidOut(r))}`] as [string, string]] : []),
-        ["Expected", thb(expected), true], ["Counted", thb(cashTotal)], ["Over / Short", thb(overShort), true],
+        ["Counted", thb(cashTotal)], ["Over / Short", thb(overShort), true],
       ]) },
     ];
     await printDirect("counter", { kind: "report", restaurant: restaurantName || "Restaurant", report_type: kind, business_day: shift.business_day, printed_at: now.toISOString(), sections });
@@ -168,16 +141,9 @@ ${r.vatAdded > 0 ? row("VAT (7%) (added)", thb(r.vatAdded)) : ""}
 ${row("Net sales", thb(r.net), true)}
 </table>
 <h2>Payments</h2><table>
-${row("QR PAYMENT", thb(getQrGrossReceived(r)))}
-${(r.qrByBucket ?? []).map((b) => subRow(b.label, thb(b.gross))).join("")}
-${r.byMethod.gov_qr > 0 ? row("60/40 PAYMENT", thb(r.byMethod.gov_qr)) : ""}
-${r.tipTotal > 0 ? row("  Tips collected (QR)", thb(r.tipTotal)) : ""}
-${r.tipTotal > 0 ? row("  Tips paid out (cash)", `- ${thb(r.tipTotal)}`) : ""}
-${r.tipTotal > 0 ? row("  Net QR sales", thb(getNetQrSales(r)), true) : ""}
-${row("Credit card", thb(getCardGrossReceived(r)))}
-${r.cardTipTotal > 0 ? row("  Tips collected (card)", thb(r.cardTipTotal)) : ""}
-${r.cardTipTotal > 0 ? row("  Tips paid out (cash)", `- ${thb(r.cardTipTotal)}`) : ""}
-${r.cardTipTotal > 0 ? row("  Net card sales", thb(r.byMethod.card), true) : ""}
+${row("QR PAYMENT", thb(r.byMethod.qr))}
+${row("60/40 PAYMENT", thb(r.byMethod.gov_qr))}
+${row("Credit card", thb(r.byMethod.card))}
 ${row("Cash", thb(r.byMethod.cash))}
 </table>
 <h2>Other</h2><table>
@@ -191,22 +157,13 @@ ${r.staffTabCharged > 0 ? row("Staff tab charged", thb(r.staffTabCharged)) : ""}
 ${r.staffTabCashCollected > 0 ? row("Staff tab collected (cash)", thb(r.staffTabCashCollected)) : ""}
 ${r.staffTabQrCollected > 0 ? row("Staff tab collected (QR)", thb(r.staffTabQrCollected)) : ""}
 </table>
-${r.discount > 0 ? `<h2>Discount breakdown</h2><table>
-${row("Total discounts", `- ${thb(r.discount)}`)}
-${r.discountByType.percent > 0 ? row("  % Off", `- ${thb(r.discountByType.percent)}`) : ""}
-${r.discountByType.fixed > 0 ? row("  Fixed amount", `- ${thb(r.discountByType.fixed)}`) : ""}
-${r.discountByType.free_item > 0 ? row("  Free items", `- ${thb(r.discountByType.free_item)}`) : ""}
-${r.discountByType.item > 0 ? row("  Item discounts", `- ${thb(r.discountByType.item)}`) : ""}
-${r.discountByStaff.map((s) => row(`  ${escapeHtml(s.staffName)} (×${s.count})`, `- ${thb(s.amount)}`)).join("")}
-</table>` : "<table>"}
-</table>
 <h2>Cash count</h2><table>${denomRows}</table>
 <h2>Cash drawer</h2><table>
+${row("Expected", thb(expected), true)}
 ${row("Opening float", thb(r.openingFloat))}
-${row("Cash sales", thb(r.byMethod.cash))}
+${row("Cash sales", thb(r.byMethod.cash), true)}
 ${r.staffTabCashCollected > 0 ? row("Staff tab cash collected", thb(r.staffTabCashCollected)) : ""}
 ${cashTipsPaidOut(r) > 0 ? row("Tips paid out (cash)", `- ${thb(cashTipsPaidOut(r))}`) : ""}
-${row("Expected", thb(expected), true)}
 ${row("Counted", thb(cashTotal))}
 ${row("Over / Short", thb(overShort), true)}
 </table>
