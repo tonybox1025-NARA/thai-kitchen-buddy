@@ -16,6 +16,7 @@ import { OfflineBanner } from "@/components/OfflineBanner";
 import { useNativePrintQueue } from "@/lib/native-print-queue";
 import { syncPosAssets, type AssetProgress } from "@/lib/pos-assets";
 import { Capacitor } from "@capacitor/core";
+import { isNativeApp } from "@/lib/print/native-printer";
 
 export const Route = createFileRoute("/_app")({ component: AppLayout });
 
@@ -27,6 +28,12 @@ function AppLayout() {
   const [assetsReady, setAssetsReady] = useState(false);
   const [assetProgress, setAssetProgress] = useState<AssetProgress>({ done: 0, total: 1, stage: "catalog" });
   const needsPosAssets = path === "/pos" || path.startsWith("/order/");
+  // The SUNMI is a registered, single-purpose till. Signing the Supabase device
+  // session out from the shop floor only strands the next shift at an owner
+  // email/password prompt. Keep server authentication and the staff PIN gate,
+  // but do not expose device sign-out inside the native POS app. Browser sessions
+  // (owner laptops, shared manager devices) still retain their normal sign-out.
+  const nativeTill = isNativeApp();
   const qrAlertCount = useQrAlertCount(Boolean(session && staff));
   useNativePrintQueue(Boolean(session && staff));
 
@@ -93,7 +100,9 @@ function AppLayout() {
       <div className="min-h-screen grid place-items-center p-4 bg-gradient-to-br from-background to-muted">
         <div className="absolute top-4 right-4 flex gap-2">
           <LanguageToggle />
-          <Button variant="ghost" size="sm" onClick={() => signOut()}><LogOut className="h-4 w-4 mr-1" />{t("logout")}</Button>
+          {!nativeTill && (
+            <Button variant="ghost" size="sm" onClick={() => signOut()}><LogOut className="h-4 w-4 mr-1" />{t("logout")}</Button>
+          )}
         </div>
         <div className="w-full max-w-sm">
           <PinKeypad
@@ -172,9 +181,11 @@ function AppLayout() {
             <span className="hidden sm:inline font-medium">{staff.name}</span>
             <span className="hidden sm:inline text-xs text-muted-foreground">({staff.role})</span>
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => signOut()} title={t("logout")}>
-            <LogOut className="h-4 w-4" />
-          </Button>
+          {!nativeTill && (
+            <Button variant="ghost" size="sm" onClick={() => signOut()} title={t("logout")}>
+              <LogOut className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </header>
       <OfflineBanner />
