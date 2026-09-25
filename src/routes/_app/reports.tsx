@@ -23,6 +23,7 @@ import type { DateRange } from "react-day-picker";
 import { PencilLine, ArrowRight, CalendarIcon, Download, XCircle, Printer } from "lucide-react";
 import { bucketizeQr, parseBuckets, type QrBucketTotal, type QrTimeBucket } from "@/lib/qr-buckets";
 import { canPrintDirect, printDirect } from "@/lib/counter-printer";
+import { KeypadInput } from "@/components/KeypadInput";
 
 export const Route = createFileRoute("/_app/reports")({ component: Reports });
 
@@ -1860,7 +1861,7 @@ function DenomGrid({ cashCount, onChange }: { cashCount: Record<number, number>;
   const label = (d: number) => (d < 1 ? `${d.toFixed(2)}฿` : `${d}฿`);
   const cell = (d: number) => {
     const count = cashCount[d] ?? 0;
-    const isCoin = COINS.includes(d);
+    const isDirectEntry = d === 20 || COINS.includes(d);
     const setCount = (next: number) => {
       const safeCount = Number.isFinite(next) ? Math.max(0, Math.floor(next)) : 0;
       onChange({ ...cashCount, [d]: safeCount });
@@ -1874,18 +1875,14 @@ function DenomGrid({ cashCount, onChange }: { cashCount: Record<number, number>;
             onClick={() => setCount(count - 1)}
             className="h-12 w-12 flex-shrink-0 rounded-lg border bg-muted text-2xl font-bold flex items-center justify-center hover:bg-accent active:scale-95 transition-all select-none"
           >−</button>
-          {isCoin ? (
-            <Input
-              type="number"
-              inputMode="numeric"
-              min={0}
-              step={1}
+          {isDirectEntry ? (
+            <KeypadInput
               value={count}
-              aria-label={`${label(d)} coin count`}
-              onFocus={(event) => event.currentTarget.select()}
-              onChange={(event) => setCount(Number(event.target.value))}
-              onWheel={(event) => event.currentTarget.blur()}
-              className="h-12 min-w-0 flex-1 px-1 text-center text-2xl font-bold tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              onChange={setCount}
+              title={`${label(d)} ${t("qty")}`}
+              placeholder="0"
+              display={String}
+              className="h-12 min-w-0 flex-1 justify-center px-1 text-2xl"
             />
           ) : (
             <div className="flex-1 text-center text-2xl font-bold tabular-nums">{count}</div>
