@@ -62,19 +62,6 @@ type BillRow = {
   payments: { method: string; amount: number }[];
 };
 
-function getQrGrossReceived(r: ReportData) {
-  return r.byMethod.qr + r.tipTotal;
-}
-
-function getNetQrSales(r: ReportData) {
-  return r.byMethod.qr;
-}
-
-// What the merchant receives via the card terminal = card sales + card tips.
-function getCardGrossReceived(r: ReportData) {
-  return r.byMethod.card + (r.cardTipTotal ?? 0);
-}
-
 // Tips are collected electronically (QR / card) but handed to staff in cash, so
 // they leave the drawer and reduce the expected cash.
 function cashTipsPaidOut(r: ReportData) {
@@ -87,6 +74,15 @@ function calcCashSummary(cashCount: Record<number, number>, r: ReportData) {
   return { cashTotal, expected, overShort: cashTotal - expected };
 }
 
+function customerDiscount(r: ReportData) {
+  return Math.max(0, r.discount - r.staffTabDiscount);
+}
+
+function reconciledPaymentTotal(r: ReportData) {
+  return r.byMethod.qr + r.byMethod.gov_qr + r.byMethod.card + r.byMethod.cash
+    + r.staffTabCharged - r.refunds;
+}
+
 async function openPrintWindow(
   kind: "X" | "Z",
   r: ReportData,
@@ -97,10 +93,6 @@ async function openPrintWindow(
   const { cashTotal, expected, overShort } = calcCashSummary(counts, r);
   const row = (l: string, v: string, b = false) =>
     `<tr${b ? ' style="font-weight:700"' : ""}><td>${l}</td><td style="text-align:right">${v}</td></tr>`;
-  // Informational sub-line: indented label, amount pulled left — shows a breakdown of the
-  // line above without being part of the totals column.
-  const subRow = (l: string, v: string) =>
-    `<tr><td colspan="2" style="padding-left:20px;color:#555;font-size:12px"><span style="display:inline-block;min-width:130px">${l}</span>${v}</td></tr>`;
   const denomRows = DENOMS.filter((d) => (counts[d] ?? 0) > 0)
     .map((d) => row(`${d}฿ × ${counts[d]}`, thb(d * counts[d])))
     .join("") || `<tr><td colspan="2" style="color:#888">No denominations entered</td></tr>`;
@@ -110,44 +102,37 @@ async function openPrintWindow(
       entries.map(([label, value, bold, indent]) => ({ label, value, bold, indent }));
     const sections = [
       { title: "Sales", rows: rows([
-        ["Gross sales", thb(r.gross)], ["Discount", `- ${thb(r.discount)}`],
+        ["Gross sales", thb(r.gross)], ["Customer discount", `- ${thb(customerDiscount(r))}`],
+        ...(r.staffTabDiscount > 0 ? [["Staff discount", `- ${thb(r.staffTabDiscount)}`] as [string, string]] : []),
         ["Member discount", `- ${thb(r.member)}`], ["Coupon", `- ${thb(r.coupon)}`],
         ...(r.vatIncluded > 0 ? [["VAT (7%) included", thb(r.vatIncluded)] as [string, string]] : []),
         ...(r.vatAdded > 0 ? [["VAT (7%) added", thb(r.vatAdded)] as [string, string]] : []),
         ["Net sales", thb(r.net), true],
       ]) },
       { title: "Payments", rows: rows([
-        ["QR PAYMENT", thb(getQrGrossReceived(r))],
-        ...(r.qrByBucket ?? []).map((b) => [b.label, thb(b.gross), false, true] as [string, string, boolean, boolean]),
-        ...(r.byMethod.gov_qr > 0 ? [["60/40 PAYMENT", thb(r.byMethod.gov_qr)] as [string, string]] : []),
-        ...(r.tipTotal > 0 ? [["Tips collected (QR)", thb(r.tipTotal), false, true] as [string, string, boolean, boolean], ["Tips paid out (cash)", `- ${thb(r.tipTotal)}`, false, true] as [string, string, boolean, boolean], ["Net QR sales", thb(getNetQrSales(r)), true] as [string, string, boolean]] : []),
-        ["Credit card", thb(getCardGrossReceived(r))],
-        ...(r.cardTipTotal > 0 ? [["Tips collected (card)", thb(r.cardTipTotal), false, true] as [string, string, boolean, boolean], ["Tips paid out (cash)", `- ${thb(r.cardTipTotal)}`, false, true] as [string, string, boolean, boolean], ["Net card sales", thb(r.byMethod.card), true] as [string, string, boolean]] : []),
+        ["QR PAYMENT", thb(r.byMethod.qr)],
+        ["60/40 PAYMENT", thb(r.byMethod.gov_qr)],
+        ["Credit card", thb(r.byMethod.card)],
         ["Cash", thb(r.byMethod.cash)],
+        ...(r.staffTabCharged > 0 ? [["Staff credit sales", thb(r.staffTabCharged)] as [string, string]] : []),
+        ...(r.refunds > 0 ? [["Cash refunds", `- ${thb(r.refunds)}`] as [string, string]] : []),
+        ["Payment total", thb(reconciledPaymentTotal(r)), true],
       ]) },
       { title: "Other", rows: rows([
         ["Voids & Cancellations", thb(r.voids)], ["Refunds total", thb(r.refunds)], ["Bills", String(r.bills)],
         ...(r.cancelledCount > 0 ? [["Cancelled orders", String(r.cancelledCount)] as [string, string]] : []),
         ...(r.takeoutTotal > 0 ? [["Takeout sales", thb(r.takeoutTotal)] as [string, string]] : []),
         ...(r.staffMealTotal > 0 ? [["Staff meal cost", thb(r.staffMealTotal)] as [string, string]] : []),
-        ...(r.staffTabCharged > 0 ? [["Staff tab charged", thb(r.staffTabCharged)] as [string, string]] : []),
         ...(r.staffTabCashCollected > 0 ? [["Staff tab collected (cash)", thb(r.staffTabCashCollected)] as [string, string]] : []),
         ...(r.staffTabQrCollected > 0 ? [["Staff tab collected (QR)", thb(r.staffTabQrCollected)] as [string, string]] : []),
       ]) },
-      ...(r.discount > 0 ? [{ title: "Discount breakdown", rows: rows([
-        ["Total discounts", `- ${thb(r.discount)}`],
-        ...(r.discountByType.percent > 0 ? [["% Off", `- ${thb(r.discountByType.percent)}`, false, true] as [string, string, boolean, boolean]] : []),
-        ...(r.discountByType.fixed > 0 ? [["Fixed amount", `- ${thb(r.discountByType.fixed)}`, false, true] as [string, string, boolean, boolean]] : []),
-        ...(r.discountByType.free_item > 0 ? [["Free items", `- ${thb(r.discountByType.free_item)}`, false, true] as [string, string, boolean, boolean]] : []),
-        ...(r.discountByType.item > 0 ? [["Item discounts", `- ${thb(r.discountByType.item)}`, false, true] as [string, string, boolean, boolean]] : []),
-        ...r.discountByStaff.map((s) => [`${s.staffName} (x${s.count})`, `- ${thb(s.amount)}`, false, true] as [string, string, boolean, boolean]),
-      ]) }] : []),
       { title: "Cash count", rows: rows(DENOMS.filter((d) => (counts[d] ?? 0) > 0).map((d) => [`${d} THB x ${counts[d]}`, thb(d * counts[d])] as [string, string])) },
       { title: "Cash drawer", rows: rows([
-        ["Opening float", thb(r.openingFloat)], ["Cash sales", thb(r.byMethod.cash)],
+        ["Expected", thb(expected), true],
+        ["Opening float", thb(r.openingFloat)], ["Cash sales", thb(r.byMethod.cash), true],
         ...(r.staffTabCashCollected > 0 ? [["Staff tab cash collected", thb(r.staffTabCashCollected)] as [string, string]] : []),
         ...(cashTipsPaidOut(r) > 0 ? [["Tips paid out (cash)", `- ${thb(cashTipsPaidOut(r))}`] as [string, string]] : []),
-        ["Expected", thb(expected), true], ["Counted", thb(cashTotal)], ["Over / Short", thb(overShort), true],
+        ["Counted", thb(cashTotal)], ["Over / Short", thb(overShort), true],
       ]) },
     ];
     await printDirect("counter", {
@@ -163,7 +148,8 @@ async function openPrintWindow(
 <div class="meta">${kind} Report · Business day ${escapeHtml(shift.business_day)}<br/>Printed ${now.toLocaleString()}</div>
 <h2>Sales</h2><table>
 ${row("Gross sales", thb(r.gross))}
-${row("Discount", `- ${thb(r.discount)}`)}
+${row("Customer discount", `- ${thb(customerDiscount(r))}`)}
+${r.staffTabDiscount > 0 ? row("Staff discount", `- ${thb(r.staffTabDiscount)}`) : ""}
 ${row("Member discount", `- ${thb(r.member)}`)}
 ${row("Coupon", `- ${thb(r.coupon)}`)}
 ${r.vatIncluded > 0 ? row("VAT (7%) (included)", thb(r.vatIncluded)) : ""}
@@ -171,17 +157,13 @@ ${r.vatAdded > 0 ? row("VAT (7%) (added)", thb(r.vatAdded)) : ""}
 ${row("Net sales", thb(r.net), true)}
 </table>
 <h2>Payments</h2><table>
-${row("QR PAYMENT", thb(getQrGrossReceived(r)))}
-${(r.qrByBucket ?? []).map((b) => subRow(b.label, thb(b.gross))).join("")}
-${r.byMethod.gov_qr > 0 ? row("60/40 PAYMENT", thb(r.byMethod.gov_qr)) : ""}
-${r.tipTotal > 0 ? row("  Tips collected (QR)", thb(r.tipTotal)) : ""}
-${r.tipTotal > 0 ? row("  Tips paid out (cash)", `- ${thb(r.tipTotal)}`) : ""}
-${r.tipTotal > 0 ? row("  Net QR sales", thb(getNetQrSales(r)), true) : ""}
-${row("Credit card", thb(getCardGrossReceived(r)))}
-${r.cardTipTotal > 0 ? row("  Tips collected (card)", thb(r.cardTipTotal)) : ""}
-${r.cardTipTotal > 0 ? row("  Tips paid out (cash)", `- ${thb(r.cardTipTotal)}`) : ""}
-${r.cardTipTotal > 0 ? row("  Net card sales", thb(r.byMethod.card), true) : ""}
+${row("QR PAYMENT", thb(r.byMethod.qr))}
+${row("60/40 PAYMENT", thb(r.byMethod.gov_qr))}
+${row("Credit card", thb(r.byMethod.card))}
 ${row("Cash", thb(r.byMethod.cash))}
+${r.staffTabCharged > 0 ? row("Staff credit sales", thb(r.staffTabCharged)) : ""}
+${r.refunds > 0 ? row("Cash refunds", `- ${thb(r.refunds)}`) : ""}
+${row("Payment total", thb(reconciledPaymentTotal(r)), true)}
 </table>
 <h2>Other</h2><table>
 ${row("Voids &amp; Cancellations", thb(r.voids))}
@@ -190,26 +172,16 @@ ${row("Bills", String(r.bills))}
 ${r.cancelledCount > 0 ? row("Cancelled orders", String(r.cancelledCount)) : ""}
 ${r.takeoutTotal > 0 ? row("Takeout sales", thb(r.takeoutTotal)) : ""}
 ${r.staffMealTotal > 0 ? row("Staff meal cost", thb(r.staffMealTotal)) : ""}
-${r.staffTabCharged > 0 ? row("Staff tab charged", thb(r.staffTabCharged)) : ""}
 ${r.staffTabCashCollected > 0 ? row("Staff tab collected (cash)", thb(r.staffTabCashCollected)) : ""}
 ${r.staffTabQrCollected > 0 ? row("Staff tab collected (QR)", thb(r.staffTabQrCollected)) : ""}
 </table>
-${r.discount > 0 ? `<h2>Discount breakdown</h2><table>
-${row("Total discounts", `- ${thb(r.discount)}`)}
-${r.discountByType.percent > 0 ? row("  % Off", `- ${thb(r.discountByType.percent)}`) : ""}
-${r.discountByType.fixed > 0 ? row("  Fixed amount", `- ${thb(r.discountByType.fixed)}`) : ""}
-${r.discountByType.free_item > 0 ? row("  Free items", `- ${thb(r.discountByType.free_item)}`) : ""}
-${r.discountByType.item > 0 ? row("  Item discounts", `- ${thb(r.discountByType.item)}`) : ""}
-${r.discountByStaff.map((s) => row(`  ${escapeHtml(s.staffName)} (×${s.count})`, `- ${thb(s.amount)}`)).join("")}
-</table>` : "<table>"}
-</table>
 <h2>Cash count</h2><table>${denomRows}</table>
 <h2>Cash drawer</h2><table>
+${row("Expected", thb(expected), true)}
 ${row("Opening float", thb(r.openingFloat))}
-${row("Cash sales", thb(r.byMethod.cash))}
+${row("Cash sales", thb(r.byMethod.cash), true)}
 ${r.staffTabCashCollected > 0 ? row("Staff tab cash collected", thb(r.staffTabCashCollected)) : ""}
 ${cashTipsPaidOut(r) > 0 ? row("Tips paid out (cash)", `- ${thb(cashTipsPaidOut(r))}`) : ""}
-${row("Expected", thb(expected), true)}
 ${row("Counted", thb(cashTotal))}
 ${row("Over / Short", thb(overShort), true)}
 </table>
@@ -1763,6 +1735,7 @@ function ReportCard({ r }: { r: ReportData }) {
               {r.discountByType.fixed > 0     && <Row label="  Fixed Amount"    value={`- ${thb(r.discountByType.fixed)}`}     />}
               {r.discountByType.free_item > 0 && <Row label="  Free Item"       value={`- ${thb(r.discountByType.free_item)}`} />}
               {r.discountByType.item > 0      && <Row label="  Item Discount"  value={`- ${thb(r.discountByType.item)}`}      />}
+              {r.staffTabDiscount > 0         && <Row label="  Staff Discount" value={`- ${thb(r.staffTabDiscount)}`}         />}
               {r.member > 0                   && <Row label="  Member Discount" value={`- ${thb(r.member)}`}                  />}
             </div>
             <Row label="Total discounts" value={`- ${thb(r.discount + r.member)}`} bold />
@@ -1775,23 +1748,13 @@ function ReportCard({ r }: { r: ReportData }) {
         {r.vatAdded > 0 && <Row label="VAT (7%) (added)" value={thb(r.vatAdded)} />}
         <Row label="Net sales" value={thb(r.net)} bold />
         <div className="border-t pt-2 mt-2" />
-        <Row label="QR PAYMENT" value={thb(getQrGrossReceived(r))} />
-        {(r.qrByBucket ?? []).map((b) => (
-          <SubRow key={b.label} label={b.label} value={thb(b.gross)} />
-        ))}
-        {r.byMethod.gov_qr > 0 && <Row label="60/40 PAYMENT" value={thb(r.byMethod.gov_qr)} />}
-        {r.tipTotal > 0 && <>
-          <Row label="  ↳ Tips collected (QR)" value={thb(r.tipTotal)} />
-          <Row label="  ↳ Tips paid out (cash)" value={`- ${thb(r.tipTotal)}`} />
-          <Row label="  ↳ Net QR sales" value={thb(getNetQrSales(r))} bold />
-        </>}
-        <Row label="Credit card" value={thb(getCardGrossReceived(r))} />
-        {(r.cardTipTotal ?? 0) > 0 && <>
-          <Row label="  ↳ Tips collected (card)" value={thb(r.cardTipTotal)} />
-          <Row label="  ↳ Tips paid out (cash)" value={`- ${thb(r.cardTipTotal)}`} />
-          <Row label="  ↳ Net card sales" value={thb(r.byMethod.card)} bold />
-        </>}
+        <Row label="QR PAYMENT" value={thb(r.byMethod.qr)} />
+        <Row label="60/40 PAYMENT" value={thb(r.byMethod.gov_qr)} />
+        <Row label="Credit card" value={thb(r.byMethod.card)} />
         <Row label="Cash" value={thb(r.byMethod.cash)} />
+        {r.staffTabCharged > 0 && <Row label="Staff credit sales" value={thb(r.staffTabCharged)} />}
+        {r.refunds > 0 && <Row label="Cash refunds" value={`- ${thb(r.refunds)}`} />}
+        <Row label="Payment total" value={thb(reconciledPaymentTotal(r))} bold />
         <div className="border-t pt-2 mt-2" />
         <Row label="Voids & Cancellations" value={thb(r.voids)} />
         <Row label="Refunds total" value={thb(r.refunds)} />
@@ -1806,10 +1769,9 @@ function ReportCard({ r }: { r: ReportData }) {
             {r.staffMealTotal > 0 && <Row label="  ↳ Staff meal cost" value={thb(r.staffMealTotal)} />}
           </>
         )}
-        {(r.staffTabCharged > 0 || r.staffTabCashCollected > 0 || r.staffTabQrCollected > 0) && (
+        {(r.staffTabCashCollected > 0 || r.staffTabQrCollected > 0) && (
           <>
             <div className="border-t pt-2 mt-2" />
-            {r.staffTabCharged > 0 && <Row label="Staff tab charged" value={thb(r.staffTabCharged)} />}
             {r.staffTabCashCollected > 0 && <Row label="Staff tab collected (cash)" value={thb(r.staffTabCashCollected)} />}
             {r.staffTabQrCollected > 0 && <Row label="Staff tab collected (QR)" value={thb(r.staffTabQrCollected)} />}
           </>
@@ -1823,17 +1785,6 @@ function Row({ label, value, bold }: { label: string; value: string; bold?: bool
   return (
     <div className={`flex justify-between ${bold ? "font-bold" : ""}`}>
       <span>{label}</span><span>{value}</span>
-    </div>
-  );
-}
-
-// Informational breakdown line: indented label, amount pulled left (not in the totals
-// column) so it reads as detail of the line above, not part of the calculation.
-function SubRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex gap-4 pl-5 text-xs text-muted-foreground">
-      <span className="min-w-[8rem]">{label}</span>
-      <span className="tabular-nums">{value}</span>
     </div>
   );
 }

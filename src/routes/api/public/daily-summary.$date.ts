@@ -110,7 +110,10 @@ export const Route = createFileRoute("/api/public/daily-summary/$date")({
           discount: sum(billRows, (b) => b.discount_amount) + staffDiscount,
           vat: sum(billRows, (b) => b.vat_amount),
           net_sales: sum(billRows, (b) => b.total) + staffCredit - refundTotal,
-          qr_total_amount: byMethod("qr") + staffCollectedQr,
+          // The manager import treats this as the complete QR-family total and
+          // derives ordinary PromptPay by subtracting `sixty_forty_amount`.
+          // Keep staff-tab QR collections here because they are real QR cash-in.
+          qr_total_amount: byMethod("qr") + byMethod("gov_qr") + staffCollectedQr,
           sixty_forty_amount: byMethod("gov_qr"),
           credit_amount: byMethod("card"),
           // Preserve what was actually received by each tender. Cash paid back
