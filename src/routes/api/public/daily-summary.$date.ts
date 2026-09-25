@@ -65,7 +65,7 @@ export const Route = createFileRoute("/api/public/daily-summary/$date")({
 
         const [{ data: pays }, { data: refunds }, { data: staffCharges }, { data: staffSettlements }] = await Promise.all([
           billIds.length
-            ? sb.from("payments").select("method,amount").in("bill_id", billIds)
+            ? sb.from("payments").select("method,amount,tip_amount").in("bill_id", billIds)
             : Promise.resolve({ data: [] }),
           sb.from("refunds").select("amount").in("shift_id", shiftIds),
           sb.from("staff_tab_charges")
@@ -82,6 +82,11 @@ export const Route = createFileRoute("/api/public/daily-summary/$date")({
             payRows.filter((p: any) => p.method === m),
             (p: any) => p.amount,
           );
+        const tipsByMethod = (m: string) =>
+          sum(
+            payRows.filter((p: any) => p.method === m),
+            (p: any) => p.tip_amount,
+          );
 
         const refundTotal = sum(refunds ?? [], (r) => r.amount);
         const staffChargeRows = staffCharges ?? [];
@@ -97,6 +102,9 @@ export const Route = createFileRoute("/api/public/daily-summary/$date")({
           staffSettlementRows.filter((r: any) => r.method === "qr"),
           (r) => r.amount,
         );
+        const qrTipPayout = tipsByMethod("qr") + tipsByMethod("gov_qr");
+        const cardTipPayout = tipsByMethod("card");
+        const cashTipPayout = qrTipPayout + cardTipPayout;
         return json({
           date,
           has_data: billRows.length > 0 || staffChargeRows.length > 0 || staffSettlementRows.length > 0,
@@ -110,20 +118,20 @@ export const Route = createFileRoute("/api/public/daily-summary/$date")({
           discount: sum(billRows, (b) => b.discount_amount) + staffDiscount,
           vat: sum(billRows, (b) => b.vat_amount),
           net_sales: sum(billRows, (b) => b.total) + staffCredit - refundTotal,
-          // The manager import treats this as the complete QR-family total and
-          // derives ordinary PromptPay by subtracting `sixty_forty_amount`.
-          // Keep staff-tab QR collections here because they are real QR cash-in.
-          qr_total_amount: byMethod("qr") + byMethod("gov_qr") + staffCollectedQr,
+          // Sales tenders only. Staff-tab collections settle older receivables,
+          // so expose them separately instead of inflating today's sales tender.
+          qr_total_amount: Math.max(0, byMethod("qr") + byMethod("gov_qr") - qrTipPayout),
           sixty_forty_amount: byMethod("gov_qr"),
-          credit_amount: byMethod("card"),
+          credit_amount: Math.max(0, byMethod("card") - cardTipPayout),
           // Preserve what was actually received by each tender. Cash paid back
           // is reported separately in `refund`; it is not a payment-type edit.
-          cash_amount: byMethod("cash") + staffCollectedCash,
+          cash_amount: byMethod("cash"),
           staff_sales_gross: staffSalesGross,
           staff_discount: staffDiscount,
           staff_credit: staffCredit,
           staff_collected_cash: staffCollectedCash,
           staff_collected_qr: staffCollectedQr,
+          cash_tip_payout: cashTipPayout,
         });
       },
     },
