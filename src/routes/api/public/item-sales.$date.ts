@@ -29,6 +29,54 @@ const json = (obj: unknown, status = 200) =>
   new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json", ...CORS } });
 
 type Agg = { menu_id: string | null; name_th: string; name_en: string; qty: number; revenue: number; cost: number };
+type SetComponentAgg = {
+  parent_menu_id: string | null;
+  parent_name_th: string;
+  parent_name_en: string;
+  menu_id: string | null;
+  group: "main" | "side" | "rice" | "drink";
+  name_th: string;
+  name_en: string;
+  qty: number;
+};
+
+type StoredSetItem = { id?: string | null; th?: string | null; en?: string | null };
+type StoredSetConfig = {
+  main?: StoredSetItem | null;
+  sides?: StoredSetItem[] | null;
+  drink?: StoredSetItem | null;
+  rice?: "rice" | "porridge" | null;
+};
+
+function addSetComponent(
+  map: Map<string, SetComponentAgg>,
+  parent: { menu_id?: string | null; name_th?: string | null; name_en?: string | null; qty?: number | null },
+  group: SetComponentAgg["group"],
+  component: StoredSetItem,
+) {
+  const qty = Number(parent.qty) || 0;
+  if (qty <= 0) return;
+  const menuId = component.id || null;
+  const nameTh = String(component.th || component.en || "").trim();
+  const nameEn = String(component.en || component.th || "").trim();
+  if (!nameTh && !nameEn) return;
+  const key = [parent.menu_id || parent.name_en || parent.name_th, group, menuId || nameTh].join("::");
+  const current = map.get(key);
+  if (current) {
+    current.qty += qty;
+    return;
+  }
+  map.set(key, {
+    parent_menu_id: parent.menu_id || null,
+    parent_name_th: String(parent.name_th || parent.name_en || ""),
+    parent_name_en: String(parent.name_en || parent.name_th || ""),
+    menu_id: menuId,
+    group,
+    name_th: nameTh,
+    name_en: nameEn,
+    qty,
+  });
+}
 
 export const Route = createFileRoute("/api/public/item-sales/$date")({
   server: {
@@ -61,10 +109,11 @@ export const Route = createFileRoute("/api/public/item-sales/$date")({
         if (orderIds.length === 0) return json({ date, has_data: false, item_count: 0, items: [] });
 
         const { data: items } = await sb.from("order_items")
-          .select("order_id,menu_id,name_th,name_en,qty,unit_price,unit_cost")
+          .select("order_id,menu_id,name_th,name_en,qty,unit_price,unit_cost,set_config")
           .in("order_id", orderIds).neq("status", "voided");
 
         const agg = new Map<string, Agg>();
+        const setComponents = new Map<string, SetComponentAgg>();
         for (const it of (items ?? []) as any[]) {
           const qty = Number(it.qty) || 0;
           const key = it.menu_id ?? `__name__${it.name_th}`;
@@ -79,6 +128,16 @@ export const Route = createFileRoute("/api/public/item-sales/$date")({
           // Daily Sales gross; the staff discount is reported separately there.
           row.revenue += qty * (Number(it.unit_price) || 0);
           row.cost += qty * (Number(it.unit_cost) || 0);
+
+          const setConfig = it.set_config as StoredSetConfig | null | undefined;
+          if (setConfig?.main) addSetComponent(setComponents, it, "main", setConfig.main);
+          for (const side of setConfig?.sides ?? []) addSetComponent(setComponents, it, "side", side);
+          if (setConfig?.drink) addSetComponent(setComponents, it, "drink", setConfig.drink);
+          if (setConfig?.rice === "rice") {
+            addSetComponent(setComponents, it, "rice", { th: "ข้าวสวย", en: "Steamed Rice" });
+          } else if (setConfig?.rice === "porridge") {
+            addSetComponent(setComponents, it, "rice", { th: "ข้าวต้ม", en: "Rice Porridge" });
+          }
         }
 
         const rows = [...agg.values()].sort((a, b) => b.qty - a.qty);
@@ -90,6 +149,9 @@ export const Route = createFileRoute("/api/public/item-sales/$date")({
           total_revenue: rows.reduce((s, r) => s + r.revenue, 0),
           total_cost: rows.reduce((s, r) => s + r.cost, 0),
           items: rows,
+          // Component rows carry no extra revenue. Manager uses them only to
+          // deduct the exact recipes selected inside each sold SET.
+          set_components: [...setComponents.values()],
         });
       },
     },
