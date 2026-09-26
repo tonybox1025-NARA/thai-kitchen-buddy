@@ -17,7 +17,7 @@ export const Route = createFileRoute("/_app/detail-gross")({
 
 type BillRow = {
   id: string; order_id: string; total: number; subtotal: number;
-  discount_amount: number; paid_at: string | null;
+  discount_amount: number; member_discount_amount: number; paid_at: string | null;
 };
 
 function GrossSalesDetail() {
@@ -28,6 +28,8 @@ function GrossSalesDetail() {
   const [bills, setBills] = useState<BillRow[]>([]);
   const [tableMap, setTableMap] = useState<Map<string, string>>(new Map()); // bill_id → table_code
   const [loading, setLoading] = useState(false);
+  const [staffSales, setStaffSales] = useState({ gross: 0, net: 0, discount: 0 });
+  const [refunds, setRefunds] = useState(0);
 
   const bounds = useMemo<[Date, Date]>(() => {
     if (range === "custom" && custom?.from) {
@@ -46,10 +48,20 @@ function GrossSalesDetail() {
         const shiftIds = await shiftIdsFor(range, bounds);
         if (!shiftIds.length) { setBills([]); setTableMap(new Map()); return; }
 
-        const { data: b } = await supabase.from("bills")
-          .select("id,order_id,total,subtotal,discount_amount,paid_at")
-          .eq("status","paid").in("shift_id", shiftIds)
-          .order("paid_at", { ascending: false }).limit(500);
+        const [{ data: b }, { data: staffRows }, { data: refundRows }] = await Promise.all([
+          supabase.from("bills")
+          .select("id,order_id,total,subtotal,discount_amount,member_discount_amount,paid_at")
+          .in("status", ["paid", "partial_refund", "refunded"]).in("shift_id", shiftIds)
+          .order("paid_at", { ascending: false }).limit(500),
+          (supabase as any).from("staff_tab_charges").select("subtotal,discount_amount,amount").in("shift_id", shiftIds).neq("status", "voided"),
+          supabase.from("refunds").select("amount").in("shift_id", shiftIds),
+        ]);
+        setStaffSales({
+          gross: (staffRows ?? []).reduce((sum: number, row: any) => sum + Number(row.subtotal ?? row.amount ?? 0), 0),
+          net: (staffRows ?? []).reduce((sum: number, row: any) => sum + Number(row.amount ?? 0), 0),
+          discount: (staffRows ?? []).reduce((sum: number, row: any) => sum + Number(row.discount_amount ?? 0), 0),
+        });
+        setRefunds((refundRows ?? []).reduce((sum, row) => sum + Number(row.amount ?? 0), 0));
         if (!b?.length) { setBills([]); setTableMap(new Map()); return; }
 
         setBills(b as BillRow[]);
@@ -76,9 +88,9 @@ function GrossSalesDetail() {
     })();
   }, [bounds, range, custom]);
 
-  const gross     = bills.reduce((s, b) => s + Number(b.subtotal), 0);
-  const net       = bills.reduce((s, b) => s + Number(b.total), 0);
-  const discounts = bills.reduce((s, b) => s + Number(b.discount_amount), 0);
+  const gross     = bills.reduce((s, b) => s + Number(b.subtotal), 0) + staffSales.gross;
+  const net       = bills.reduce((s, b) => s + Number(b.total), 0) + staffSales.net - refunds;
+  const discounts = bills.reduce((s, b) => s + Number(b.discount_amount) + Number(b.member_discount_amount), 0) + staffSales.discount;
 
   // By hour
   const byHour = useMemo(() => {

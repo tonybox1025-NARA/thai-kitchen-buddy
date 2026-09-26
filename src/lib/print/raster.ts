@@ -123,7 +123,7 @@ export type TableQrPayload = {
 export type ReportPayload = {
   kind: "report";
   restaurant?: string;
-  report_type: "X" | "Z" | "OPEN";
+  report_type: "X" | "Z" | "OPEN" | "SALES";
   business_day: string;
   printed_at?: string;
   sections: {
@@ -684,7 +684,7 @@ export async function buildReport(p: ReportPayload): Promise<Uint8Array> {
   const printedAt = p.printed_at ? new Date(p.printed_at) : new Date();
 
   d.text(p.restaurant || "Restaurant", S.big, "center");
-  const reportTitle = p.report_type === "OPEN" ? "OPEN SHIFT" : `${p.report_type} REPORT`;
+  const reportTitle = p.report_type === "OPEN" ? "OPEN SHIFT" : p.report_type === "SALES" ? "SALES REPORT" : `${p.report_type} REPORT`;
   d.text(reportTitle, S.xl, "center");
   d.text(`Business day ${p.business_day}`, S.small, "center");
   d.text(`${fmtDate(printedAt)} ${fmtTime(printedAt)}`, S.small, "center");

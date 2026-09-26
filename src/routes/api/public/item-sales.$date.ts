@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { createFileRoute } from "@tanstack/react-router";
 import type { Database } from "@/integrations/supabase/types";
+import { bangkokDayUtcBounds } from "@/lib/business-day";
 
 // Per-item sales for a business day, so the LONMOH Manager app can compute actual
 // food cost (qty sold × recipe cost). Read-only aggregate over paid, non-test
@@ -93,12 +94,14 @@ export const Route = createFileRoute("/api/public/item-sales/$date")({
 
         const sb = supabase as any;
 
-        const { data: shifts } = await sb.from("shifts").select("id").eq("business_day", date);
+        const [openedFrom, openedBefore] = bangkokDayUtcBounds(date);
+        const { data: shifts } = await sb.from("shifts").select("id")
+          .gte("opened_at", openedFrom).lt("opened_at", openedBefore);
         const shiftIds = (shifts ?? []).map((s: any) => s.id);
         if (shiftIds.length === 0) return json({ date, has_data: false, item_count: 0, items: [] });
 
         const [{ data: bills }, { data: staffCharges }] = await Promise.all([
-          sb.from("bills").select("order_id").in("shift_id", shiftIds).eq("status", "paid").not("is_test", "is", true),
+          sb.from("bills").select("order_id").in("shift_id", shiftIds).in("status", ["paid", "partial_refund", "refunded"]).not("is_test", "is", true),
           sb.from("staff_tab_charges").select("order_id").in("shift_id", shiftIds).neq("status", "voided"),
         ]);
         const staffOrderIds = new Set((staffCharges ?? []).map((charge: any) => charge.order_id).filter(Boolean));

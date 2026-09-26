@@ -38,12 +38,20 @@ export function isValidBucket(b: QrTimeBucket): boolean {
   return s !== null && e !== null && s !== e;
 }
 
-/** Local time-of-day (minutes) for an ISO timestamp, or null if unparseable. */
+/** Bangkok time-of-day (minutes) for an ISO timestamp, or null if unparseable. */
 function minuteOfDay(iso: string): number | null {
   if (!iso) return null;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
-  return d.getHours() * 60 + d.getMinutes();
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Bangkok",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(d);
+  const hour = Number(parts.find((part) => part.type === "hour")?.value);
+  const minute = Number(parts.find((part) => part.type === "minute")?.value);
+  return Number.isFinite(hour) && Number.isFinite(minute) ? hour * 60 + minute : null;
 }
 
 /** True if the timestamp's local time-of-day falls in [start, end).

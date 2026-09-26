@@ -456,6 +456,8 @@ const dict: Dict = {
   tips_payout_hint:    { th: "จ่ายให้พนักงานเป็นเงินสด",  en: "Pay this to staff in cash"      },
   // date range bar
   custom_range:        { th: "กำหนดเอง",                  en: "Custom range"                   },
+  single_date:         { th: "วันเดียว",                  en: "Single date"                    },
+  date_range:          { th: "ช่วงวันที่",                 en: "Date range"                     },
   // detail-gross
   gross:               { th: "ยอดรวม",                    en: "Gross"                          },
   net:                 { th: "สุทธิ",                     en: "Net"                            },

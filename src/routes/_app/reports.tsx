@@ -23,6 +23,8 @@ import type { DateRange } from "react-day-picker";
 import { PencilLine, ArrowRight, CalendarIcon, Download, XCircle, Printer } from "lucide-react";
 import { bucketizeQr, parseBuckets, type QrBucketTotal, type QrTimeBucket } from "@/lib/qr-buckets";
 import { canPrintDirect, printDirect } from "@/lib/counter-printer";
+import { shiftIdsFor } from "@/lib/dash-range";
+import { bangkokDateKey } from "@/lib/business-day";
 
 export const Route = createFileRoute("/_app/reports")({ component: Reports });
 
@@ -218,6 +220,61 @@ ${row("Over / Short", thb(overShort), true)}
 </body></html>`;
   const w = window.open("", "_blank");
   if (w) { w.document.write(html); w.document.close(); }
+}
+
+async function printSalesHistoryReport(r: ReportData, shift: Shift, restaurantName: string) {
+  const businessDay = bangkokDateKey(new Date(shift.opened_at));
+  const rows = (entries: Array<[string, string, boolean?]>) =>
+    entries.map(([label, value, bold]) => ({ label, value, bold }));
+  const sections = [
+    { title: "Sales", rows: rows([
+      ["Gross sales", thb(r.gross)],
+      ["Discounts", `- ${thb(r.discount + r.member)}`],
+      ["Net sales", thb(r.net), true],
+      ["Bills", String(r.bills)],
+    ]) },
+    { title: "Payments", rows: rows([
+      ["QR PAYMENT", thb(r.byMethod.qr)],
+      ["60/40 PAYMENT", thb(r.byMethod.gov_qr)],
+      ["Credit card", thb(r.byMethod.card)],
+      ["Cash", thb(r.byMethod.cash)],
+      ...(r.staffTabCharged > 0 ? [["Staff credit sales", thb(r.staffTabCharged)] as [string, string]] : []),
+      ...(r.refunds > 0 ? [["Refunds", `- ${thb(r.refunds)}`] as [string, string]] : []),
+      ["Payment total", thb(reconciledPaymentTotal(r)), true],
+    ]) },
+    ...(r.qrByBucket.length > 0 ? [{
+      title: "KBank QR cutoff",
+      rows: rows(r.qrByBucket.map((bucket) => [bucket.label, thb(bucket.net)] as [string, string])),
+    }] : []),
+    { title: "Other", rows: rows([
+      ["Voids & Cancellations", thb(r.voids)],
+      ["Cancelled orders", String(r.cancelledCount)],
+      ["Refunds", thb(r.refunds)],
+    ]) },
+  ];
+
+  if (canPrintDirect()) {
+    await printDirect("counter", {
+      kind: "report",
+      restaurant: restaurantName || "Restaurant",
+      report_type: "SALES",
+      business_day: businessDay,
+      printed_at: new Date().toISOString(),
+      sections,
+    });
+    return;
+  }
+
+  const htmlRows = (sectionRows: { label: string; value: string; bold?: boolean }[]) => sectionRows
+    .map((entry) => `<tr${entry.bold ? ' style="font-weight:700"' : ""}><td>${escapeHtml(entry.label)}</td><td style="text-align:right">${escapeHtml(entry.value)}</td></tr>`)
+    .join("");
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Sales Report ${escapeHtml(businessDay)}</title>
+<style>body{font-family:ui-sans-serif,system-ui;padding:24px;max-width:480px;margin:auto}h1{font-size:20px;text-align:center;margin:0}.meta{text-align:center;font-size:12px;color:#555;margin:6px 0 12px}h2{font-size:14px;margin:14px 0 4px;border-bottom:1px solid #bbb}table{width:100%;font-size:13px}td{padding:2px 0}</style></head><body>
+<h1>${escapeHtml(restaurantName) || "Restaurant"}</h1><div class="meta">Sales Report · Business day ${escapeHtml(businessDay)}</div>
+${sections.map((section) => `<h2>${escapeHtml(section.title)}</h2><table>${htmlRows(section.rows)}</table>`).join("")}
+<script>window.onload=()=>setTimeout(()=>window.print(),100)</script></body></html>`;
+  const printWindow = window.open("", "_blank");
+  if (printWindow) { printWindow.document.write(html); printWindow.document.close(); }
 }
 
 function Reports() {
@@ -443,7 +500,7 @@ function Reports() {
       toast.success(t("rep_shift_opened"));
       return;
     }
-    const today = new Date().toISOString().slice(0, 10);
+    const today = bangkokDateKey();
     const { data: newShift, error } = await supabase.from("shifts")
       .insert({ business_day: today, opened_by: staff?.id, opening_float: openTotal })
       .select("*").single();
@@ -615,8 +672,9 @@ function Reports() {
       <h1 className="text-2xl font-bold">{t("nav_reports")}</h1>
 
       <Tabs defaultValue="history">
-        <TabsList>
+        <TabsList className="h-auto flex-wrap justify-start">
           <TabsTrigger value="history">{t("rep_bill_history")}</TabsTrigger>
+          <TabsTrigger value="sales_history">Sales History</TabsTrigger>
           <TabsTrigger value="item_sales">{t("item_sales")}</TabsTrigger>
           {(staff?.role === "admin" || staff?.role === "manager") && (
             <>
@@ -629,6 +687,10 @@ function Reports() {
 
         <TabsContent value="history" className="mt-4">
           <BillHistoryTab />
+        </TabsContent>
+
+        <TabsContent value="sales_history" className="mt-4">
+          <SalesHistoryTab buildReport={buildReport} restaurantName={restaurantName} />
         </TabsContent>
 
         <TabsContent value="item_sales" className="mt-4">
@@ -836,6 +898,142 @@ function Reports() {
         onOpenChange={setManagerOpen}
         onApproved={() => { if (pendingZ) doZ(); setPendingZ(false); }}
       />
+    </div>
+  );
+}
+
+function formatBangkokDateTime(iso: string | null) {
+  if (!iso) return "—";
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Bangkok",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(new Date(iso));
+}
+
+function SalesHistoryTab({
+  buildReport,
+  restaurantName,
+}: {
+  buildReport: (shift: Shift) => Promise<ReportData>;
+  restaurantName: string;
+}) {
+  const [shifts, setShifts] = useState<Shift[]>([]);
+  const [selected, setSelected] = useState<Shift | null>(null);
+  const [report, setReport] = useState<ReportData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [printing, setPrinting] = useState(false);
+
+  const openShiftReport = async (shift: Shift) => {
+    setSelected(shift);
+    setLoading(true);
+    try {
+      setReport(await buildReport(shift));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not load sales history");
+      setReport(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const { data, error } = await supabase.from("shifts").select("*")
+        .order("opened_at", { ascending: false }).limit(120);
+      if (cancelled) return;
+      if (error) {
+        toast.error(error.message);
+        setLoading(false);
+        return;
+      }
+      const rows = (data ?? []) as Shift[];
+      setShifts(rows);
+      if (rows[0]) await openShiftReport(rows[0]);
+      else setLoading(false);
+    })();
+    return () => { cancelled = true; };
+    // The report loader intentionally runs once when this tab mounts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const printSelected = async () => {
+    if (!selected || !report || printing) return;
+    setPrinting(true);
+    try {
+      await printSalesHistoryReport(report, selected, restaurantName);
+      toast.success("Sales report printed");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Sales report print failed");
+    } finally {
+      setPrinting(false);
+    }
+  };
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-[22rem_minmax(0,1fr)]">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Sales History</CardTitle>
+          <p className="text-xs text-muted-foreground">Each row is one register OPEN → Z CLOSE shift.</p>
+        </CardHeader>
+        <CardContent className="max-h-[68vh] space-y-2 overflow-y-auto">
+          {shifts.length === 0 && !loading && <p className="py-8 text-center text-sm text-muted-foreground">No register shifts found.</p>}
+          {shifts.map((shift) => (
+            <button
+              key={shift.id}
+              type="button"
+              onClick={() => void openShiftReport(shift)}
+              className={`w-full rounded-lg border p-3 text-left transition-colors ${selected?.id === shift.id ? "border-primary bg-primary/5" : "hover:bg-muted/50"}`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold">{bangkokDateKey(new Date(shift.opened_at))}</span>
+                <Badge variant={shift.status === "open" ? "default" : "secondary"}>{shift.status === "open" ? "OPEN" : "Z CLOSED"}</Badge>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">Open {formatBangkokDateTime(shift.opened_at)}</p>
+              <p className="text-xs text-muted-foreground">Close {formatBangkokDateTime(shift.closed_at)}</p>
+            </button>
+          ))}
+        </CardContent>
+      </Card>
+
+      <div className="space-y-4">
+        {selected && (
+          <Card>
+            <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
+              <div>
+                <p className="font-bold">Business day {bangkokDateKey(new Date(selected.opened_at))}</p>
+                <p className="text-xs text-muted-foreground">
+                  {formatBangkokDateTime(selected.opened_at)} → {formatBangkokDateTime(selected.closed_at)}
+                </p>
+              </div>
+              <Button onClick={() => void printSelected()} disabled={!report || printing}>
+                <Printer className="mr-2 h-4 w-4" />{printing ? "Printing…" : "Print Sales Report"}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+        {loading && <Card><CardContent className="py-16 text-center text-sm text-muted-foreground">Loading sales report…</CardContent></Card>}
+        {!loading && report && (
+          <>
+            <ReportCard r={report} />
+            {report.qrByBucket.length > 0 && (
+              <Card>
+                <CardHeader><CardTitle className="text-base">KBank QR cutoff</CardTitle></CardHeader>
+                <CardContent className="space-y-1 text-sm">
+                  {report.qrByBucket.map((bucket) => <Row key={bucket.label} label={bucket.label} value={thb(bucket.net)} />)}
+                  <div className="border-t pt-2"><Row label="QR total" value={thb(report.byMethod.qr)} bold /></div>
+                </CardContent>
+              </Card>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -1142,15 +1340,15 @@ function BillHistoryTab() {
     if (!bounds) return;
     setLoading(true);
     try {
-      const [fromDt, toDt] = bounds;
+      const shiftIds = await shiftIdsFor(range, bounds);
+      if (!shiftIds.length) { setBills([]); setLoaded(true); return; }
 
       const { data: rawBills } = await supabase
         .from("bills")
         .select("id,total,paid_at,order_id")
         .not("is_test", "is", true)
-        .eq("status", "paid")
-        .gte("paid_at", fromDt.toISOString())
-        .lte("paid_at", toDt.toISOString())
+        .in("status", ["paid", "partial_refund", "refunded"])
+        .in("shift_id", shiftIds)
         .order("paid_at", { ascending: false })
         .limit(500);
 
@@ -1321,16 +1519,16 @@ function ItemSalesTab() {
     if (!bounds) return;
     setLoading(true);
     try {
-      const [fromDt, toDt] = bounds;
+      const shiftIds = await shiftIdsFor(range, bounds);
+      if (!shiftIds.length) { setRows([]); setLoaded(true); return; }
 
       // 1. Paid bills in range → order IDs
       const { data: bills } = await supabase
         .from("bills")
         .select("id,order_id")
         .not("is_test", "is", true)
-        .eq("status", "paid")
-        .gte("paid_at", fromDt.toISOString())
-        .lte("paid_at", toDt.toISOString())
+        .in("status", ["paid", "partial_refund", "refunded"])
+        .in("shift_id", shiftIds)
         .limit(2000);
 
       if (!bills?.length) { setRows([]); setLoaded(true); return; }
@@ -1794,14 +1992,14 @@ function CancelledOrdersTab() {
     if (!bounds) return;
     setLoading(true);
     try {
-      const [fromDt, toDt] = bounds;
+      const shiftIds = await shiftIdsFor(range, bounds);
+      if (!shiftIds.length) { setOrders([]); setLoaded(true); return; }
       const { data: ords } = await supabase
         .from("orders")
         .select("id,cancel_reason,closed_at,table_id,closed_by")
         .eq("status", "cancelled")
         .not("is_test", "is", true)
-        .gte("closed_at", fromDt.toISOString())
-        .lte("closed_at", toDt.toISOString())
+        .in("shift_id", shiftIds)
         .order("closed_at", { ascending: false })
         .limit(500);
 

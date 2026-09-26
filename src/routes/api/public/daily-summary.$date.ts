@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { createFileRoute } from "@tanstack/react-router";
 import type { Database } from "@/integrations/supabase/types";
+import { bangkokDayUtcBounds } from "@/lib/business-day";
 
 // Daily sales summary for a business day, shaped to fill the LONMOH Manager app's
 // Daily Sales Entry. Read-only aggregate over paid, non-test bills. Uses a path
@@ -48,7 +49,9 @@ export const Route = createFileRoute("/api/public/daily-summary/$date")({
 
         const sb = supabase as any;
 
-        const { data: shifts } = await sb.from("shifts").select("id").eq("business_day", date);
+        const [openedFrom, openedBefore] = bangkokDayUtcBounds(date);
+        const { data: shifts } = await sb.from("shifts").select("id")
+          .gte("opened_at", openedFrom).lt("opened_at", openedBefore);
         const shiftIds = (shifts ?? []).map((s: any) => s.id);
         if (shiftIds.length === 0) return json({ date, bill_count: 0, has_data: false });
 

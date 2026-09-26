@@ -20,6 +20,8 @@ function Dashboard() {
   const [voidsTotal, setVoidsTotal]   = useState(0);
   const [cancelledCt, setCancelledCt] = useState(0);
   const [totalCost, setTotalCost] = useState(0);
+  const [refundsTotal, setRefundsTotal] = useState(0);
+  const [staffSales, setStaffSales] = useState<{ gross: number; net: number; discount: number }>({ gross: 0, net: 0, discount: 0 });
 
   const bounds = useMemo<[Date, Date]>(() => {
     if (range === "custom" && custom?.from) {
@@ -36,19 +38,31 @@ function Dashboard() {
       const shiftIds = await shiftIdsFor(range, bounds);
       if (!shiftIds.length) {
         setBills([]); setPayments([]); setVoidsTotal(0); setCancelledCt(0); setTotalCost(0);
+        setRefundsTotal(0); setStaffSales({ gross: 0, net: 0, discount: 0 });
         return;
       }
-      const [{ data: b }, { data: voidRows }, { data: cancelledOrds }] = await Promise.all([
+      const [{ data: b }, { data: voidRows }, { data: cancelledOrds }, { data: refundRows }, { data: staffRows }] = await Promise.all([
         supabase.from("bills").select("id,order_id,total,subtotal,discount_amount,member_discount_amount,vat_amount,vat_mode")
-          .eq("status","paid").in("shift_id", shiftIds).not("is_test", "is", true),
+          .in("status", ["paid", "partial_refund", "refunded"]).in("shift_id", shiftIds).not("is_test", "is", true),
         supabase.from("voids").select("amount").in("shift_id", shiftIds),
         supabase.from("orders").select("id").in("shift_id", shiftIds).eq("status","cancelled").not("is_test", "is", true),
+        supabase.from("refunds").select("amount").in("shift_id", shiftIds),
+        (supabase as any).from("staff_tab_charges").select("order_id,subtotal,discount_amount,amount").in("shift_id", shiftIds).neq("status", "voided"),
       ]);
       setBills((b ?? []) as typeof bills);
       setVoidsTotal((voidRows ?? []).reduce((s, v) => s + Number(v.amount), 0));
       setCancelledCt((cancelledOrds ?? []).length);
+      setRefundsTotal((refundRows ?? []).reduce((sum, row) => sum + Number(row.amount ?? 0), 0));
+      setStaffSales({
+        gross: (staffRows ?? []).reduce((sum: number, row: any) => sum + Number(row.subtotal ?? row.amount ?? 0), 0),
+        net: (staffRows ?? []).reduce((sum: number, row: any) => sum + Number(row.amount ?? 0), 0),
+        discount: (staffRows ?? []).reduce((sum: number, row: any) => sum + Number(row.discount_amount ?? 0), 0),
+      });
       const ids      = (b ?? []).map(x => x.id);
-      const orderIds = (b ?? []).map(x => x.order_id).filter(Boolean) as string[];
+      const orderIds = [
+        ...(b ?? []).map(x => x.order_id),
+        ...(staffRows ?? []).map((row: any) => row.order_id),
+      ].filter(Boolean) as string[];
       // Fetch payments + cost items in parallel
       const [paymentsRes, costRes] = await Promise.all([
         ids.length
@@ -67,9 +81,9 @@ function Dashboard() {
   }, [bounds, range, custom]);
 
   const stats = useMemo(() => {
-    const gross     = bills.reduce((s, b) => s + Number(b.subtotal), 0);
-    const net       = bills.reduce((s, b) => s + Number(b.total), 0);
-    const discounts = bills.reduce((s, b) => s + Number(b.discount_amount) + Number(b.member_discount_amount), 0);
+    const gross     = bills.reduce((s, b) => s + Number(b.subtotal), 0) + staffSales.gross;
+    const net       = bills.reduce((s, b) => s + Number(b.total), 0) + staffSales.net - refundsTotal;
+    const discounts = bills.reduce((s, b) => s + Number(b.discount_amount) + Number(b.member_discount_amount), 0) + staffSales.discount;
     const byMethod: Record<string,number> = { cash:0, qr:0, gov_qr:0, card:0 };
     payments.forEach(p => { byMethod[p.method] = (byMethod[p.method]??0) + Number(p.amount); });
     const tipTotal = payments.filter(p => p.method==="qr").reduce((s,p) => s+Number(p.tip_amount??0), 0);
@@ -84,7 +98,7 @@ function Dashboard() {
     const costPct     = gross > 0 ? (totalCost  / gross) * 100 : 0;
     const marginPct   = gross > 0 ? (grossProfit / gross) * 100 : 0;
     return { gross, net, discounts, byMethod, count: bills.length, tipTotal, vatIncluded, vatAdded, vatTotal, grossProfit, costPct, marginPct };
-  }, [bills, payments, totalCost]);
+  }, [bills, payments, totalCost, refundsTotal, staffSales]);
 
   // Encode range into query string for detail pages
   const rangeQ = range === "custom" ? "" : `?range=${range}`;
@@ -161,6 +175,12 @@ function Dashboard() {
           {stats.byMethod.gov_qr > 0 && (
             <div className="grid grid-cols-3 gap-4">
               <StatCard title={t("pm_gov_qr")} value={thb(stats.byMethod.gov_qr)} />
+            </div>
+          )}
+          {(staffSales.net > 0 || refundsTotal > 0) && (
+            <div className="border-t pt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {staffSales.net > 0 && <StatCard title="Staff credit sales" value={thb(staffSales.net)} />}
+              {refundsTotal > 0 && <StatCard title="Refunds" value={`- ${thb(refundsTotal)}`} />}
             </div>
           )}
           {stats.tipTotal > 0 && (

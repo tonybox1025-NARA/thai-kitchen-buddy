@@ -4,6 +4,7 @@ import type { Database } from "@/integrations/supabase/types";
 import { isFrontCounterCategory } from "@/lib/print/routing";
 import { formatSetKitchenNotes, setCostFromLabels, type SetConfig } from "@/lib/set-menu";
 import { z } from "zod";
+import { bangkokDateKey } from "@/lib/business-day";
 
 function createPublicServerClient() {
   const url = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
@@ -233,7 +234,7 @@ export const Route = createFileRoute("/api/public/qr-order")({
           .eq("status", "open")
           .maybeSingle();
         if (!shift) {
-          const today = new Date().toISOString().slice(0, 10);
+          const today = bangkokDateKey();
           const { data: cfg } = await supabase
             .from("settings")
             .select("starting_cash")

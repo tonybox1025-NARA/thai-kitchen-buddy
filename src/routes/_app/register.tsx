@@ -22,6 +22,8 @@ import type { DateRange } from "react-day-picker";
 import { PencilLine, ArrowRight, CalendarIcon, XCircle, Printer } from "lucide-react";
 import { bucketizeQr, parseBuckets, type QrBucketTotal, type QrTimeBucket } from "@/lib/qr-buckets";
 import { canPrintDirect, printDirect } from "@/lib/counter-printer";
+import { shiftIdsFor } from "@/lib/dash-range";
+import { bangkokDateKey } from "@/lib/business-day";
 
 export const Route = createFileRoute("/_app/register")({ component: Register });
 
@@ -432,7 +434,7 @@ function Register() {
         toast.success(t("rep_shift_opened"));
         return;
       }
-    const today = new Date().toISOString().slice(0, 10);
+    const today = bangkokDateKey();
     const { data: newShift, error } = await supabase.from("shifts")
       .insert({ business_day: today, opened_by: staff?.id, opening_float: openTotal })
       .select("*").single();
@@ -844,15 +846,15 @@ function BillHistoryTab() {
     if (!bounds) return;
     setLoading(true);
     try {
-      const [fromDt, toDt] = bounds;
+      const shiftIds = await shiftIdsFor(range, bounds);
+      if (!shiftIds.length) { setBills([]); setLoaded(true); return; }
 
       const { data: rawBills } = await supabase
         .from("bills")
         .select("id,total,paid_at,order_id")
         .not("is_test", "is", true)
-        .eq("status", "paid")
-        .gte("paid_at", fromDt.toISOString())
-        .lte("paid_at", toDt.toISOString())
+        .in("status", ["paid", "partial_refund", "refunded"])
+        .in("shift_id", shiftIds)
         .order("paid_at", { ascending: false })
         .limit(500);
 
@@ -1023,16 +1025,16 @@ function ItemSalesTab() {
     if (!bounds) return;
     setLoading(true);
     try {
-      const [fromDt, toDt] = bounds;
+      const shiftIds = await shiftIdsFor(range, bounds);
+      if (!shiftIds.length) { setRows([]); setLoaded(true); return; }
 
       // 1. Paid bills in range → order IDs
       const { data: bills } = await supabase
         .from("bills")
         .select("id,order_id")
         .not("is_test", "is", true)
-        .eq("status", "paid")
-        .gte("paid_at", fromDt.toISOString())
-        .lte("paid_at", toDt.toISOString())
+        .in("status", ["paid", "partial_refund", "refunded"])
+        .in("shift_id", shiftIds)
         .limit(2000);
 
       if (!bills?.length) { setRows([]); setLoaded(true); return; }
@@ -1496,14 +1498,14 @@ function CancelledOrdersTab() {
     if (!bounds) return;
     setLoading(true);
     try {
-      const [fromDt, toDt] = bounds;
+      const shiftIds = await shiftIdsFor(range, bounds);
+      if (!shiftIds.length) { setOrders([]); setLoaded(true); return; }
       const { data: ords } = await supabase
         .from("orders")
         .select("id,cancel_reason,closed_at,table_id,closed_by")
         .eq("status", "cancelled")
         .not("is_test", "is", true)
-        .gte("closed_at", fromDt.toISOString())
-        .lte("closed_at", toDt.toISOString())
+        .in("shift_id", shiftIds)
         .order("closed_at", { ascending: false })
         .limit(500);
 
