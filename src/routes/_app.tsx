@@ -6,10 +6,11 @@ import { LanguageToggle } from "@/components/LanguageToggle";
 import { ConnectionStatus } from "@/components/ConnectionStatus";
 import { PinKeypad } from "@/components/PinKeypad";
 import { Button } from "@/components/ui/button";
+import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { LayoutGrid, BarChart3, FileText, Settings, LogOut, UserCircle2, Heart, UtensilsCrossed, BadgePercent, Activity, Wallet } from "lucide-react";
+import { LayoutGrid, BarChart3, FileText, Settings, LogOut, UserCircle2, Heart, UtensilsCrossed, BadgePercent, Activity, Wallet, Menu } from "lucide-react";
 import { installAudioUnlockListeners, unlockAudio } from "@/lib/audio-alert";
 import { useQrAlertCount } from "@/lib/qr-alert-count";
 import { OfflineBanner } from "@/components/OfflineBanner";
@@ -173,8 +174,55 @@ function AppLayout() {
             );
           })}
         </nav>
+        {!path.startsWith("/crew") && (
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="outline" size="icon" className="shrink-0 lg:hidden" aria-label={lang === "th" ? "เปิดเมนูหลัก" : "Open main menu"}>
+                <Menu className="h-5 w-5" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="flex w-[86vw] max-w-sm flex-col p-0">
+              <SheetHeader className="border-b px-5 py-4 text-left">
+                <SheetTitle>🍽️ {t("app_name")}</SheetTitle>
+              </SheetHeader>
+              <nav className="flex-1 space-y-1 overflow-y-auto p-3">
+                {navItems.map((it) => {
+                  const active = path.startsWith(it.to);
+                  const showBadge = it.to === "/pos" && qrAlertCount > 0;
+                  return (
+                    <SheetClose asChild key={it.to}>
+                      <Link
+                        to={it.to}
+                        className={`flex min-h-12 items-center gap-3 rounded-lg px-4 py-3 text-base font-medium ${active ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                      >
+                        <it.icon className="h-5 w-5 shrink-0" />
+                        <span className="flex-1">{it.label}</span>
+                        {showBadge && (
+                          <span className="inline-flex min-w-6 items-center justify-center rounded-full bg-destructive px-2 py-0.5 text-xs font-bold text-destructive-foreground">
+                            {qrAlertCount}
+                          </span>
+                        )}
+                      </Link>
+                    </SheetClose>
+                  );
+                })}
+              </nav>
+              <div className="space-y-3 border-t p-4 text-sm text-muted-foreground">
+                <div>
+                  <p className="font-medium text-foreground">{staff.name}</p>
+                  <p>{staff.role}</p>
+                </div>
+                {!nativeTill && (
+                  <Button variant="outline" className="w-full justify-start" onClick={() => signOut()}>
+                    <LogOut className="mr-2 h-4 w-4" />{t("logout")}
+                  </Button>
+                )}
+              </div>
+            </SheetContent>
+          </Sheet>
+        )}
         <div className="ml-auto flex items-center gap-2">
-          <ConnectionStatus />
+          <div className="hidden sm:block"><ConnectionStatus /></div>
           {!path.startsWith("/crew") && <LanguageToggle />}
           <Button variant="outline" size="sm" onClick={() => setStaff(null)} className="gap-2">
             <UserCircle2 className="h-4 w-4" />
@@ -182,7 +230,7 @@ function AppLayout() {
             <span className="hidden sm:inline text-xs text-muted-foreground">({staff.role})</span>
           </Button>
           {!nativeTill && (
-            <Button variant="ghost" size="sm" onClick={() => signOut()} title={t("logout")}>
+            <Button variant="ghost" size="sm" onClick={() => signOut()} title={t("logout")} className="hidden sm:inline-flex">
               <LogOut className="h-4 w-4" />
             </Button>
           )}
