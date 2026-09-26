@@ -14,10 +14,19 @@ type RTable = {
   status: "available" | "occupied" | "bill_requested";
   guests: number;
 };
-type OpenOrder = { id: string; table_id: string | null; opened_at: string };
+type OpenOrder = { id: string; table_id: string | null; shift_id: string | null; opened_at: string };
 type AttendancePerson = { external_code: string; employee_id: string | null; external_name: string };
 type AttendanceDay = { external_code: string; employee_id: string | null; clock_in: string | null; clock_out: string | null };
-type TableItemLine = { name_th: string; name_en: string; qty: number; amount: number };
+type TableItemLine = {
+  orderId: string;
+  name_th: string;
+  name_en: string;
+  qty: number;
+  amount: number;
+  sentAt: string | null;
+  roundNumber: number | null;
+  roundSource: string | null;
+};
 
 function inferredShift(clockIn: string | null): "14:00–01:00" | "17:00–04:00" | null {
   if (!clockIn) return null;
@@ -33,6 +42,19 @@ function minutesSince(iso: string): number {
 function fmtDuration(min: number): string {
   if (min < 60) return `${min}m`;
   return `${Math.floor(min / 60)}h ${min % 60}m`;
+}
+
+function fmtOrderTime(iso: string | null, lang: "th" | "en"): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleTimeString(lang === "th" ? "th-TH" : "en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Bangkok",
+  });
+}
+
+function itemRoundKey(item: TableItemLine): string {
+  return `${item.orderId}:${item.roundNumber ?? "pending"}`;
 }
 
 const TOP_ITEM_EXCLUDED_EN = new Set([
@@ -91,12 +113,15 @@ function LivePage() {
     // Tables + open orders (for how long each table has been seated)
     const [{ data: tbls }, { data: openOrders }, { data: shift }] = await Promise.all([
       supabase.from("restaurant_tables").select("id,code,capacity,status,guests").not("is_test", "is", true).order("code"),
-      supabase.from("orders").select("id,table_id,opened_at").eq("status", "open").not("table_id", "is", null).not("is_test", "is", true),
+      supabase.from("orders").select("id,table_id,shift_id,opened_at").eq("status", "open").not("table_id", "is", null).not("is_test", "is", true),
       supabase.from("shifts").select("id").eq("status", "open").order("opened_at", { ascending: false }).limit(1),
     ]);
+    const currentShift = shift?.[0] ?? null;
+    const openOrderRows = ((openOrders ?? []) as OpenOrder[])
+      .filter((order) => !!currentShift?.id && order.shift_id === currentShift.id);
     setTables((tbls ?? []) as RTable[]);
     const map = new Map<string, string>();
-    for (const o of (openOrders ?? []) as OpenOrder[]) {
+    for (const o of openOrderRows) {
       if (o.table_id && (!map.has(o.table_id) || o.opened_at < map.get(o.table_id)!)) map.set(o.table_id, o.opened_at);
     }
     setOpenedAt(map);
@@ -116,7 +141,6 @@ function LivePage() {
 
     // Current unpaid value per active table. Use live, non-voided order items so
     // this stays separate from the paid-sales headline above.
-    const openOrderRows = (openOrders ?? []) as OpenOrder[];
     const orderToTable = new Map(
       openOrderRows
         .filter((o): o is OpenOrder & { table_id: string } => !!o.table_id)
@@ -127,18 +151,36 @@ function LivePage() {
     if (orderToTable.size > 0) {
       const { data: openItems } = await (supabase as any)
         .from("order_items")
-        .select("order_id,name_th,name_en,qty,unit_price")
+        .select("order_id,name_th,name_en,qty,unit_price,sent_at,round_number,round_source")
         .in("order_id", [...orderToTable.keys()])
         .is("voided_at", null);
-      for (const item of (openItems ?? []) as { order_id: string; name_th: string; name_en: string; qty: number; unit_price: number }[]) {
+      for (const item of (openItems ?? []) as {
+        order_id: string;
+        name_th: string;
+        name_en: string;
+        qty: number;
+        unit_price: number;
+        sent_at: string | null;
+        round_number: number | null;
+        round_source: string | null;
+      }[]) {
         const tableId = orderToTable.get(item.order_id);
         if (!tableId) continue;
         const qty = Number(item.qty);
         const amount = qty * Number(item.unit_price);
         totals.set(tableId, (totals.get(tableId) ?? 0) + amount);
         const groups = itemGroups.get(tableId) ?? new Map<string, TableItemLine>();
-        const key = `${item.name_en}\u0000${item.name_th}\u0000${item.unit_price}`;
-        const current = groups.get(key) ?? { name_th: item.name_th, name_en: item.name_en, qty: 0, amount: 0 };
+        const key = `${item.order_id}\u0000${item.round_number ?? "pending"}\u0000${item.name_en}\u0000${item.name_th}\u0000${item.unit_price}`;
+        const current = groups.get(key) ?? {
+          orderId: item.order_id,
+          name_th: item.name_th,
+          name_en: item.name_en,
+          qty: 0,
+          amount: 0,
+          sentAt: item.sent_at,
+          roundNumber: item.round_number,
+          roundSource: item.round_source,
+        };
         current.qty += qty;
         current.amount += amount;
         groups.set(key, current);
@@ -149,12 +191,18 @@ function LivePage() {
     setTableItems(new Map(
       [...itemGroups.entries()].map(([tableId, groups]) => [
         tableId,
-        [...groups.values()].sort((a, b) => b.amount - a.amount || a.name_en.localeCompare(b.name_en)),
+        [...groups.values()].sort((a, b) => {
+          const aPending = a.roundNumber === null ? 1 : 0;
+          const bPending = b.roundNumber === null ? 1 : 0;
+          return aPending - bPending
+            || (a.roundNumber ?? 0) - (b.roundNumber ?? 0)
+            || String(a.sentAt ?? "").localeCompare(String(b.sentAt ?? ""))
+            || a.name_en.localeCompare(b.name_en);
+        }),
       ]),
     ));
 
     // Today's paid sales for the open shift
-    const currentShift = shift?.[0] ?? null;
     setHasShift(!!currentShift);
     if (currentShift?.id) {
       const [{ data: bills }, { data: refunds }, { data: staffCharges }] = await Promise.all([
@@ -453,13 +501,33 @@ function LivePage() {
                   </button>
                   {expandedTableId === tbl.id && (
                     <div className="space-y-2 border-t px-3 py-3">
-                      {tbl.items.length > 0 ? tbl.items.map((item) => (
-                        <div key={`${item.name_en}-${item.name_th}-${item.amount}`} className="flex items-start gap-3 text-sm">
-                          <span className="flex-none font-semibold tabular-nums">{item.qty}×</span>
-                          <span className="min-w-0 flex-1">{lang === "th" ? (item.name_th || item.name_en) : (item.name_en || item.name_th)}</span>
-                          <span className="flex-none font-medium tabular-nums">{thb(item.amount)}</span>
-                        </div>
-                      )) : (
+                      {tbl.items.length > 0 ? tbl.items.map((item, index) => {
+                        const previous = tbl.items[index - 1];
+                        const showRoundHeader = !previous || itemRoundKey(previous) !== itemRoundKey(item);
+                        const pending = item.roundNumber === null;
+                        return (
+                          <div key={`${itemRoundKey(item)}-${item.name_en}-${item.name_th}-${item.amount}`}>
+                            {showRoundHeader && (
+                              <div className={`${index > 0 ? "mt-3" : ""} mb-2 flex items-center justify-between rounded-md bg-muted px-2.5 py-1.5 text-xs`}>
+                                <div className="font-bold">
+                                  {pending
+                                    ? (lang === "th" ? "รอส่ง" : "Pending")
+                                    : (lang === "th" ? `รอบ ${item.roundNumber}` : `Round ${item.roundNumber}`)}
+                                </div>
+                                <div className="flex items-center gap-2 tabular-nums">
+                                  {item.roundSource && <span className="text-[10px] text-muted-foreground">{item.roundSource.toUpperCase()}</span>}
+                                  {item.sentAt && <span className="font-semibold">{fmtOrderTime(item.sentAt, lang)}</span>}
+                                </div>
+                              </div>
+                            )}
+                            <div className="flex items-start gap-3 text-sm">
+                              <span className="flex-none font-semibold tabular-nums">{item.qty}×</span>
+                              <span className="min-w-0 flex-1">{lang === "th" ? (item.name_th || item.name_en) : (item.name_en || item.name_th)}</span>
+                              <span className="flex-none font-medium tabular-nums">{thb(item.amount)}</span>
+                            </div>
+                          </div>
+                        );
+                      }) : (
                         <div className="py-1 text-center text-xs text-muted-foreground">
                           {lang === "th" ? "ยังไม่มีรายการอาหาร" : "No order items yet"}
                         </div>
