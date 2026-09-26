@@ -126,7 +126,11 @@ export const Route = createFileRoute("/api/public/daily-summary/$date")({
           net_sales: sum(billRows, (b) => b.total) + staffCredit - refundTotal,
           // Sales tenders only. Staff-tab collections settle older receivables,
           // so expose them separately instead of inflating today's sales tender.
+          // Keep the combined field for older Manager builds, and expose the
+          // ordinary PromptPay amount explicitly so the UI never has to infer
+          // it by subtracting 60/40.
           qr_total_amount: byMethod("qr") + byMethod("gov_qr"),
+          qr_prompt_amount: byMethod("qr"),
           sixty_forty_amount: byMethod("gov_qr"),
           credit_amount: byMethod("card"),
           // Preserve what was actually received by each tender. Cash paid back
