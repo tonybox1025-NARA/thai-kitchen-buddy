@@ -65,7 +65,6 @@ function PosPage() {
   const [combineSelected, setCombineSelected] = useState<string[]>([]);
   const [combineTargetId, setCombineTargetId] = useState<string | null>(null);
   const [combineBusy, setCombineBusy] = useState(false);
-  const [combinePinOpen, setCombinePinOpen] = useState(false);
   const [staffTabOpen, setStaffTabOpen] = useState(false);
   const [staffChoices, setStaffChoices] = useState<StaffChoice[]>([]);
   const [staffTabRows, setStaffTabRows] = useState<StaffTabSummary[]>([]);
@@ -412,8 +411,7 @@ function PosPage() {
 
   const requestCombine = () => {
     if (combineSelected.length !== 2 || !combineTargetId) return;
-    if (staff?.role === "staff") setCombinePinOpen(true);
-    else void combineChosenTables();
+    void combineChosenTables();
   };
 
   const takeoutOrders = specialOrders.filter((o) => o.source === "takeout");
@@ -758,11 +756,6 @@ function PosPage() {
         </DialogContent>
       </Dialog>
 
-      <ManagerPinDialog
-        open={combinePinOpen}
-        onOpenChange={setCombinePinOpen}
-        onApproved={() => { void combineChosenTables(); }}
-      />
       <ManagerPinDialog
         open={staffTabRemovePinOpen}
         onOpenChange={setStaffTabRemovePinOpen}

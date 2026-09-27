@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { thb } from "@/lib/format";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { ManagerPinDialog } from "@/components/ManagerPinDialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -305,8 +304,6 @@ function Reports() {
   const [cashCount, setCashCount] = useState<Record<number, number>>({});
   const [restaurantName, setRestaurantName] = useState("");
   const [qrBuckets, setQrBuckets] = useState<QrTimeBucket[]>([]);
-  const [managerOpen, setManagerOpen] = useState(false);
-  const [pendingZ, setPendingZ] = useState(false);
   const [xLoading, setXLoading] = useState(false);
   // Register open flow
   const [openDlg, setOpenDlg] = useState(false);
@@ -590,7 +587,6 @@ function Reports() {
 
   const submitZ = async () => {
     if (!shift || !report) return;
-    if (staff?.role === "staff") { setPendingZ(true); setManagerOpen(true); return; }
     await doZ();
   };
 
@@ -701,13 +697,9 @@ function Reports() {
           <TabsTrigger value="history">{t("rep_bill_history")}</TabsTrigger>
           <TabsTrigger value="sales_history">Sales History</TabsTrigger>
           <TabsTrigger value="item_sales">{t("item_sales")}</TabsTrigger>
-          {(staff?.role === "admin" || staff?.role === "manager") && (
-            <>
-              <TabsTrigger value="cancelled">{t("rep_cancelled")}</TabsTrigger>
-              <TabsTrigger value="loyalty_audit">{t("rep_loyalty_audit")}</TabsTrigger>
-              <TabsTrigger value="z_history">Z Report History</TabsTrigger>
-            </>
-          )}
+          <TabsTrigger value="cancelled">{t("rep_cancelled")}</TabsTrigger>
+          <TabsTrigger value="loyalty_audit">{t("rep_loyalty_audit")}</TabsTrigger>
+          <TabsTrigger value="z_history">Z Report History</TabsTrigger>
         </TabsList>
 
         <TabsContent value="history" className="mt-4">
@@ -722,19 +714,15 @@ function Reports() {
           <ItemSalesTab />
         </TabsContent>
 
-        {(staff?.role === "admin" || staff?.role === "manager") && (
-          <>
-            <TabsContent value="cancelled" className="mt-4">
-              <CancelledOrdersTab />
-            </TabsContent>
-            <TabsContent value="loyalty_audit" className="mt-4">
-              <LoyaltyAuditTab />
-            </TabsContent>
-            <TabsContent value="z_history" className="mt-4">
-              <ZReportHistoryTab restaurantName={restaurantName} />
-            </TabsContent>
-          </>
-        )}
+        <TabsContent value="cancelled" className="mt-4">
+          <CancelledOrdersTab />
+        </TabsContent>
+        <TabsContent value="loyalty_audit" className="mt-4">
+          <LoyaltyAuditTab />
+        </TabsContent>
+        <TabsContent value="z_history" className="mt-4">
+          <ZReportHistoryTab restaurantName={restaurantName} />
+        </TabsContent>
       </Tabs>
 
       {/* Open register dialog — count starting cash */}
@@ -918,11 +906,6 @@ function Reports() {
         </DialogContent>
       </Dialog>
 
-      <ManagerPinDialog
-        open={managerOpen}
-        onOpenChange={setManagerOpen}
-        onApproved={() => { if (pendingZ) doZ(); setPendingZ(false); }}
-      />
     </div>
   );
 }

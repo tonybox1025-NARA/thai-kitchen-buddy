@@ -14,7 +14,6 @@ import { ArrowLeft, Banknote, QrCode, CreditCard, Printer, RotateCcw, PencilLine
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { ManagerPinDialog } from "@/components/ManagerPinDialog";
 import { openCashDrawer, printCounter } from "@/lib/counter-printer";
 import { isOffline } from "@/lib/online-status";
 import { tableLabel } from "@/lib/table";
@@ -209,8 +208,6 @@ function PaymentPage() {
   const [refundMode, setRefundMode] = useState<"items" | "amount">("items");
   const [refundItemQty, setRefundItemQty] = useState<Record<string, number>>({});
   const [refundedItemQty, setRefundedItemQty] = useState<Record<string, number>>({});
-  const [managerOpen, setManagerOpen] = useState(false);
-  const [pendingAction, setPendingAction] = useState<"refund" | "correction" | null>(null);
 
   // Customer-facing view
   const [customerViewOpen, setCustomerViewOpen] = useState(false);
@@ -1036,7 +1033,6 @@ function PaymentPage() {
       return;
     }
     if (refundMode === "amount" && refundAmt <= 0) return;
-    if (staff?.role === "staff") { setPendingAction("refund"); setManagerOpen(true); return; }
     doRefund();
   };
   const doRefund = async () => {
@@ -1067,7 +1063,7 @@ function PaymentPage() {
   };
 
   const paidStatus = bill?.status === "paid" || bill?.status === "partial_refund";
-  const canCorrect = !!paidStatus && (staff?.role === "admin" || staff?.role === "manager");
+  const canCorrect = !!paidStatus && !!staff;
   const selectedRefundGross = items.reduce(
     (sum, item) => sum + (refundItemQty[item.id] ?? 0) * Number(item.unit_price),
     0,
@@ -1078,7 +1074,6 @@ function PaymentPage() {
       : selectedRefundGross,
   );
   const openCorr = () => {
-    if (staff?.role === "manager") { setPendingAction("correction"); setManagerOpen(true); return; }
     setCorrChanges({}); setCorrReason(""); setCorrOpen(true);
   };
   const applyCorrection = async () => {
@@ -1993,11 +1988,6 @@ function PaymentPage() {
         govQrLabel={govQrLabel}
       />
 
-      <ManagerPinDialog open={managerOpen} onOpenChange={setManagerOpen} onApproved={() => {
-        if (pendingAction === "refund") doRefund();
-        if (pendingAction === "correction") { setCorrChanges({}); setCorrReason(""); setCorrOpen(true); }
-        setPendingAction(null);
-      }} />
 
       {/* ── Payment type correction dialog ──────────────────────────────────── */}
       <Dialog open={corrOpen} onOpenChange={setCorrOpen}>

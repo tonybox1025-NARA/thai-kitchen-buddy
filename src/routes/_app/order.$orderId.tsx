@@ -11,7 +11,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Plus, Minus, Trash2, ChefHat, Receipt, ArrowLeft, AlertTriangle, ArrowLeftRight, X, Printer, Eye, Layers, Bell, QrCode, Check, ShoppingBag, Tag, Users } from "lucide-react";
-import { ManagerPinDialog } from "@/components/ManagerPinDialog";
 import { SetMenuDialog } from "@/components/SetMenuDialog";
 import { SETS, buildSetDef, formatSetKitchenNotes, setConfigCost, type SetConfig, type SetDef, type SetItemRow } from "@/lib/set-menu";
 import { printCounter, printCounterJobs, printKitchenJobs, type CounterPrintPayload } from "@/lib/counter-printer";
@@ -175,8 +174,6 @@ function OrderPage() {
   const [voidItem, setVoidItem] = useState<Item | null>(null);
   const [voidReason, setVoidReason] = useState("");
   const [voidPreset, setVoidPreset] = useState<string>("");
-  const [managerOpen, setManagerOpen] = useState(false);
-  const [managerAction, setManagerAction] = useState<"void" | "close_table" | "move_table" | null>(null);
   const [tableCode, setTableCode] = useState<string>("");
   const [tableRawCode, setTableRawCode] = useState<string>("");
   const [tableId, setTableId] = useState<string>("");
@@ -630,7 +627,6 @@ function OrderPage() {
 
   const performVoid = async () => {
     if (!voidItem || !voidReason.trim()) return;
-    if (staff?.role === "staff") { setManagerAction("void"); setManagerOpen(true); return; }
     await doVoid();
   };
 
@@ -756,12 +752,10 @@ function OrderPage() {
   };
 
   const openCloseTable = () => {
-    if (staff?.role === "staff") { setManagerAction("close_table"); setManagerOpen(true); return; }
     setCloseTableOpen(true);
   };
 
   const openMoveTable = async () => {
-    if (staff?.role === "staff") { setManagerAction("move_table"); setManagerOpen(true); return; }
     await loadAvailableTables();
     setMoveTableOpen(true);
   };
@@ -1597,17 +1591,6 @@ function OrderPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <ManagerPinDialog
-        open={managerOpen}
-        onOpenChange={setManagerOpen}
-        onApproved={async () => {
-          if (managerAction === "void") { doVoid(); }
-          else if (managerAction === "close_table") { setCloseTableOpen(true); }
-          else if (managerAction === "move_table") { await loadAvailableTables(); setMoveTableOpen(true); }
-          setManagerAction(null);
-        }}
-      />
 
       <Dialog open={guestDialogOpen} onOpenChange={setGuestDialogOpen}>
         <DialogContent className="max-w-sm">

@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { ManagerPinDialog } from "@/components/ManagerPinDialog";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
@@ -138,7 +137,6 @@ function CrewPage() {
   const [voidPreset, setVoidPreset] = useState<VoidReasonKey>("changedMind");
   const [voidReason, setVoidReason] = useState("");
   const [voiding, setVoiding] = useState(false);
-  const [managerOpen, setManagerOpen] = useState(false);
   const touchStart = useRef(0);
 
   const selected = tables.find((table) => table.id === selectedId) ?? null;
@@ -304,10 +302,6 @@ function CrewPage() {
   };
   const confirmVoid = async () => {
     if (!voidItem || !voidReason.trim()) return;
-    if (staff?.role === "staff") {
-      setManagerOpen(true);
-      return;
-    }
     await executeVoid();
   };
   const executeVoid = async () => {
@@ -683,11 +677,6 @@ function CrewPage() {
           </Button>
         </DialogContent>
       </Dialog>
-      <ManagerPinDialog
-        open={managerOpen}
-        onOpenChange={setManagerOpen}
-        onApproved={() => void executeVoid()}
-      />
     </div>
   );
 }

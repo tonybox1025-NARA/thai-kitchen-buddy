@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { thb } from "@/lib/format";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { ManagerPinDialog } from "@/components/ManagerPinDialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -220,8 +219,6 @@ function Register() {
   const [cashCount, setCashCount] = useState<Record<number, number>>({});
   const [restaurantName, setRestaurantName] = useState("");
   const [qrBuckets, setQrBuckets] = useState<QrTimeBucket[]>([]);
-  const [managerOpen, setManagerOpen] = useState(false);
-  const [pendingZ, setPendingZ] = useState(false);
   const [xLoading, setXLoading] = useState(false);
   // Register open flow
   const [openDlg, setOpenDlg] = useState(false);
@@ -514,7 +511,6 @@ function Register() {
 
   const submitZ = async () => {
     if (!shift || !report) return;
-    if (staff?.role === "staff") { setPendingZ(true); setManagerOpen(true); return; }
     await doZ();
   };
 
@@ -826,11 +822,6 @@ function Register() {
         </DialogContent>
       </Dialog>
 
-      <ManagerPinDialog
-        open={managerOpen}
-        onOpenChange={setManagerOpen}
-        onApproved={() => { if (pendingZ) doZ(); setPendingZ(false); }}
-      />
     </div>
   );
 }
