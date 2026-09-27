@@ -44,6 +44,7 @@ import {
   Download,
   RefreshCw,
   Smartphone,
+  KeyRound,
 } from "lucide-react";
 import { toast } from "sonner";
 import { makeDriver, printInDedicatedDocument, type DriverId } from "@/lib/print/PrintService";
@@ -3055,6 +3056,11 @@ function StaffTab() {
   const [role, setRole] = useState<Staff["role"]>("staff");
   const [pin, setPin] = useState("");
   const [adminPin, setAdminPin] = useState("");
+  const [pinStaff, setPinStaff] = useState<Staff | null>(null);
+  const [newPin, setNewPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
+  const [pinChangeAdminPin, setPinChangeAdminPin] = useState("");
+  const [changingPin, setChangingPin] = useState(false);
 
   const load = async () => {
     const { data } = await supabase.rpc("list_staff");
@@ -3106,6 +3112,43 @@ function StaffTab() {
     load();
   };
 
+  const closePinChange = () => {
+    setPinStaff(null);
+    setNewPin("");
+    setConfirmPin("");
+    setPinChangeAdminPin("");
+  };
+
+  const changePin = async () => {
+    if (!pinStaff) return;
+    if (newPin.length < 4 || newPin.length > 6) {
+      toast.error("New PIN must be 4–6 digits");
+      return;
+    }
+    if (newPin !== confirmPin) {
+      toast.error("New PINs do not match");
+      return;
+    }
+    if (pinChangeAdminPin.length < 4) {
+      toast.error("Admin PIN required");
+      return;
+    }
+
+    setChangingPin(true);
+    const { error } = await supabase.rpc("set_staff_pin", {
+      _staff_id: pinStaff.id,
+      _pin: newPin,
+      _admin_pin: pinChangeAdminPin,
+    });
+    setChangingPin(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(`${pinStaff.name} PIN updated`);
+    closePinChange();
+  };
+
   return (
     <div className="mt-4 space-y-3">
       <Button onClick={() => setAdd(true)}>
@@ -3122,6 +3165,10 @@ function StaffTab() {
                   {t(("role_" + s.role) as "role_admin")}
                 </div>
               </div>
+              <Button variant="outline" size="sm" onClick={() => setPinStaff(s)}>
+                <KeyRound className="mr-2 h-4 w-4" />
+                Change PIN
+              </Button>
               <Button variant="ghost" size="sm" onClick={() => del(s)}>
                 <Trash2 className="h-4 w-4 text-destructive" />
               </Button>
@@ -3180,6 +3227,56 @@ function StaffTab() {
               {t("cancel")}
             </Button>
             <Button onClick={create}>{t("save")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={Boolean(pinStaff)} onOpenChange={(open) => !open && closePinChange()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change PIN — {pinStaff?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>New PIN (4–6 digits)</Label>
+              <Input
+                type="password"
+                inputMode="numeric"
+                autoComplete="new-password"
+                maxLength={6}
+                value={newPin}
+                onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ""))}
+              />
+            </div>
+            <div>
+              <Label>Confirm new PIN</Label>
+              <Input
+                type="password"
+                inputMode="numeric"
+                autoComplete="new-password"
+                maxLength={6}
+                value={confirmPin}
+                onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ""))}
+              />
+            </div>
+            <div>
+              <Label>Current Admin PIN</Label>
+              <Input
+                type="password"
+                inputMode="numeric"
+                autoComplete="current-password"
+                maxLength={6}
+                value={pinChangeAdminPin}
+                onChange={(e) => setPinChangeAdminPin(e.target.value.replace(/\D/g, ""))}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closePinChange} disabled={changingPin}>
+              {t("cancel")}
+            </Button>
+            <Button onClick={() => void changePin()} disabled={changingPin}>
+              {changingPin ? "Saving…" : "Change PIN"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
