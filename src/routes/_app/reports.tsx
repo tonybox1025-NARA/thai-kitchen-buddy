@@ -1093,6 +1093,33 @@ function ZReportHistoryTab({ restaurantName }: { restaurantName: string }) {
     setPrintingId(shift.id);
     try {
       const report = historicalReport(shift.totals);
+      // Older closing snapshots only stored collection totals. Rehydrate the
+      // employee and tender detail so a historical reprint remains auditable.
+      const { data: settlements, error: settlementError } = await (supabase as any)
+        .from("staff_tab_settlements")
+        .select("amount,method,staff_id")
+        .eq("shift_id", shift.id);
+      if (settlementError) throw settlementError;
+      const staffIds = [...new Set((settlements ?? []).map((row: any) => row.staff_id).filter(Boolean))] as string[];
+      const { data: staffRows, error: staffError } = staffIds.length
+        ? await supabase.from("staff").select("id,name").in("id", staffIds)
+        : { data: [] as { id: string; name: string }[], error: null };
+      if (staffError) throw staffError;
+      const staffNames = new Map((staffRows ?? []).map((person) => [person.id, person.name]));
+      const collectionDetails: StaffTabCollection[] = (settlements ?? []).map((row: any) => ({
+        staffName: staffNames.get(row.staff_id) ?? "—",
+        method: row.method === "qr" ? "qr" : "cash",
+        amount: Number(row.amount),
+      }));
+      if (collectionDetails.length > 0) {
+        report.staffTabCollections = collectionDetails;
+        report.staffTabCashCollected = collectionDetails
+          .filter((item) => item.method === "cash")
+          .reduce((sum, item) => sum + item.amount, 0);
+        report.staffTabQrCollected = collectionDetails
+          .filter((item) => item.method === "qr")
+          .reduce((sum, item) => sum + item.amount, 0);
+      }
       const counts = Object.fromEntries(
         Object.entries(shift.cash_count ?? {}).map(([denom, count]) => [Number(denom), Number(count)]),
       ) as Record<number, number>;
