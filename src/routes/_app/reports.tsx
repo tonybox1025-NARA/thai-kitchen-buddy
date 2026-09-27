@@ -1078,7 +1078,46 @@ function ZReportHistoryTab({ restaurantName }: { restaurantName: string }) {
         .select("id,business_day,opened_at,closed_at,opening_float,status,cash_count,totals")
         .eq("status", "closed").order("business_day", { ascending: false }).limit(120);
       if (error) throw error;
-      setRows((data ?? []) as unknown as ClosedShift[]);
+      const closedShifts = (data ?? []) as unknown as ClosedShift[];
+      const shiftIds = closedShifts.map((shift) => shift.id);
+      const { data: settlements, error: settlementError } = shiftIds.length
+        ? await (supabase as any)
+            .from("staff_tab_settlements")
+            .select("shift_id,amount,method,staff_id")
+            .in("shift_id", shiftIds)
+        : { data: [], error: null };
+      if (settlementError) throw settlementError;
+      const staffIds = [...new Set((settlements ?? []).map((row: any) => row.staff_id).filter(Boolean))] as string[];
+      const { data: staffRows, error: staffError } = staffIds.length
+        ? await supabase.from("staff").select("id,name").in("id", staffIds)
+        : { data: [] as { id: string; name: string }[], error: null };
+      if (staffError) throw staffError;
+      const staffNames = new Map((staffRows ?? []).map((person) => [person.id, person.name]));
+      const settlementsByShift = new Map<string, StaffTabCollection[]>();
+      for (const row of settlements ?? []) {
+        const details = settlementsByShift.get(row.shift_id) ?? [];
+        details.push({
+          staffName: staffNames.get(row.staff_id) ?? "—",
+          method: row.method === "qr" ? "qr" : "cash",
+          amount: Number(row.amount),
+        });
+        settlementsByShift.set(row.shift_id, details);
+      }
+      setRows(closedShifts.map((shift) => {
+        const details = settlementsByShift.get(shift.id) ?? [];
+        if (!shift.totals || details.length === 0) return shift;
+        return {
+          ...shift,
+          totals: {
+            ...shift.totals,
+            staffTabCollections: details,
+            staffTabCashCollected: details.filter((item) => item.method === "cash")
+              .reduce((sum, item) => sum + item.amount, 0),
+            staffTabQrCollected: details.filter((item) => item.method === "qr")
+              .reduce((sum, item) => sum + item.amount, 0),
+          },
+        };
+      }));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not load Z report history");
     } finally {
@@ -1149,6 +1188,10 @@ function ZReportHistoryTab({ restaurantName }: { restaurantName: string }) {
             {rows.map((shift) => {
               const totals = shift.totals ? historicalReport(shift.totals) : null;
               const saved = shift.totals as Record<string, unknown> | null;
+              const counts = Object.fromEntries(
+                Object.entries(shift.cash_count ?? {}).map(([denom, count]) => [Number(denom), Number(count)]),
+              ) as Record<number, number>;
+              const cashSummary = totals ? calcCashSummary(counts, totals) : null;
               return (
                 <div key={shift.id} className="flex items-center justify-between gap-4 rounded-lg border p-3">
                   <div className="min-w-0">
@@ -1158,9 +1201,9 @@ function ZReportHistoryTab({ restaurantName }: { restaurantName: string }) {
                     </p>
                     <div className="mt-1 flex flex-wrap gap-x-4 text-sm tabular-nums">
                       <span>Net sales <b>{thb(totals?.net ?? 0)}</b></span>
-                      <span>Expected {thb(Number(saved?.expected ?? 0))}</span>
-                      <span>Counted {thb(Number(saved?.cashTotal ?? 0))}</span>
-                      <span>Over / Short {thb(Number(saved?.overShort ?? 0))}</span>
+                      <span>Expected {thb(cashSummary?.expected ?? Number(saved?.expected ?? 0))}</span>
+                      <span>Counted {thb(cashSummary?.cashTotal ?? Number(saved?.cashTotal ?? 0))}</span>
+                      <span>Over / Short {thb(cashSummary?.overShort ?? Number(saved?.overShort ?? 0))}</span>
                     </div>
                   </div>
                   <Button onClick={() => reprint(shift)} disabled={!shift.totals || printingId === shift.id}>
