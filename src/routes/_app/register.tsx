@@ -255,7 +255,7 @@ function Register() {
     const { data: bills } = await supabase.from("bills").select("id,total,subtotal,discount_amount,member_discount_amount,vat_amount,vat_mode,order_id").eq("shift_id", s.id).in("status", ["paid", "partial_refund", "refunded"]).not("is_test", "is", true);
     const billIds = (bills ?? []).map((b) => b.id);
     const orderIds = (bills ?? []).map((b) => (b as any).order_id).filter(Boolean) as string[];
-    const [{ data: pays }, { data: voids }, { data: refunds }, { data: cancelledOrds }, { data: orderSources }, { data: billDiscs }, { data: itemDiscs }, { data: staffTabCharges }, { data: staffTabSettlements }] = await Promise.all([
+    const [{ data: pays }, { data: voids }, { data: refunds }, { data: cancelledOrds }, { data: orderSources }, { data: billDiscs }, { data: itemDiscs }, { data: staffTabActivity, error: staffTabError }] = await Promise.all([
       billIds.length
         ? supabase.from("payments").select("method,amount,tip_amount,created_at").in("bill_id", billIds)
         : Promise.resolve({ data: [] as { method: string; amount: number; tip_amount: number; created_at: string }[], error: null }),
@@ -271,9 +271,11 @@ function Register() {
       billIds.length
         ? (supabase as any).from("order_item_discounts").select("amount,applied_by").in("bill_id", billIds)
         : Promise.resolve({ data: [] as { amount: number; applied_by: string | null }[], error: null }),
-      (supabase as any).from("staff_tab_charges").select("subtotal,discount_amount,amount").eq("shift_id", s.id).neq("status", "voided"),
-      (supabase as any).from("staff_tab_settlements").select("amount,method,staff_id").eq("shift_id", s.id),
+      (supabase as any).rpc("staff_tab_shift_activity", { p_shift_ids: [s.id] }),
     ]);
+    if (staffTabError) throw staffTabError;
+    const staffTabCharges = (staffTabActivity ?? []).filter((row: any) => row.activity_type === "charge");
+    const staffTabSettlements = (staffTabActivity ?? []).filter((row: any) => row.activity_type === "settlement");
     const staffTabGross = (staffTabCharges ?? []).reduce((sum: number, row: any) => sum + Number(row.subtotal ?? row.amount), 0);
     const staffTabDiscount = (staffTabCharges ?? []).reduce((sum: number, row: any) => sum + Number(row.discount_amount ?? 0), 0);
     const gross = (bills ?? []).reduce((x, b) => x + Number(b.subtotal), 0) + staffTabGross;
@@ -334,13 +336,8 @@ function Register() {
     const staffTabCharged = (staffTabCharges ?? []).reduce((sum: number, row: any) => sum + Number(row.amount), 0);
     const staffTabCashCollected = (staffTabSettlements ?? []).filter((row: any) => row.method === "cash").reduce((sum: number, row: any) => sum + Number(row.amount), 0);
     const staffTabQrCollected = (staffTabSettlements ?? []).filter((row: any) => row.method === "qr").reduce((sum: number, row: any) => sum + Number(row.amount), 0);
-    const settlementStaffIds = [...new Set((staffTabSettlements ?? []).map((row: any) => row.staff_id).filter(Boolean))] as string[];
-    const { data: settlementStaffList } = settlementStaffIds.length
-      ? await supabase.from("staff").select("id,name").in("id", settlementStaffIds)
-      : { data: [] as { id: string; name: string }[] };
-    const settlementStaffMap = new Map((settlementStaffList ?? []).map((person) => [person.id, person.name]));
     const staffTabCollections: StaffTabCollection[] = (staffTabSettlements ?? []).map((row: any) => ({
-      staffName: settlementStaffMap.get(row.staff_id) ?? "—",
+      staffName: row.staff_name ?? "—",
       method: row.method === "qr" ? "qr" : "cash",
       amount: Number(row.amount),
     }));
