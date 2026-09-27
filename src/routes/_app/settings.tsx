@@ -174,7 +174,19 @@ type Settings = {
   starting_cash: number;
   qr_time_buckets: QrTimeBucket[];
 };
-type Staff = { id: string; name: string; role: "admin" | "manager" | "staff"; active: boolean };
+type StaffPosition = "owner" | "general_manager" | "manager" | "assistant_manager" | "supervisor" | "shift_leader" | "captain" | "staff";
+type Staff = { id: string; name: string; role: "admin" | "manager" | "staff"; position: StaffPosition; active: boolean };
+const STAFF_POSITIONS: { value: StaffPosition; label: string }[] = [
+  { value: "owner", label: "Owner" },
+  { value: "general_manager", label: "General Manager" },
+  { value: "manager", label: "Manager" },
+  { value: "assistant_manager", label: "Assistant Manager" },
+  { value: "supervisor", label: "Supervisor" },
+  { value: "shift_leader", label: "Shift Leader" },
+  { value: "captain", label: "Captain" },
+  { value: "staff", label: "Staff" },
+];
+const staffPositionLabel = (position: StaffPosition) => STAFF_POSITIONS.find((item) => item.value === position)?.label ?? position;
 // Add-ons
 type AddonOption = { id?: string; name: string; price: number; _deleted?: boolean };
 type AddonGroup = {
@@ -3053,7 +3065,7 @@ function StaffTab() {
   const [list, setList] = useState<Staff[]>([]);
   const [add, setAdd] = useState(false);
   const [name, setName] = useState("");
-  const [role, setRole] = useState<Staff["role"]>("staff");
+  const [position, setPosition] = useState<StaffPosition>("staff");
   const [pin, setPin] = useState("");
   const [adminPin, setAdminPin] = useState("");
   const [pinStaff, setPinStaff] = useState<Staff | null>(null);
@@ -3061,10 +3073,17 @@ function StaffTab() {
   const [confirmPin, setConfirmPin] = useState("");
   const [pinChangeAdminPin, setPinChangeAdminPin] = useState("");
   const [changingPin, setChangingPin] = useState(false);
+  const [positionStaff, setPositionStaff] = useState<Staff | null>(null);
+  const [editPosition, setEditPosition] = useState<StaffPosition>("staff");
+  const [positionAdminPin, setPositionAdminPin] = useState("");
+  const [changingPosition, setChangingPosition] = useState(false);
 
   const load = async () => {
-    const { data } = await supabase.rpc("list_staff");
-    setList((data ?? []) as Staff[]);
+    const { data } = await (supabase as any).rpc("list_staff_profiles");
+    setList((data ?? []).map((person: any) => ({
+      ...person,
+      position: person.job_position,
+    })) as Staff[]);
   };
   useEffect(() => {
     load();
@@ -3079,9 +3098,9 @@ function StaffTab() {
       toast.error("Admin PIN required");
       return;
     }
-    const { error } = await supabase.rpc("create_staff", {
+    const { error } = await (supabase as any).rpc("create_staff_profile", {
       _name: name,
-      _role: role,
+      _position: position,
       _pin: pin,
       _admin_pin: adminPin,
     });
@@ -3093,7 +3112,7 @@ function StaffTab() {
     setName("");
     setPin("");
     setAdminPin("");
-    setRole("staff");
+    setPosition("staff");
     load();
   };
 
@@ -3149,24 +3168,58 @@ function StaffTab() {
     closePinChange();
   };
 
+  const closePositionChange = () => {
+    setPositionStaff(null);
+    setEditPosition("staff");
+    setPositionAdminPin("");
+  };
+
+  const changePosition = async () => {
+    if (!positionStaff) return;
+    if (positionAdminPin.length < 4) {
+      toast.error("Admin PIN required");
+      return;
+    }
+    setChangingPosition(true);
+    const { error } = await (supabase as any).rpc("set_staff_position", {
+      _staff_id: positionStaff.id,
+      _position: editPosition,
+      _admin_pin: positionAdminPin,
+    });
+    setChangingPosition(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(`${positionStaff.name} position updated`);
+    closePositionChange();
+    void load();
+  };
+
   const byName = (a: Staff, b: Staff) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
   const management = list
-    .filter((person) => person.role === "admin" || person.role === "manager")
+    .filter((person) => person.position !== "staff")
     .sort((a, b) => {
-      const roleOrder = { admin: 0, manager: 1, staff: 2 };
-      return roleOrder[a.role] - roleOrder[b.role] || byName(a, b);
+      const positions = STAFF_POSITIONS.map((item) => item.value);
+      return positions.indexOf(a.position) - positions.indexOf(b.position) || byName(a, b);
     });
-  const employees = list.filter((person) => person.role === "staff").sort(byName);
+  const employees = list.filter((person) => person.position === "staff").sort(byName);
 
   const staffCard = (person: Staff) => (
     <Card key={person.id}>
-      <CardContent className="py-3 flex items-center gap-4">
+      <CardContent className="py-3 flex flex-wrap items-center gap-3">
         <div className="flex-1">
           <div className="font-medium">{person.name}</div>
           <div className="text-xs text-muted-foreground">
-            {t(("role_" + person.role) as "role_admin")}
+            {staffPositionLabel(person.position)}
           </div>
         </div>
+        <Button variant="outline" size="sm" onClick={() => {
+          setPositionStaff(person);
+          setEditPosition(person.position);
+        }}>
+          Change position
+        </Button>
         <Button variant="outline" size="sm" onClick={() => setPinStaff(person)}>
           <KeyRound className="mr-2 h-4 w-4" />
           Change PIN
@@ -3211,15 +3264,15 @@ function StaffTab() {
               <Input value={name} onChange={(e) => setName(e.target.value)} />
             </div>
             <div>
-              <Label>{t("role")}</Label>
-              <Select value={role} onValueChange={(v) => setRole(v as Staff["role"])}>
+              <Label>Position</Label>
+              <Select value={position} onValueChange={(v) => setPosition(v as StaffPosition)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="admin">{t("role_admin")}</SelectItem>
-                  <SelectItem value="manager">{t("role_manager")}</SelectItem>
-                  <SelectItem value="staff">{t("role_staff")}</SelectItem>
+                  {STAFF_POSITIONS.map((item) => (
+                    <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -3249,6 +3302,45 @@ function StaffTab() {
               {t("cancel")}
             </Button>
             <Button onClick={create}>{t("save")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={Boolean(positionStaff)} onOpenChange={(open) => !open && closePositionChange()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change position — {positionStaff?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Position</Label>
+              <Select value={editPosition} onValueChange={(value) => setEditPosition(value as StaffPosition)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {STAFF_POSITIONS.map((item) => (
+                    <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Current Admin PIN</Label>
+              <Input
+                type="password"
+                inputMode="numeric"
+                maxLength={6}
+                value={positionAdminPin}
+                onChange={(event) => setPositionAdminPin(event.target.value.replace(/\D/g, ""))}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Owner and General Manager receive Admin access. Manager and Assistant Manager receive Manager access. Other positions remain Staff access.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closePositionChange} disabled={changingPosition}>{t("cancel")}</Button>
+            <Button onClick={() => void changePosition()} disabled={changingPosition}>
+              {changingPosition ? "Saving…" : "Save position"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
