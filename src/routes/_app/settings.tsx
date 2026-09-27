@@ -3149,33 +3149,55 @@ function StaffTab() {
     closePinChange();
   };
 
+  const byName = (a: Staff, b: Staff) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+  const management = list
+    .filter((person) => person.role === "admin" || person.role === "manager")
+    .sort((a, b) => {
+      const roleOrder = { admin: 0, manager: 1, staff: 2 };
+      return roleOrder[a.role] - roleOrder[b.role] || byName(a, b);
+    });
+  const employees = list.filter((person) => person.role === "staff").sort(byName);
+
+  const staffCard = (person: Staff) => (
+    <Card key={person.id}>
+      <CardContent className="py-3 flex items-center gap-4">
+        <div className="flex-1">
+          <div className="font-medium">{person.name}</div>
+          <div className="text-xs text-muted-foreground">
+            {t(("role_" + person.role) as "role_admin")}
+          </div>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => setPinStaff(person)}>
+          <KeyRound className="mr-2 h-4 w-4" />
+          Change PIN
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => del(person)}>
+          <Trash2 className="h-4 w-4 text-destructive" />
+        </Button>
+      </CardContent>
+    </Card>
+  );
+
   return (
     <div className="mt-4 space-y-3">
       <Button onClick={() => setAdd(true)}>
         <Plus className="h-4 w-4 mr-1" />
         {t("add")}
       </Button>
-      <div className="grid gap-2">
-        {list.map((s) => (
-          <Card key={s.id}>
-            <CardContent className="py-3 flex items-center gap-4">
-              <div className="flex-1">
-                <div className="font-medium">{s.name}</div>
-                <div className="text-xs text-muted-foreground">
-                  {t(("role_" + s.role) as "role_admin")}
-                </div>
-              </div>
-              <Button variant="outline" size="sm" onClick={() => setPinStaff(s)}>
-                <KeyRound className="mr-2 h-4 w-4" />
-                Change PIN
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => del(s)}>
-                <Trash2 className="h-4 w-4 text-destructive" />
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <section className="space-y-2">
+        <div className="flex items-center gap-2 border-b pb-2">
+          <h3 className="font-semibold">Management</h3>
+          <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{management.length}</span>
+        </div>
+        <div className="grid gap-2">{management.map(staffCard)}</div>
+      </section>
+      <section className="space-y-2 pt-2">
+        <div className="flex items-center gap-2 border-b pb-2">
+          <h3 className="font-semibold">{t("staff")}</h3>
+          <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{employees.length}</span>
+        </div>
+        <div className="grid gap-2">{employees.map(staffCard)}</div>
+      </section>
       <Dialog open={add} onOpenChange={setAdd}>
         <DialogContent>
           <DialogHeader>
