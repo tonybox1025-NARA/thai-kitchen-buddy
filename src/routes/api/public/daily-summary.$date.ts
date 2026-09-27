@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createFileRoute } from "@tanstack/react-router";
 import type { Database } from "@/integrations/supabase/types";
 import { bangkokDayUtcBounds } from "@/lib/business-day";
+import { countedCashAfterOpening, totalCashCount } from "@/lib/cash-denominations";
 
 // Daily sales summary for a business day, shaped to fill the LONMOH Manager app's
 // Daily Sales Entry. Read-only aggregate over paid, non-test bills. Uses a path
@@ -50,7 +51,7 @@ export const Route = createFileRoute("/api/public/daily-summary/$date")({
         const sb = supabase as any;
 
         const [openedFrom, openedBefore] = bangkokDayUtcBounds(date);
-        const { data: shifts } = await sb.from("shifts").select("id")
+        const { data: shifts } = await sb.from("shifts").select("id,status,opening_float,cash_count")
           .gte("opened_at", openedFrom).lt("opened_at", openedBefore);
         const shiftIds = (shifts ?? []).map((s: any) => s.id);
         if (shiftIds.length === 0) return json({ date, bill_count: 0, has_data: false });
@@ -110,6 +111,13 @@ export const Route = createFileRoute("/api/public/daily-summary/$date")({
           (r) => r.amount,
         );
         const cashTipPayout = tipsByMethod("qr") + tipsByMethod("gov_qr") + tipsByMethod("card");
+        const cashCounts = countedCashAfterOpening(shifts ?? []);
+        const countedCashTotal = cashCounts == null
+          ? null
+          : sum(shifts ?? [], (shift) => totalCashCount(shift.cash_count) ?? 0);
+        const openingFloatTotal = cashCounts == null
+          ? null
+          : sum(shifts ?? [], (shift) => shift.opening_float);
         return json({
           date,
           has_data:
@@ -142,6 +150,11 @@ export const Route = createFileRoute("/api/public/daily-summary/$date")({
           staff_collected_cash: staffCollectedCash,
           staff_collected_qr: staffCollectedQr,
           cash_tip_payout: cashTipPayout,
+          // Z-report drawer count less the opening float. Null means the day is
+          // not fully closed or a shift has no denomination count yet.
+          cash_counts: cashCounts,
+          cash_counted_total: countedCashTotal,
+          opening_float_total: openingFloatTotal,
         });
       },
     },
