@@ -71,6 +71,8 @@ function PosPage() {
   const [staffTabRows, setStaffTabRows] = useState<StaffTabSummary[]>([]);
   const [staffTabCharges, setStaffTabCharges] = useState<StaffTabCharge[]>([]);
   const [staffTabBusy, setStaffTabBusy] = useState(false);
+  const [staffTabRemovePinOpen, setStaffTabRemovePinOpen] = useState(false);
+  const [pendingStaffTabRemoval, setPendingStaffTabRemoval] = useState<StaffTabCharge | null>(null);
   const [pendingStaffSettlement, setPendingStaffSettlement] = useState<{
     person: StaffTabSummary;
     method: "cash" | "qr";
@@ -317,7 +319,7 @@ function PosPage() {
     await loadStaffTabs();
   };
 
-  const voidStaffTabCharge = async (charge: StaffTabCharge) => {
+  const voidStaffTabCharge = async (charge: StaffTabCharge, managerPin: string) => {
     if (!staff || staffTabBusy) return;
     const confirmed = window.confirm(
       lang === "th"
@@ -326,9 +328,9 @@ function PosPage() {
     );
     if (!confirmed) return;
     setStaffTabBusy(true);
-    const { error } = await (supabase as any).rpc("void_staff_tab_charge", {
+    const { error } = await (supabase as any).rpc("void_staff_tab_charge_authorized", {
       p_charge_id: charge.charge_id,
-      p_voided_by: staff.id,
+      p_manager_pin: managerPin,
     });
     setStaffTabBusy(false);
     if (error) {
@@ -631,7 +633,15 @@ function PosPage() {
                                   {charge.discount_amount > 0 ? ` · ${lang === "th" ? "ส่วนลด" : "discount"} ฿${charge.discount_amount.toFixed(2)}` : ""}
                                 </div>
                               </div>
-                              <Button size="sm" variant="destructive" disabled={staffTabBusy} onClick={() => void voidStaffTabCharge(charge)}>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                disabled={staffTabBusy}
+                                onClick={() => {
+                                  setPendingStaffTabRemoval(charge);
+                                  setStaffTabRemovePinOpen(true);
+                                }}
+                              >
                                 <X className="mr-1 h-3.5 w-3.5" />{lang === "th" ? "ลบ" : "Remove"}
                               </Button>
                             </div>
@@ -752,6 +762,15 @@ function PosPage() {
         open={combinePinOpen}
         onOpenChange={setCombinePinOpen}
         onApproved={() => { void combineChosenTables(); }}
+      />
+      <ManagerPinDialog
+        open={staffTabRemovePinOpen}
+        onOpenChange={setStaffTabRemovePinOpen}
+        onApproved={(pin) => {
+          const charge = pendingStaffTabRemoval;
+          setPendingStaffTabRemoval(null);
+          if (charge) void voidStaffTabCharge(charge, pin);
+        }}
       />
     </div>
   );

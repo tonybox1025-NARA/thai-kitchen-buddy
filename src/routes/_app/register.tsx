@@ -32,6 +32,7 @@ const COINS = [10, 5, 2, 1, 0.5, 0.25];
 const DENOMS = [...BILLS, ...COINS];
 
 type Shift = { id: string; business_day: string; opened_at: string; closed_at: string | null; opening_float: number; status: "open" | "closed" };
+type StaffTabCollection = { staffName: string; method: "cash" | "qr"; amount: number };
 type ReportData = {
   gross: number; net: number; discount: number; member: number;
   coupon: number; // reserved for the upcoming coupon system
@@ -47,6 +48,7 @@ type ReportData = {
   staffTabDiscount: number; // discount recognized with staff sales this shift
   staffTabCashCollected: number; // old/current staff tabs repaid in cash this shift
   staffTabQrCollected: number; // old/current staff tabs repaid by QR this shift
+  staffTabCollections: StaffTabCollection[]; // employee + tender detail for reconciliation
   discountByType: { percent: number; fixed: number; free_item: number; item: number }; // discount amount per type
   discountByStaff: { staffName: string; amount: number; count: number }[]; // who gave how much
   qrByBucket: QrBucketTotal[]; // QR revenue split into the user-defined time windows
@@ -85,6 +87,20 @@ function reconciledPaymentTotal(r: ReportData) {
     + r.staffTabCharged - r.refunds;
 }
 
+function staffCollectionRows(r: ReportData, method?: "cash" | "qr") {
+  const details = r.staffTabCollections.filter((item) => !method || item.method === method);
+  if (details.length > 0) {
+    return details.map((item) => [
+      `${item.staffName} (${item.method === "cash" ? "Cash" : "QR"})`,
+      thb(item.amount),
+    ] as [string, string]);
+  }
+  return ([
+    ...(!method || method === "cash" ? [["Staff tab (Cash)", thb(r.staffTabCashCollected)] as [string, string]] : []),
+    ...(!method || method === "qr" ? [["Staff tab (QR)", thb(r.staffTabQrCollected)] as [string, string]] : []),
+  ]).filter(([, value]) => value !== thb(0));
+}
+
 async function openPrintWindow(
   kind: "X" | "Z",
   r: ReportData,
@@ -120,19 +136,20 @@ async function openPrintWindow(
         ...(r.refunds > 0 ? [["Cash refunds", `- ${thb(r.refunds)}`] as [string, string]] : []),
         ["Payment total", thb(reconciledPaymentTotal(r)), true],
       ]) },
+      ...(r.staffTabCollections.length > 0 || r.staffTabCashCollected > 0 || r.staffTabQrCollected > 0
+        ? [{ title: "Staff credit collections (not sales)", rows: rows(staffCollectionRows(r)) }]
+        : []),
       { title: "Other", rows: rows([
         ["Voids & Cancellations", thb(r.voids)], ["Refunds total", thb(r.refunds)], ["Bills", String(r.bills)],
         ...(r.cancelledCount > 0 ? [["Cancelled orders", String(r.cancelledCount)] as [string, string]] : []),
         ...(r.takeoutTotal > 0 ? [["Takeout sales", thb(r.takeoutTotal)] as [string, string]] : []),
         ...(r.staffMealTotal > 0 ? [["Staff meal cost", thb(r.staffMealTotal)] as [string, string]] : []),
-        ...(r.staffTabCashCollected > 0 ? [["Staff tab collected (cash)", thb(r.staffTabCashCollected)] as [string, string]] : []),
-        ...(r.staffTabQrCollected > 0 ? [["Staff tab collected (QR)", thb(r.staffTabQrCollected)] as [string, string]] : []),
       ]) },
       { title: "Cash count", rows: rows(DENOMS.filter((d) => (counts[d] ?? 0) > 0).map((d) => [`${d} THB x ${counts[d]}`, thb(d * counts[d])] as [string, string])) },
       { title: "Cash drawer", rows: rows([
         ["Expected", thb(expected), true],
         ["Opening float", thb(r.openingFloat)], ["Cash sales", thb(r.byMethod.cash), true],
-        ...(r.staffTabCashCollected > 0 ? [["Staff tab cash collected", thb(r.staffTabCashCollected)] as [string, string]] : []),
+        ...staffCollectionRows(r, "cash"),
         ...(cashTipsPaidOut(r) > 0 ? [["Tips paid out (cash)", `- ${thb(cashTipsPaidOut(r))}`] as [string, string]] : []),
         ["Counted", thb(cashTotal)], ["Over / Short", thb(overShort), true],
       ]) },
@@ -167,6 +184,7 @@ ${r.staffTabCharged > 0 ? row("Staff credit sales", thb(r.staffTabCharged)) : ""
 ${r.refunds > 0 ? row("Cash refunds", `- ${thb(r.refunds)}`) : ""}
 ${row("Payment total", thb(reconciledPaymentTotal(r)), true)}
 </table>
+${r.staffTabCollections.length > 0 || r.staffTabCashCollected > 0 || r.staffTabQrCollected > 0 ? `<h2>Staff credit collections (not sales)</h2><table>${staffCollectionRows(r).map(([label, value]) => row(label, value)).join("")}</table>` : ""}
 <h2>Other</h2><table>
 ${row("Voids &amp; Cancellations", thb(r.voids))}
 ${row("Refunds total", thb(r.refunds))}
@@ -174,15 +192,13 @@ ${row("Bills", String(r.bills))}
 ${r.cancelledCount > 0 ? row("Cancelled orders", String(r.cancelledCount)) : ""}
 ${r.takeoutTotal > 0 ? row("Takeout sales", thb(r.takeoutTotal)) : ""}
 ${r.staffMealTotal > 0 ? row("Staff meal cost", thb(r.staffMealTotal)) : ""}
-${r.staffTabCashCollected > 0 ? row("Staff tab collected (cash)", thb(r.staffTabCashCollected)) : ""}
-${r.staffTabQrCollected > 0 ? row("Staff tab collected (QR)", thb(r.staffTabQrCollected)) : ""}
 </table>
 <h2>Cash count</h2><table>${denomRows}</table>
 <h2>Cash drawer</h2><table>
 ${row("Expected", thb(expected), true)}
 ${row("Opening float", thb(r.openingFloat))}
 ${row("Cash sales", thb(r.byMethod.cash), true)}
-${r.staffTabCashCollected > 0 ? row("Staff tab cash collected", thb(r.staffTabCashCollected)) : ""}
+${staffCollectionRows(r, "cash").map(([label, value]) => row(label, value)).join("")}
 ${cashTipsPaidOut(r) > 0 ? row("Tips paid out (cash)", `- ${thb(cashTipsPaidOut(r))}`) : ""}
 ${row("Counted", thb(cashTotal))}
 ${row("Over / Short", thb(overShort), true)}
@@ -256,7 +272,7 @@ function Register() {
         ? (supabase as any).from("order_item_discounts").select("amount,applied_by").in("bill_id", billIds)
         : Promise.resolve({ data: [] as { amount: number; applied_by: string | null }[], error: null }),
       (supabase as any).from("staff_tab_charges").select("subtotal,discount_amount,amount").eq("shift_id", s.id).neq("status", "voided"),
-      (supabase as any).from("staff_tab_settlements").select("amount,method").eq("shift_id", s.id),
+      (supabase as any).from("staff_tab_settlements").select("amount,method,staff_id").eq("shift_id", s.id),
     ]);
     const staffTabGross = (staffTabCharges ?? []).reduce((sum: number, row: any) => sum + Number(row.subtotal ?? row.amount), 0);
     const staffTabDiscount = (staffTabCharges ?? []).reduce((sum: number, row: any) => sum + Number(row.discount_amount ?? 0), 0);
@@ -318,6 +334,16 @@ function Register() {
     const staffTabCharged = (staffTabCharges ?? []).reduce((sum: number, row: any) => sum + Number(row.amount), 0);
     const staffTabCashCollected = (staffTabSettlements ?? []).filter((row: any) => row.method === "cash").reduce((sum: number, row: any) => sum + Number(row.amount), 0);
     const staffTabQrCollected = (staffTabSettlements ?? []).filter((row: any) => row.method === "qr").reduce((sum: number, row: any) => sum + Number(row.amount), 0);
+    const settlementStaffIds = [...new Set((staffTabSettlements ?? []).map((row: any) => row.staff_id).filter(Boolean))] as string[];
+    const { data: settlementStaffList } = settlementStaffIds.length
+      ? await supabase.from("staff").select("id,name").in("id", settlementStaffIds)
+      : { data: [] as { id: string; name: string }[] };
+    const settlementStaffMap = new Map((settlementStaffList ?? []).map((person) => [person.id, person.name]));
+    const staffTabCollections: StaffTabCollection[] = (staffTabSettlements ?? []).map((row: any) => ({
+      staffName: settlementStaffMap.get(row.staff_id) ?? "—",
+      method: row.method === "qr" ? "qr" : "cash",
+      amount: Number(row.amount),
+    }));
 
     const refundTotal = (refunds ?? []).reduce((x, v) => x + Number(v.amount), 0);
     return {
@@ -334,6 +360,7 @@ function Register() {
       staffTabDiscount,
       staffTabCashCollected,
       staffTabQrCollected,
+      staffTabCollections,
       discountByType,
       discountByStaff,
       qrByBucket,
@@ -1715,7 +1742,7 @@ function CashSummary({ r, cashCount, overShortLabel }: { r: ReportData; cashCoun
     <div className="text-sm space-y-1 pt-3 border-t">
       <Row label="Opening float" value={thb(r.openingFloat)} />
       <Row label="Cash sales" value={thb(r.byMethod.cash)} />
-      {r.staffTabCashCollected > 0 && <Row label="Staff tab cash collected" value={thb(r.staffTabCashCollected)} />}
+      {staffCollectionRows(r, "cash").map(([label, value], index) => <Row key={`${label}-${value}-${index}`} label={label} value={value} />)}
       {tipsOut > 0 && <Row label="Tips paid out (cash)" value={`- ${thb(tipsOut)}`} />}
       <Row label="Expected" value={thb(expected)} bold />
       <Row label="Counted" value={thb(cashTotal)} />
@@ -1771,11 +1798,11 @@ function ReportCard({ r }: { r: ReportData }) {
             {r.staffMealTotal > 0 && <Row label="  ↳ Staff meal cost" value={thb(r.staffMealTotal)} />}
           </>
         )}
-        {(r.staffTabCashCollected > 0 || r.staffTabQrCollected > 0) && (
+        {(r.staffTabCollections.length > 0 || r.staffTabCashCollected > 0 || r.staffTabQrCollected > 0) && (
           <>
             <div className="border-t pt-2 mt-2" />
-            {r.staffTabCashCollected > 0 && <Row label="Staff tab collected (cash)" value={thb(r.staffTabCashCollected)} />}
-            {r.staffTabQrCollected > 0 && <Row label="Staff tab collected (QR)" value={thb(r.staffTabQrCollected)} />}
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Staff credit collections (not sales)</div>
+            {staffCollectionRows(r).map(([label, value], index) => <Row key={`${label}-${value}-${index}`} label={label} value={value} />)}
           </>
         )}
       </CardContent>
