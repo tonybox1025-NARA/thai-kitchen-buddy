@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createFileRoute } from "@tanstack/react-router";
 import type { Database } from "@/integrations/supabase/types";
 import { z } from "zod";
+import { normalizePhone } from "@/lib/phone";
 
 const MEMBER_COLS = "id,full_name,nickname,current_points,member_level,member_group_en,birthday,phone,created_at,line_user_id";
 
@@ -16,8 +17,6 @@ const Body = z.object({
   guest_token: z.string().min(20).max(120),
   phone: z.string().min(8).max(30),
 });
-
-const normalizePhone = (value: string | null | undefined) => (value ?? "").replace(/\D/g, "").replace(/^66(?=\d{9}$)/, "0");
 
 export const Route = createFileRoute("/api/public/wallet-phone")({
   server: {
@@ -39,10 +38,20 @@ export const Route = createFileRoute("/api/public/wallet-phone")({
           return Response.json({ error: "Connect LINE before linking an existing membership" }, { status: 409 });
         }
 
-        const { data: candidates, error: candidateError } = await sb.from("members")
-          .select(`${MEMBER_COLS},guest_token,status`).eq("status", "active").not("phone", "is", null);
-        if (candidateError) return Response.json({ error: candidateError.message }, { status: 500 });
-        const matches = (candidates ?? []).filter((m: any) => normalizePhone(m.phone) === wanted);
+        const matches: any[] = [];
+        const pageSize = 1000;
+        for (let from = 0; ; from += pageSize) {
+          const { data: page, error: candidateError } = await sb.from("members")
+            .select(`${MEMBER_COLS},guest_token,status`)
+            .eq("status", "active")
+            .not("phone", "is", null)
+            .order("id", { ascending: true })
+            .range(from, from + pageSize - 1);
+          if (candidateError) return Response.json({ error: candidateError.message }, { status: 500 });
+          const rows = page ?? [];
+          matches.push(...rows.filter((m: any) => normalizePhone(m.phone) === wanted));
+          if (rows.length < pageSize) break;
+        }
         if (matches.length !== 1) {
           return Response.json(
             { error: matches.length === 0 ? "Member not found" : "Duplicate phone records need staff review" },

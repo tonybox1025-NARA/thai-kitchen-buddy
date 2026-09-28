@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createFileRoute } from "@tanstack/react-router";
 import type { Database } from "@/integrations/supabase/types";
 import { z } from "zod";
+import { normalizePhone } from "@/lib/phone";
 
 const REWARD_TIERS = [
   { points: 500, baht: 25 },
@@ -45,11 +46,25 @@ const Body = z.discriminatedUnion("action", [
   }),
 ]);
 
-function normalizePhone(value: string | null | undefined) {
-  const digits = String(value ?? "").replace(/\D/g, "");
-  if (!digits) return "";
-  if (digits.startsWith("66") && digits.length >= 11) return `0${digits.slice(2)}`;
-  return digits;
+async function findActiveMembersByPhone(sb: any, wantedPhone: string) {
+  const matches: any[] = [];
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    const { data: page, error } = await sb
+      .from("members")
+      .select("id,full_name,nickname,current_points,phone,guest_token,status,imported_from")
+      .eq("status", "active")
+      .not("phone", "is", null)
+      .order("id", { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) return { matches: [], error };
+    const rows = page ?? [];
+    matches.push(...rows.filter(
+      (member: { phone?: string | null }) => normalizePhone(member.phone) === wantedPhone,
+    ));
+    if (rows.length < pageSize) break;
+  }
+  return { matches, error: null };
 }
 
 async function tableOrder(sb: ReturnType<typeof client>, tableCode: string, orderId?: string | null) {
@@ -200,15 +215,8 @@ export const Route = createFileRoute("/api/public/checkout/$tableCode")({
             return Response.json({ error: "Please enter a valid phone number" }, { status: 400 });
           }
 
-          const { data: candidates, error: memberError } = await (sb as any)
-            .from("members")
-            .select("id,full_name,nickname,current_points,phone,guest_token,status,imported_from")
-            .eq("status", "active")
-            .not("phone", "is", null);
+          const { matches, error: memberError } = await findActiveMembersByPhone(sb as any, wantedPhone);
           if (memberError) return Response.json({ error: memberError.message }, { status: 500 });
-          const matches = (candidates ?? []).filter(
-            (member: { phone?: string | null }) => normalizePhone(member.phone) === wantedPhone,
-          );
           if (matches.length !== 1) {
             return Response.json(
               {

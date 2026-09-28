@@ -19,6 +19,7 @@ import { isOffline } from "@/lib/online-status";
 import { tableLabel } from "@/lib/table";
 import { publicBaseUrl } from "@/lib/public-url";
 import { toast } from "sonner";
+import { isPhoneSearch, normalizePhone } from "@/lib/phone";
 
 export const Route = createFileRoute("/_app/payment/$billId")({ component: PaymentPage });
 
@@ -51,12 +52,6 @@ type MemberLookup = {
   current_points: number;
   member_group_en: string | null;
 };
-
-function normalizePhone(value: string | null | undefined) {
-  const digits = String(value ?? "").replace(/\D/g, "");
-  if (digits.startsWith("66") && digits.length >= 10) return `0${digits.slice(2)}`;
-  return digits;
-}
 
 type BillDiscount = {
   id: string;
@@ -769,7 +764,7 @@ function PaymentPage() {
 
       const directMatches = (data ?? []) as MemberLookup[];
       const phoneTerm = normalizePhone(term);
-      if (!phoneTerm || phoneTerm.length < 4) {
+      if (!isPhoneSearch(term)) {
         setMemberResults(directMatches);
         return;
       }
