@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import type { Database } from "@/integrations/supabase/types";
 import { bangkokDayUtcBounds } from "@/lib/business-day";
 import { countedCashAfterOpening, totalCashCount } from "@/lib/cash-denominations";
+import { calculateKbankSettlement, previousDateKey } from "@/lib/kbank-settlement";
 
 // Daily sales summary for a business day, shaped to fill the LONMOH Manager app's
 // Daily Sales Entry. Read-only aggregate over paid, non-test bills. Uses a path
@@ -51,9 +52,23 @@ export const Route = createFileRoute("/api/public/daily-summary/$date")({
         const sb = supabase as any;
 
         const [openedFrom, openedBefore] = bangkokDayUtcBounds(date);
-        const { data: shifts } = await sb.from("shifts").select("id,status,opening_float,cash_count")
-          .gte("opened_at", openedFrom).lt("opened_at", openedBefore);
+        const previousDate = previousDateKey(date);
+        const [previousOpenedFrom, previousOpenedBefore] =
+          bangkokDayUtcBounds(previousDate);
+        const [{ data: shifts }, { data: previousShifts }] = await Promise.all([
+          sb
+            .from("shifts")
+            .select("id,status,opening_float,cash_count")
+            .gte("opened_at", openedFrom)
+            .lt("opened_at", openedBefore),
+          sb
+            .from("shifts")
+            .select("id")
+            .gte("opened_at", previousOpenedFrom)
+            .lt("opened_at", previousOpenedBefore),
+        ]);
         const shiftIds = (shifts ?? []).map((s: any) => s.id);
+        const previousShiftIds = (previousShifts ?? []).map((s: any) => s.id);
         if (shiftIds.length === 0) return json({ date, bill_count: 0, has_data: false });
 
         const { data: bills } = await sb
@@ -67,14 +82,28 @@ export const Route = createFileRoute("/api/public/daily-summary/$date")({
         const billRows = bills ?? [];
         const billIds = billRows.map((b: any) => b.id);
 
+        const { data: previousBills } = previousShiftIds.length
+          ? await sb
+              .from("bills")
+              .select("id")
+              .in("shift_id", previousShiftIds)
+              .in("status", ["paid", "partial_refund", "refunded"])
+              .not("is_test", "is", true)
+          : { data: [] };
+        const previousBillIds = (previousBills ?? []).map((b: any) => b.id);
+
         const [
           { data: pays },
           { data: refunds },
           { data: staffCharges },
           { data: staffSettlements },
+          { data: previousQrPays },
         ] = await Promise.all([
           billIds.length
-            ? sb.from("payments").select("method,amount,tip_amount").in("bill_id", billIds)
+            ? sb
+                .from("payments")
+                .select("method,amount,tip_amount,created_at")
+                .in("bill_id", billIds)
             : Promise.resolve({ data: [] }),
           sb.from("refunds").select("amount").in("shift_id", shiftIds),
           sb
@@ -83,6 +112,13 @@ export const Route = createFileRoute("/api/public/daily-summary/$date")({
             .in("shift_id", shiftIds)
             .neq("status", "voided"),
           sb.from("staff_tab_settlements").select("amount,method").in("shift_id", shiftIds),
+          previousBillIds.length
+            ? sb
+                .from("payments")
+                .select("amount,created_at")
+                .in("bill_id", previousBillIds)
+                .eq("method", "qr")
+            : Promise.resolve({ data: [] }),
         ]);
         const payRows = pays ?? [];
         const byMethod = (m: string) =>
@@ -115,9 +151,15 @@ export const Route = createFileRoute("/api/public/daily-summary/$date")({
         const countedCashTotal = cashCounts == null
           ? null
           : sum(shifts ?? [], (shift) => totalCashCount(shift.cash_count) ?? 0);
-        const openingFloatTotal = cashCounts == null
-          ? null
-          : sum(shifts ?? [], (shift) => shift.opening_float);
+        const openingFloatTotal =
+          cashCounts == null
+            ? null
+            : sum(shifts ?? [], (shift) => shift.opening_float);
+        const kbank = calculateKbankSettlement(
+          date,
+          previousQrPays ?? [],
+          payRows.filter((payment: any) => payment.method === "qr"),
+        );
         return json({
           date,
           has_data:
@@ -155,6 +197,11 @@ export const Route = createFileRoute("/api/public/daily-summary/$date")({
           cash_counts: cashCounts,
           cash_counted_total: countedCashTotal,
           opening_float_total: openingFloatTotal,
+          // Separate bank-settlement view. Daily sales stay on their business
+          // day; KBANK Finance uses these cutoff totals for the deposit date.
+          kbank_previous_after_cutoff: kbank.previousAfterCutoff,
+          kbank_current_before_cutoff: kbank.currentBeforeCutoff,
+          kbank_expected_deposit: kbank.expectedDeposit,
         });
       },
     },
