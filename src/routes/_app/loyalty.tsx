@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { Gift, MinusCircle, PlusCircle, RefreshCw, Search, UserPlus } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { ManagerPinDialog } from "@/components/ManagerPinDialog";
+import { isPhoneSearch, normalizePhone } from "@/lib/phone";
 
 export const Route = createFileRoute("/_app/loyalty")({ component: LoyaltyPage });
 
@@ -104,24 +105,55 @@ function LoyaltyPage() {
 
   const searchMembers = async () => {
     setLoading(true);
-    const term = query.trim().replace(/[%,()]/g, "");
-    let req = supabase
-      .from("members")
-      .select("id,full_name,nickname,phone,member_group_en,current_points,legacy_visit_count,legacy_total_spend,status")
-      .order("current_points", { ascending: false })
-      .limit(50);
+    try {
+      const term = query.trim().replace(/[%,()]/g, "");
+      let req = supabase
+        .from("members")
+        .select("id,full_name,nickname,phone,member_group_en,current_points,legacy_visit_count,legacy_total_spend,status")
+        .order("current_points", { ascending: false })
+        .limit(50);
 
-    if (term) {
-      req = req.or(`full_name.ilike.%${term}%,nickname.ilike.%${term}%,phone.ilike.%${term}%`);
-    }
+      if (term) {
+        req = req.or(`full_name.ilike.%${term}%,nickname.ilike.%${term}%,phone.ilike.%${term}%`);
+      }
 
-    const { data, error } = await req;
-    setLoading(false);
-    if (error) {
-      toast.error(error.message);
-      return;
+      const { data, error } = await req;
+      if (error) throw error;
+      const directMatches = (data ?? []) as Member[];
+
+      if (!isPhoneSearch(term)) {
+        setMembers(directMatches);
+        return;
+      }
+
+      const wanted = normalizePhone(term);
+      const normalizedMatches: Member[] = [];
+      const pageSize = 1000;
+      for (let from = 0; ; from += pageSize) {
+        const { data: page, error: pageError } = await supabase
+          .from("members")
+          .select("id,full_name,nickname,phone,member_group_en,current_points,legacy_visit_count,legacy_total_spend,status")
+          .not("phone", "is", null)
+          .order("id", { ascending: true })
+          .range(from, from + pageSize - 1);
+        if (pageError) throw pageError;
+        const rows = (page ?? []) as Member[];
+        normalizedMatches.push(...rows.filter((member) => normalizePhone(member.phone).includes(wanted)));
+        if (rows.length < pageSize) break;
+      }
+
+      const merged = new Map<string, Member>();
+      for (const member of [...directMatches, ...normalizedMatches]) merged.set(member.id, member);
+      setMembers(
+        [...merged.values()]
+          .sort((a, b) => Number(b.current_points ?? 0) - Number(a.current_points ?? 0))
+          .slice(0, 50),
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not search members");
+    } finally {
+      setLoading(false);
     }
-    setMembers((data ?? []) as Member[]);
   };
 
   const loadLedger = async (memberId: string) => {

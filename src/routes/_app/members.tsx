@@ -16,6 +16,7 @@ import { AlertTriangle, Merge, RefreshCw, Search, SlidersHorizontal, Upload } fr
 import { segmentFor, type Segment } from "@/lib/rfm";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth";
+import { isPhoneSearch, normalizePhone } from "@/lib/phone";
 
 export const Route = createFileRoute("/_app/members")({ component: MembersPage });
 
@@ -305,11 +306,14 @@ function MembersPage() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const phoneQuery = normalizePhone(q);
+    const searchByPhone = isPhoneSearch(q);
     return members.filter((m) => {
       if (segmentFilter && m.segment !== segmentFilter) return false;
       if (!q) return true;
-      return [m.full_name, m.nickname, m.phone, m.segment, m.member_group_en, m.member_level]
+      const textMatch = [m.full_name, m.nickname, m.phone, m.segment, m.member_group_en, m.member_level]
         .some((v) => String(v ?? "").toLowerCase().includes(q));
+      return textMatch || (searchByPhone && normalizePhone(m.phone).includes(phoneQuery));
     });
   }, [members, query, segmentFilter]);
 
