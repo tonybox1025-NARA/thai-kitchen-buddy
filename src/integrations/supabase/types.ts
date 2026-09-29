@@ -1037,6 +1037,83 @@ export type Database = {
           },
         ]
       }
+      order_item_discounts: {
+        Row: {
+          amount: number
+          applied_by: string | null
+          bill_id: string
+          created_at: string
+          id: string
+          item_name_en: string | null
+          item_name_th: string | null
+          order_item_id: string
+          qty: number
+          reason: string | null
+          type: string
+          updated_at: string
+          value: number
+        }
+        Insert: {
+          amount: number
+          applied_by?: string | null
+          bill_id: string
+          created_at?: string
+          id?: string
+          item_name_en?: string | null
+          item_name_th?: string | null
+          order_item_id: string
+          qty: number
+          reason?: string | null
+          type: string
+          updated_at?: string
+          value: number
+        }
+        Update: {
+          amount?: number
+          applied_by?: string | null
+          bill_id?: string
+          created_at?: string
+          id?: string
+          item_name_en?: string | null
+          item_name_th?: string | null
+          order_item_id?: string
+          qty?: number
+          reason?: string | null
+          type?: string
+          updated_at?: string
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_item_discounts_applied_by_fkey"
+            columns: ["applied_by"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_item_discounts_applied_by_fkey"
+            columns: ["applied_by"]
+            isOneToOne: false
+            referencedRelation: "staff_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_item_discounts_bill_id_fkey"
+            columns: ["bill_id"]
+            isOneToOne: false
+            referencedRelation: "bills"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_item_discounts_order_item_id_fkey"
+            columns: ["order_item_id"]
+            isOneToOne: false
+            referencedRelation: "order_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_items: {
         Row: {
           created_at: string
@@ -1342,6 +1419,7 @@ export type Database = {
           id: string
           method: Database["public"]["Enums"]["payment_method"]
           reference: string | null
+          request_key: string | null
           tip_amount: number
         }
         Insert: {
@@ -1354,6 +1432,7 @@ export type Database = {
           id?: string
           method: Database["public"]["Enums"]["payment_method"]
           reference?: string | null
+          request_key?: string | null
           tip_amount?: number
         }
         Update: {
@@ -1366,6 +1445,7 @@ export type Database = {
           id?: string
           method?: Database["public"]["Enums"]["payment_method"]
           reference?: string | null
+          request_key?: string | null
           tip_amount?: number
         }
         Relationships: [
@@ -1407,6 +1487,60 @@ export type Database = {
           status?: Database["public"]["Enums"]["print_status"]
         }
         Relationships: []
+      }
+      refund_items: {
+        Row: {
+          created_at: string
+          gross_amount: number
+          id: string
+          name_en: string
+          name_th: string
+          order_item_id: string | null
+          qty: number
+          refund_amount: number
+          refund_id: string
+          unit_price: number
+        }
+        Insert: {
+          created_at?: string
+          gross_amount: number
+          id?: string
+          name_en: string
+          name_th: string
+          order_item_id?: string | null
+          qty: number
+          refund_amount: number
+          refund_id: string
+          unit_price: number
+        }
+        Update: {
+          created_at?: string
+          gross_amount?: number
+          id?: string
+          name_en?: string
+          name_th?: string
+          order_item_id?: string | null
+          qty?: number
+          refund_amount?: number
+          refund_id?: string
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "refund_items_order_item_id_fkey"
+            columns: ["order_item_id"]
+            isOneToOne: false
+            referencedRelation: "order_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "refund_items_refund_id_fkey"
+            columns: ["refund_id"]
+            isOneToOne: false
+            referencedRelation: "refunds"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       refunds: {
         Row: {
@@ -1671,6 +1805,7 @@ export type Database = {
           id: string
           name: string
           pin_hash: string
+          position: string
           role: Database["public"]["Enums"]["app_role"]
         }
         Insert: {
@@ -1679,6 +1814,7 @@ export type Database = {
           id?: string
           name: string
           pin_hash: string
+          position?: string
           role?: Database["public"]["Enums"]["app_role"]
         }
         Update: {
@@ -1687,6 +1823,7 @@ export type Database = {
           id?: string
           name?: string
           pin_hash?: string
+          position?: string
           role?: Database["public"]["Enums"]["app_role"]
         }
         Relationships: []
@@ -1696,34 +1833,52 @@ export type Database = {
           amount: number
           charged_at: string
           charged_by: string | null
+          discount_amount: number
+          discount_type: string | null
+          discount_value: number | null
           id: string
           order_id: string
           settled_at: string | null
           shift_id: string
           staff_id: string
           status: string
+          subtotal: number
+          voided_at: string | null
+          voided_by: string | null
         }
         Insert: {
           amount: number
           charged_at?: string
           charged_by?: string | null
+          discount_amount?: number
+          discount_type?: string | null
+          discount_value?: number | null
           id?: string
           order_id: string
           settled_at?: string | null
           shift_id: string
           staff_id: string
           status?: string
+          subtotal: number
+          voided_at?: string | null
+          voided_by?: string | null
         }
         Update: {
           amount?: number
           charged_at?: string
           charged_by?: string | null
+          discount_amount?: number
+          discount_type?: string | null
+          discount_value?: number | null
           id?: string
           order_id?: string
           settled_at?: string | null
           shift_id?: string
           staff_id?: string
           status?: string
+          subtotal?: number
+          voided_at?: string | null
+          voided_by?: string | null
         }
         Relationships: [
           {
@@ -1764,6 +1919,20 @@ export type Database = {
           {
             foreignKeyName: "staff_tab_charges_staff_id_fkey"
             columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_tab_charges_voided_by_fkey"
+            columns: ["voided_by"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_tab_charges_voided_by_fkey"
+            columns: ["voided_by"]
             isOneToOne: false
             referencedRelation: "staff_public"
             referencedColumns: ["id"]
@@ -2012,6 +2181,15 @@ export type Database = {
         }
         Returns: string
       }
+      create_staff_profile: {
+        Args: {
+          _admin_pin: string
+          _name: string
+          _pin: string
+          _position: string
+        }
+        Returns: string
+      }
       delete_staff: {
         Args: { _admin_pin?: string; _id: string }
         Returns: undefined
@@ -2061,6 +2239,16 @@ export type Database = {
           role: Database["public"]["Enums"]["app_role"]
         }[]
       }
+      list_staff_profiles: {
+        Args: never
+        Returns: {
+          active: boolean
+          id: string
+          job_position: string
+          name: string
+          role: Database["public"]["Enums"]["app_role"]
+        }[]
+      }
       merge_duplicate_members: {
         Args: {
           p_manager_pin: string
@@ -2101,6 +2289,31 @@ export type Database = {
           redeemed: number
         }[]
       }
+      record_bill_payment: {
+        Args: {
+          p_amount: number
+          p_bill_id: string
+          p_cash_breakdown?: Json
+          p_cash_received?: number
+          p_change_due?: number
+          p_method: Database["public"]["Enums"]["payment_method"]
+          p_reference?: string
+          p_request_key: string
+          p_tip_amount?: number
+        }
+        Returns: {
+          amount: number
+          bill_total: number
+          cash_received: number
+          change_due: number
+          fully_paid: boolean
+          method: Database["public"]["Enums"]["payment_method"]
+          paid_total: number
+          payment_id: string
+          reference: string
+          tip_amount: number
+        }[]
+      }
       record_manual_member_points: {
         Args: {
           p_description: string
@@ -2114,12 +2327,50 @@ export type Database = {
           balance_after: number
         }[]
       }
-      record_staff_tab_charge: {
-        Args: { p_charged_by: string; p_order_id: string }
+      record_staff_tab_charge:
+        | {
+            Args: { p_charged_by: string; p_order_id: string }
+            Returns: {
+              amount: number
+              charge_id: string
+            }[]
+          }
+        | {
+            Args: {
+              p_charged_by: string
+              p_discount_type?: string
+              p_discount_value?: number
+              p_order_id: string
+            }
+            Returns: {
+              amount: number
+              charge_id: string
+            }[]
+          }
+      refund_bill_items_with_loyalty: {
+        Args: {
+          p_bill_id: string
+          p_items: Json
+          p_reason: string
+          p_refunded_by: string
+        }
         Returns: {
           amount: number
-          charge_id: string
-        }[]
+          bill_id: string | null
+          created_at: string
+          id: string
+          original_payment_breakdown: Json
+          payout_method: string
+          reason: string
+          refunded_by: string | null
+          shift_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "refunds"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       refund_bill_with_loyalty: {
         Args: {
@@ -2165,16 +2416,45 @@ export type Database = {
         Args: { _admin_pin?: string; _pin: string; _staff_id: string }
         Returns: undefined
       }
-      settle_staff_tab: {
-        Args: {
-          p_method: string
-          p_pin: string
-          p_received_by: string
-          p_staff_id: string
-        }
+      set_staff_position: {
+        Args: { _admin_pin: string; _position: string; _staff_id: string }
+        Returns: undefined
+      }
+      settle_staff_tab:
+        | {
+            Args: {
+              p_method: string
+              p_pin: string
+              p_received_by: string
+              p_staff_id: string
+            }
+            Returns: {
+              amount: number
+              settlement_id: string
+            }[]
+          }
+        | {
+            Args: {
+              p_method: string
+              p_received_by: string
+              p_staff_id: string
+            }
+            Returns: {
+              amount: number
+              settlement_id: string
+            }[]
+          }
+      staff_tab_shift_activity: {
+        Args: { p_shift_ids: string[] }
         Returns: {
+          activity_type: string
           amount: number
-          settlement_id: string
+          discount_amount: number
+          method: string
+          shift_id: string
+          staff_id: string
+          staff_name: string
+          subtotal: number
         }[]
       }
       staff_tab_summary: {
@@ -2187,14 +2467,36 @@ export type Database = {
           unpaid_count: number
         }[]
       }
-      start_staff_tab_order: {
-        Args: { p_opened_by: string; p_pin: string; p_staff_id: string }
+      staff_tab_unpaid_details: {
+        Args: never
         Returns: {
-          order_id: string
+          amount: number
+          charge_id: string
+          charged_at: string
+          discount_amount: number
           order_number: string
+          staff_id: string
           staff_name: string
+          subtotal: number
         }[]
       }
+      start_staff_tab_order:
+        | {
+            Args: { p_opened_by: string; p_staff_id: string }
+            Returns: {
+              order_id: string
+              order_number: string
+              staff_name: string
+            }[]
+          }
+        | {
+            Args: { p_opened_by: string; p_pin: string; p_staff_id: string }
+            Returns: {
+              order_id: string
+              order_number: string
+              staff_name: string
+            }[]
+          }
       verify_staff_pin: {
         Args: { _pin: string }
         Returns: {
@@ -2202,6 +2504,14 @@ export type Database = {
           name: string
           role: Database["public"]["Enums"]["app_role"]
         }[]
+      }
+      void_staff_tab_charge: {
+        Args: { p_charge_id: string; p_voided_by: string }
+        Returns: boolean
+      }
+      void_staff_tab_charge_authorized: {
+        Args: { p_charge_id: string; p_manager_pin: string }
+        Returns: boolean
       }
     }
     Enums: {

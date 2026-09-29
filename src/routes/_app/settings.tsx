@@ -403,6 +403,7 @@ function IngredientsTab() {
   const { t } = useI18n();
   const [list, setList] = useState<Ingredient[]>([]);
   const [edit, setEdit] = useState<Partial<Ingredient> | null>(null);
+  const [search, setSearch] = useState("");
 
   const load = async () => {
     const { data } = await supabase.from("ingredients").select("*").order("name_thai");
@@ -446,14 +447,34 @@ function IngredientsTab() {
     load();
   };
 
+  const q = search.trim().toLowerCase();
+  const filtered = q
+    ? list.filter((i) =>
+        [i.name_thai, i.name_english ?? "", i.unit].some((v) =>
+          v.toLowerCase().includes(q),
+        ),
+      )
+    : list;
+
   return (
     <div className="mt-4 space-y-4">
-      <Button onClick={() => setEdit({})}>
-        <Plus className="h-4 w-4 mr-1" />
-        {t("set_add_ingredient")}
-      </Button>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <Button onClick={() => setEdit({})}>
+          <Plus className="h-4 w-4 mr-1" />
+          {t("set_add_ingredient")}
+        </Button>
+        <div className="relative w-full sm:w-72">
+          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t("set_search_ingredients")}
+            className="pl-8"
+          />
+        </div>
+      </div>
       <div className="grid gap-2">
-        {list.map((i) => (
+        {filtered.map((i) => (
           <Card key={i.id}>
             <CardContent className="py-3 flex items-center gap-4">
               <div className="flex-1 min-w-0">
@@ -471,6 +492,9 @@ function IngredientsTab() {
             </CardContent>
           </Card>
         ))}
+        {filtered.length === 0 && list.length > 0 && (
+          <p className="text-sm text-muted-foreground">{t("set_no_search_results")}</p>
+        )}
         {list.length === 0 && (
           <p className="text-sm text-muted-foreground">{t("set_no_ingredients")}</p>
         )}
@@ -1913,6 +1937,7 @@ function AddonsTab() {
   const db = supabase as any;
   const [groups, setGroups] = useState<AddonGroup[]>([]);
   const [editGroup, setEditGroup] = useState<EditAddonGroup | null>(null);
+  const [search, setSearch] = useState("");
 
   const load = async () => {
     const { data } = await db.from("addon_groups").select("*, addon_options(*)").order("name");
@@ -2028,14 +2053,34 @@ function AddonsTab() {
 
   const visibleOpts = editGroup?.options.filter((o) => !o._deleted) ?? [];
 
+  const q = search.trim().toLowerCase();
+  const filtered = q
+    ? groups.filter((g) =>
+        [g.name, g.kitchen_name ?? "", ...g.addon_options.map((o) => o.name)].some((v) =>
+          v.toLowerCase().includes(q),
+        ),
+      )
+    : groups;
+
   return (
     <div className="mt-4 space-y-4">
-      <Button onClick={openAdd}>
-        <Plus className="h-4 w-4 mr-1" />
-        {t("add_group")}
-      </Button>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <Button onClick={openAdd}>
+          <Plus className="h-4 w-4 mr-1" />
+          {t("add_group")}
+        </Button>
+        <div className="relative w-full sm:w-72">
+          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t("set_search_addons")}
+            className="pl-8"
+          />
+        </div>
+      </div>
       <div className="grid gap-2">
-        {groups.map((g) => (
+        {filtered.map((g) => (
           <Card key={g.id}>
             <CardContent className="py-3 flex items-center gap-4">
               <div className="flex-1 min-w-0">
@@ -2061,6 +2106,9 @@ function AddonsTab() {
             </CardContent>
           </Card>
         ))}
+        {filtered.length === 0 && groups.length > 0 && (
+          <p className="text-sm text-muted-foreground">{t("set_no_search_results")}</p>
+        )}
         {groups.length === 0 && (
           <p className="text-sm text-muted-foreground">{t("no_addon_groups")}</p>
         )}
