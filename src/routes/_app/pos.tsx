@@ -178,27 +178,28 @@ function PosPage() {
   const openTableOrder = async (): Promise<string | null> => {
     if (!openTable || !staff) return null;
     if (isOffline()) { toast.error(t("err_offline")); return null; }
-    const { data: shifts, error: shiftError } = await supabase.from("shifts").select("id")
-      .eq("status", "open").order("opened_at", { ascending: false }).limit(1);
-    const shift = shifts?.[0] ?? null;
-    if (shiftError) { toast.error(shiftError.message); return null; }
-    if (!shift) {
-      // No shift open — staff must open the register (count starting cash) first.
-      toast.error(t("rep_open_register_first"));
-      setOpenTable(null);
-      nav({ to: "/register" });
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 8_000);
+    const { data, error } = await supabase.rpc("open_table_order_safely", {
+      p_table_id: openTable.id, p_shift_id: null, p_guests: guests,
+      p_opened_by: staff.id, p_source: "pos",
+      p_is_test: openTable.is_test ?? openTable.code === "TEST",
+    }).abortSignal(controller.signal);
+    window.clearTimeout(timeout);
+    const order = data?.[0];
+    if (error || !order) {
+      const message = error?.message ?? "No response";
+      if (/abort|fetch|network/i.test(message)) {
+        toast.error("No confirmation from the server. Tap again — it is safe and will not create a duplicate.", { duration: 8_000 });
+      } else if (/No open shift/i.test(message)) {
+        toast.error(t("rep_open_register_first"));
+        setOpenTable(null);
+        nav({ to: "/register" });
+      } else {
+        toast.error(`Could not open the table: ${message}. Tap again safely.`, { duration: 8_000 });
+      }
       return null;
     }
-    const { data, error } = await supabase.rpc("open_table_order_safely", {
-      p_table_id: openTable.id,
-      p_shift_id: shift.id,
-      p_guests: guests,
-      p_opened_by: staff.id,
-      p_source: "pos",
-      p_is_test: openTable.is_test ?? openTable.code === "TEST",
-    });
-    const order = data?.[0];
-    if (error || !order) { toast.error(error?.message || "Failed"); return null; }
     return order.order_id;
   };
 

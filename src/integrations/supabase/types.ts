@@ -2129,7 +2129,7 @@ export type Database = {
         Args: {
           p_cash_count: Json
           p_closed_by: string | null
-          p_shift_id: string
+          p_shift_id: string | null
           p_totals: Json
         }
         Returns: Json
