@@ -492,6 +492,9 @@ function IngredientsTab() {
             </CardContent>
           </Card>
         ))}
+        {filtered.length === 0 && list.length > 0 && (
+          <p className="text-sm text-muted-foreground">{t("set_no_search_results")}</p>
+        )}
         {list.length === 0 && (
           <p className="text-sm text-muted-foreground">{t("set_no_ingredients")}</p>
         )}
