@@ -1937,6 +1937,7 @@ function AddonsTab() {
   const db = supabase as any;
   const [groups, setGroups] = useState<AddonGroup[]>([]);
   const [editGroup, setEditGroup] = useState<EditAddonGroup | null>(null);
+  const [search, setSearch] = useState("");
 
   const load = async () => {
     const { data } = await db.from("addon_groups").select("*, addon_options(*)").order("name");
