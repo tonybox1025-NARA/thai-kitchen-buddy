@@ -518,12 +518,12 @@ function Register() {
   };
 
   const submitZ = async () => {
-    if (!shift || !report) return;
-    await doZ();
+    if (!shift || !report) return false;
+    return doZ();
   };
 
   const doZ = async () => {
-    if (!shift || !report) return;
+    if (!shift || !report) return false;
     const { cashTotal, expected, overShort } = calcCashSummary(cashCount, report);
     try {
       const result = await closeShiftSafely({
@@ -536,14 +536,15 @@ function Register() {
         } else {
           toast.error("This shift is already closed. Refresh the page before continuing.");
         }
-        return;
+        return false;
       }
     } catch (error) {
       toast.error(`Z report was not saved: ${error instanceof Error ? error.message : String(error)}`);
-      return;
+      return false;
     }
     setZDlg(false); setShift(null); setReport(null);
     toast.success(t("rep_z_saved"));
+    return true;
   };
 
   const openAdj = async () => {
@@ -756,8 +757,12 @@ function Register() {
             <Button variant="outline" onClick={() => setZDlg(false)}>{t("cancel")}</Button>
             <Button onClick={async () => {
               try {
-                if (report && shift) await openPrintWindow("Z", report, shift, cashCount, restaurantName);
-                await submitZ();
+                if (!report || !shift) return;
+                const reportToPrint = report;
+                const shiftToPrint = shift;
+                const cashCountToPrint = cashCount;
+                const closed = await submitZ();
+                if (closed) await openPrintWindow("Z", reportToPrint, shiftToPrint, cashCountToPrint, restaurantName);
               } catch (error) {
                 toast.error(error instanceof Error ? error.message : "Print failed");
               }
