@@ -447,14 +447,34 @@ function IngredientsTab() {
     load();
   };
 
+  const q = search.trim().toLowerCase();
+  const filtered = q
+    ? list.filter((i) =>
+        [i.name_thai, i.name_english ?? "", i.unit].some((v) =>
+          v.toLowerCase().includes(q),
+        ),
+      )
+    : list;
+
   return (
     <div className="mt-4 space-y-4">
-      <Button onClick={() => setEdit({})}>
-        <Plus className="h-4 w-4 mr-1" />
-        {t("set_add_ingredient")}
-      </Button>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <Button onClick={() => setEdit({})}>
+          <Plus className="h-4 w-4 mr-1" />
+          {t("set_add_ingredient")}
+        </Button>
+        <div className="relative w-full sm:w-72">
+          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t("set_search_ingredients")}
+            className="pl-8"
+          />
+        </div>
+      </div>
       <div className="grid gap-2">
-        {list.map((i) => (
+        {filtered.map((i) => (
           <Card key={i.id}>
             <CardContent className="py-3 flex items-center gap-4">
               <div className="flex-1 min-w-0">
