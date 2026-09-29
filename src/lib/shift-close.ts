@@ -5,6 +5,7 @@ export type ShiftCloseBlockers = {
   open_orders: Array<{ id: string; order_number: string | null; source: string; table_code: string | null; amount: number }>;
   open_bills: Array<{ id: string; order_id: string; total: number }>;
   active_tables: Array<{ id: string; code: string; status: string }>;
+  loyalty_issues: Array<{ id: string; points_redeemed: number; loyalty_discount_amount: number; expected_discount: number | null }>;
 };
 
 export type SafeCloseResult = {
@@ -18,6 +19,7 @@ const emptyBlockers = (): ShiftCloseBlockers => ({
   open_orders: [],
   open_bills: [],
   active_tables: [],
+  loyalty_issues: [],
 });
 
 export async function getShiftCloseBlockers(shiftId: string): Promise<ShiftCloseBlockers> {
@@ -61,5 +63,6 @@ export function shiftCloseBlockedMessage(blockers: ShiftCloseBlockers): string {
     details.push(`Open orders: ${orders.join(", ")}`);
   }
   if (blockers.open_bills.length) details.push(`Unpaid bills: ${blockers.open_bills.length}`);
+  if (blockers.loyalty_issues?.length) details.push(`Member discount errors: ${blockers.loyalty_issues.length}`);
   return `Z report blocked. Settle or close everything first. ${details.join(" · ")}`;
 }

@@ -389,6 +389,7 @@ function PaymentPage() {
       discount_amount: totalDisc,
       member_discount_amount: memberDisc,
       points_redeemed: pointsRedeemed,
+      loyalty_discount_amount: pointsDiscount,
       service_fee_rate: settingsServiceFeeRate,
       service_fee_amount: serviceFeeAmount,
       rounding_mode: settingsRoundingMode,
