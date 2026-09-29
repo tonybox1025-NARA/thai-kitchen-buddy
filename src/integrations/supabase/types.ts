@@ -2151,6 +2151,20 @@ export type Database = {
         Args: { p_shift_id: string }
         Returns: Json
       }
+      open_table_order_safely: {
+        Args: {
+          p_guests: number
+          p_is_test?: boolean
+          p_opened_by?: string | null
+          p_shift_id: string
+          p_source?: Database["public"]["Enums"]["order_source"]
+          p_table_id: string
+        }
+        Returns: {
+          created: boolean
+          order_id: string
+        }[]
+      }
       claim_receipt_loyalty_points: {
         Args: { p_claim_token: string; p_guest_token: string }
         Returns: {
