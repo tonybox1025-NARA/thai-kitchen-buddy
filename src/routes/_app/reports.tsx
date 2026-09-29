@@ -594,15 +594,15 @@ function Reports() {
   };
 
   const submitZ = async () => {
-    if (!shift || !report) return;
-    await doZ();
+    if (!shift || !report) return false;
+    return doZ();
   };
 
   const doZ = async () => {
-    if (!shift || !report) return;
+    if (!shift || !report) return false;
     if (report.paymentIssues.length > 0) {
       toast.error("Z close blocked: payment totals do not match their bills.", { duration: 15_000 });
-      return;
+      return false;
     }
     const { cashTotal, expected, overShort } = calcCashSummary(cashCount, report);
     try {
@@ -616,14 +616,15 @@ function Reports() {
         } else {
           toast.error("This shift is already closed. Refresh the page before continuing.");
         }
-        return;
+        return false;
       }
     } catch (error) {
       toast.error(`Z report was not saved: ${error instanceof Error ? error.message : String(error)}`);
-      return;
+      return false;
     }
     setZDlg(false); setShift(null); setReport(null);
     toast.success(t("rep_z_saved"));
+    return true;
   };
 
   const openAdj = async () => {
@@ -840,8 +841,12 @@ function Reports() {
             <Button variant="outline" onClick={() => setZDlg(false)}>{t("cancel")}</Button>
             <Button disabled={(report?.paymentIssues.length ?? 0) > 0} onClick={async () => {
               try {
-                if (report && shift) await openPrintWindow("Z", report, shift, cashCount, restaurantName);
-                await submitZ();
+                if (!report || !shift) return;
+                const reportToPrint = report;
+                const shiftToPrint = shift;
+                const cashCountToPrint = cashCount;
+                const closed = await submitZ();
+                if (closed) await openPrintWindow("Z", reportToPrint, shiftToPrint, cashCountToPrint, restaurantName);
               } catch (error) {
                 toast.error(error instanceof Error ? error.message : "Print failed");
               }
