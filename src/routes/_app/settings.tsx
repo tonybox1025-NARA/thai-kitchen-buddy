@@ -2591,8 +2591,17 @@ function MenuTab() {
   );
 
   const toggleAvail = async (m: Menu) => {
-    await supabase.from("menus").update({ available: !m.available }).eq("id", m.id);
-    load();
+    const nextAvailable = !m.available;
+    const { error } = await supabase
+      .from("menus")
+      .update({ available: nextAvailable })
+      .eq("id", m.id);
+    if (error) {
+      toast.error(`Availability was not changed: ${error.message}`);
+      return;
+    }
+    await load();
+    toast.success(nextAvailable ? "Menu is back on sale" : "Menu is stopped until staff turns it on");
   };
 
   const del = async (m: Menu) => {
@@ -2816,8 +2825,8 @@ function MenuTab() {
             {edit?.manager_menu_id && (
               <div className="flex items-center gap-2 text-sm text-sky-700">
                 <Link2 className="h-4 w-4" />
-                Linked to Manager · edit names, category, price and availability in Manager; POS
-                only saves add-ons here
+                Linked to Manager · names, category and price come from Manager; POS availability
+                stays under staff control until changed here
               </div>
             )}
           </DialogHeader>

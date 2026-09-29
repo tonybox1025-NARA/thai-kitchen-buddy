@@ -136,7 +136,6 @@ Deno.serve(async (req) => {
         Number(target.price) !== Number(menu.selling_price) ||
         Math.abs(Number(target.cost ?? 0) - Number(menu.food_cost ?? 0)) >= 0.005 ||
         target.image_url !== (menu.image_url || null) ||
-        target.available !== sellable ||
         target.sort !== (menu.sort_order ?? 0) ||
         target.is_set !== (menu.is_set === true) ||
         target.is_set_child !== (menu.is_set_child === true);
@@ -295,8 +294,13 @@ Deno.serve(async (req) => {
         price: Number(menu.selling_price),
         cost: Number(menu.food_cost ?? 0),
         image_url: menu.image_url || null,
+        // POS availability is an operational switch owned by shop staff. Once
+        // a menu exists, catalog publishes (price/cost/name/recipe changes)
+        // must never undo a staff member's sold-out/on-sale decision. Manager
+        // availability is used only to initialize a brand-new POS row.
         available:
-          menu.is_active !== false && menu.available_pos !== false && menu.is_set_child !== true,
+          item.target?.available ??
+          (menu.is_active !== false && menu.available_pos !== false && menu.is_set_child !== true),
         is_set: menu.is_set === true,
         is_set_child: menu.is_set_child === true,
         sort: menu.sort_order ?? index,
