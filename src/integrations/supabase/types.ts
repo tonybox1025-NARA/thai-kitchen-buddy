@@ -2125,6 +2125,15 @@ export type Database = {
       }
     }
     Functions: {
+      close_shift_safely: {
+        Args: {
+          p_cash_count: Json
+          p_closed_by: string | null
+          p_shift_id: string
+          p_totals: Json
+        }
+        Returns: Json
+      }
       adjust_member_points: {
         Args: {
           p_delta: number
@@ -2138,6 +2147,10 @@ export type Database = {
         }[]
       }
       allocate_order_round: { Args: { p_order_id: string }; Returns: number }
+      get_shift_close_blockers: {
+        Args: { p_shift_id: string }
+        Returns: Json
+      }
       claim_receipt_loyalty_points: {
         Args: { p_claim_token: string; p_guest_token: string }
         Returns: {

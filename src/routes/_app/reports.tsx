@@ -26,6 +26,7 @@ import { shiftIdsFor } from "@/lib/dash-range";
 import { bangkokDateKey } from "@/lib/business-day";
 import { CASH_DENOMINATIONS as DENOMS } from "@/lib/cash-denominations";
 import { CashDenominationGrid as DenomGrid } from "@/components/CashDenominationGrid";
+import { closeShiftSafely, getShiftCloseBlockers, shiftCloseBlockedMessage } from "@/lib/shift-close";
 
 export const Route = createFileRoute("/_app/reports")({ component: Reports });
 
@@ -577,10 +578,19 @@ function Reports() {
 
   const startZ = async () => {
     if (!shift) return;
-    const r = await buildReport(shift);
-    setReport(r);
-    setCashCount({});
-    setZDlg(true);
+    try {
+      const blockers = await getShiftCloseBlockers(shift.id);
+      if (blockers.has_blockers) {
+        toast.error(shiftCloseBlockedMessage(blockers), { duration: 12_000 });
+        return;
+      }
+      const r = await buildReport(shift);
+      setReport(r);
+      setCashCount({});
+      setZDlg(true);
+    } catch (error) {
+      toast.error(`Could not verify whether the shift can close: ${error instanceof Error ? error.message : String(error)}`);
+    }
   };
 
   const submitZ = async () => {
@@ -595,10 +605,23 @@ function Reports() {
       return;
     }
     const { cashTotal, expected, overShort } = calcCashSummary(cashCount, report);
-    await supabase.from("shifts").update({
-      closed_at: new Date().toISOString(), closed_by: staff?.id, status: "closed",
-      cash_count: cashCount, totals: { ...report, cashTotal, expected, overShort },
-    }).eq("id", shift.id);
+    try {
+      const result = await closeShiftSafely({
+        shiftId: shift.id, closedBy: staff?.id, cashCount,
+        totals: { ...report, cashTotal, expected, overShort },
+      });
+      if (!result.closed) {
+        if (result.reason === "blocked" && result.blockers) {
+          toast.error(shiftCloseBlockedMessage(result.blockers), { duration: 12_000 });
+        } else {
+          toast.error("This shift is already closed. Refresh the page before continuing.");
+        }
+        return;
+      }
+    } catch (error) {
+      toast.error(`Z report was not saved: ${error instanceof Error ? error.message : String(error)}`);
+      return;
+    }
     setZDlg(false); setShift(null); setReport(null);
     toast.success(t("rep_z_saved"));
   };
