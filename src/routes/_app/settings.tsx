@@ -2106,6 +2106,9 @@ function AddonsTab() {
             </CardContent>
           </Card>
         ))}
+        {filtered.length === 0 && groups.length > 0 && (
+          <p className="text-sm text-muted-foreground">{t("set_no_search_results")}</p>
+        )}
         {groups.length === 0 && (
           <p className="text-sm text-muted-foreground">{t("no_addon_groups")}</p>
         )}
