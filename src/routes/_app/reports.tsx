@@ -329,7 +329,7 @@ function Reports() {
   }, []);
 
   const buildReport = async (s: Shift): Promise<ReportData> => {
-    const { data: bills } = await supabase.from("bills").select("id,total,subtotal,discount_amount,member_discount_amount,vat_amount,vat_mode,order_id").eq("shift_id", s.id).in("status", ["paid", "partial_refund", "refunded"]).not("is_test", "is", true);
+    const { data: bills } = await supabase.from("bills").select("id,total,subtotal,discount_amount,member_discount_amount,loyalty_discount_amount,vat_amount,vat_mode,order_id").eq("shift_id", s.id).in("status", ["paid", "partial_refund", "refunded"]).not("is_test", "is", true);
     const billIds = (bills ?? []).map((b) => b.id);
     const orderIds = (bills ?? []).map((b) => (b as any).order_id).filter(Boolean) as string[];
     const [{ data: pays }, { data: voids }, { data: refunds }, { data: cancelledOrds }, { data: orderSources }, { data: billDiscs }, { data: itemDiscs }, { data: staffTabActivity, error: staffTabError }] = await Promise.all([
@@ -359,7 +359,7 @@ function Reports() {
     const paidTotal = (bills ?? []).reduce((x, b) => x + Number(b.total), 0)
       + (staffTabCharges ?? []).reduce((sum: number, row: any) => sum + Number(row.amount), 0);
     const totalDiscount = (bills ?? []).reduce((x, b) => x + Number(b.discount_amount), 0);
-    const member = (bills ?? []).reduce((x, b) => x + Number(b.member_discount_amount), 0);
+    const member = (bills ?? []).reduce((x, b) => x + Number(b.member_discount_amount) + Number(b.loyalty_discount_amount ?? 0), 0);
     const vatIncluded = (bills ?? []).filter((b) => b.vat_mode === "inclusive").reduce((x, b) => x + Number(b.vat_amount ?? 0), 0);
     const vatAdded = (bills ?? []).filter((b) => b.vat_mode === "exclusive").reduce((x, b) => x + Number(b.vat_amount ?? 0), 0);
     const byMethod: Record<string, number> = { cash: 0, qr: 0, gov_qr: 0, card: 0 };
