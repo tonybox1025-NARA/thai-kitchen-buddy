@@ -219,6 +219,7 @@ const dict: Dict = {
   set_search_ingredients: { th: "ค้นหาชื่อไทย ชื่ออังกฤษ หรือหน่วย…", en: "Search Thai name, English name, or unit…" },
   set_search_addons: { th: "ค้นหากลุ่ม ชื่อครัว หรือตัวเลือก…", en: "Search group, kitchen, or option name…" },
   set_no_search_results: { th: "ไม่พบรายการที่ตรงกับการค้นหา", en: "No results match your search." },
+  set_edit_ingredient: { th: "แก้ไขวัตถุดิบ", en: "Edit Ingredient" },
   set_delete_q: { th: "ลบ ", en: "Delete " },
   set_add_zone: { th: "เพิ่มโซน", en: "Add zone" },
   set_no_zones: { th: "ยังไม่มีโซนครัว", en: "No kitchen zones yet." },
