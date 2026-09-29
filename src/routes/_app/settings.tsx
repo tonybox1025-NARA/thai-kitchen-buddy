@@ -403,6 +403,7 @@ function IngredientsTab() {
   const { t } = useI18n();
   const [list, setList] = useState<Ingredient[]>([]);
   const [edit, setEdit] = useState<Partial<Ingredient> | null>(null);
+  const [search, setSearch] = useState("");
 
   const load = async () => {
     const { data } = await supabase.from("ingredients").select("*").order("name_thai");
