@@ -258,20 +258,20 @@ export const Route = createFileRoute("/api/public/qr-order")({
         let order = openOrders?.[0] ?? null;
         let orderType: "new" | "added" = "new";
         if (!order) {
-          const { data: newOrder, error: orderErr } = await supabase
-            .from("orders")
-            .insert({
-              table_id: table.id,
-              guests: guests ?? Math.max(1, table.guests || 1),
-              shift_id: shift?.id ?? null,
-              source: "qr",
-              is_test: (table as any).is_test ?? false,
-            })
-            .select("id")
-            .single();
+          if (!shift?.id) return new Response("No open shift", { status: 409 });
+          const { data: opened, error: orderErr } = await supabase.rpc("open_table_order_safely", {
+            p_table_id: table.id,
+            p_shift_id: shift.id,
+            p_guests: guests ?? Math.max(1, table.guests || 1),
+            p_opened_by: null,
+            p_source: "qr",
+            p_is_test: (table as any).is_test ?? false,
+          });
+          const newOrder = opened?.[0];
           if (orderErr || !newOrder)
             return new Response(orderErr?.message ?? "Failed to create order", { status: 500 });
-          order = newOrder;
+          order = { id: newOrder.order_id };
+          orderType = newOrder.created ? "new" : "added";
         } else {
           const { data: existingItems, error: existingItemsErr } = await supabase
             .from("order_items")

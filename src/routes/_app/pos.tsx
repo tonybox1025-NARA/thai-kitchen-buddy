@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import { CountKeypad } from "@/components/CountKeypad";
 import { ManagerPinDialog } from "@/components/ManagerPinDialog";
-import { Bell, Users, X, ShoppingBag, UtensilsCrossed, Plus, QrCode, Merge } from "lucide-react";
+import { Bell, Users, X, ShoppingBag, UtensilsCrossed, Plus, QrCode, Merge, LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
 import { playAlertBeep } from "@/lib/audio-alert";
 import { printCounter } from "@/lib/counter-printer";
@@ -54,6 +54,7 @@ function PosPage() {
   const [tables, setTables] = useState<RTable[]>(() => cachedTables?.tables ?? []);
   const [openOrderByTable, setOpenOrderByTable] = useState<Record<string, string>>(() => cachedTables?.openOrderByTable ?? {});
   const [openTable, setOpenTable] = useState<RTable | null>(null);
+  const [openTableBusy, setOpenTableBusy] = useState<"start" | "qr" | null>(null);
   const [guests, setGuests] = useState(2);
   const [banner, setBanner] = useState<{ tableCode: string; key: number } | null>(null);
   const [specialOrders, setSpecialOrders] = useState<SpecialOrder[]>(() => readDeviceCache<SpecialOrder[]>(SPECIAL_ORDERS_CACHE_KEY) ?? []);
@@ -188,39 +189,53 @@ function PosPage() {
       nav({ to: "/register" });
       return null;
     }
-    const { data: order, error } = await supabase.from("orders").insert({
-      table_id: openTable.id, guests, opened_by: staff.id, shift_id: shift?.id, source: "pos",
-      is_test: openTable.is_test ?? openTable.code === "TEST",
-    }).select("id").single();
+    const { data, error } = await supabase.rpc("open_table_order_safely", {
+      p_table_id: openTable.id,
+      p_shift_id: shift.id,
+      p_guests: guests,
+      p_opened_by: staff.id,
+      p_source: "pos",
+      p_is_test: openTable.is_test ?? openTable.code === "TEST",
+    });
+    const order = data?.[0];
     if (error || !order) { toast.error(error?.message || "Failed"); return null; }
-    await supabase.from("restaurant_tables").update({ status: "occupied", guests }).eq("id", openTable.id);
-    return order.id;
+    return order.order_id;
   };
 
   const startTable = async () => {
-    const id = await openTableOrder();
-    if (!id) return;
-    setOpenTable(null);
-    nav({ to: "/order/$orderId", params: { orderId: id } });
+    if (openTableBusy) return;
+    setOpenTableBusy("start");
+    try {
+      const id = await openTableOrder();
+      if (!id) return;
+      setOpenTable(null);
+      nav({ to: "/order/$orderId", params: { orderId: id } });
+    } finally {
+      setOpenTableBusy(null);
+    }
   };
 
   // Open the table + print a QR slip for the guest to scan and self-order.
   const printTableQr = async () => {
+    if (openTableBusy) return;
+    setOpenTableBusy("qr");
     const code = openTable?.code;
     const seats = guests;
-    const id = await openTableOrder();
-    if (!id || !code) return;
-    await printCounter({
-      kind: "table_qr",
-      table: tableLabel(code),
-      url: `${publicBaseUrl()}/menu/${encodeURIComponent(code)}?order_id=${encodeURIComponent(id)}`,
-      // The queue bridge prints this as native ESC/POS text. Keep it ASCII:
-      // this counter printer's firmware corrupts Thai text in that mode.
-      restaurant: "LONMOH",
-      guests: seats,
-    });
-    toast.success(`QR printed · ${t("table")} ${tableLabel(code)}`);
-    setOpenTable(null);
+    try {
+      const id = await openTableOrder();
+      if (!id || !code) return;
+      await printCounter({
+        kind: "table_qr",
+        table: tableLabel(code),
+        url: `${publicBaseUrl()}/menu/${encodeURIComponent(code)}?order_id=${encodeURIComponent(id)}`,
+        restaurant: "LONMOH",
+        guests: seats,
+      });
+      toast.success(`QR printed · ${t("table")} ${tableLabel(code)}`);
+      setOpenTable(null);
+    } finally {
+      setOpenTableBusy(null);
+    }
   };
 
   const createSpecialOrder = async (source: "takeout" | "staff_meal") => {
@@ -566,11 +581,15 @@ function PosPage() {
             </div>
           </div>
           <DialogFooter className="gap-2 sm:gap-2">
-            <Button variant="outline" onClick={() => setOpenTable(null)}>{t("cancel")}</Button>
-            <Button variant="outline" onClick={printTableQr} disabled={guests < 1}>
-              <QrCode className="h-4 w-4 mr-1" />Print QR
+            <Button variant="outline" onClick={() => setOpenTable(null)} disabled={!!openTableBusy}>{t("cancel")}</Button>
+            <Button variant="outline" onClick={printTableQr} disabled={guests < 1 || !!openTableBusy}>
+              {openTableBusy === "qr" ? <LoaderCircle className="h-4 w-4 mr-1 animate-spin" /> : <QrCode className="h-4 w-4 mr-1" />}
+              {openTableBusy === "qr" ? "Opening & printing…" : "Print QR"}
             </Button>
-            <Button onClick={startTable} disabled={guests < 1}>{t("start")}</Button>
+            <Button onClick={startTable} disabled={guests < 1 || !!openTableBusy}>
+              {openTableBusy === "start" && <LoaderCircle className="h-4 w-4 mr-1 animate-spin" />}
+              {openTableBusy === "start" ? "Opening…" : t("start")}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
