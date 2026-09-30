@@ -21,7 +21,8 @@ type DiscRow = {
   amount: number;
   staffName: string;
   tableCode: string;
-  billId: string;
+  billId?: string;
+  orderId?: string;
   appliedAt: string;
 };
 
@@ -67,19 +68,35 @@ function DiscountsDetail() {
         const shiftIds = await shiftIdsFor(range, bounds);
         if (!shiftIds.length) { setRows([]); return; }
 
-        const { data: bills } = await supabase.from("bills")
-          .select("id,order_id,member_discount_amount,paid_at")
-          .eq("status","paid").in("shift_id", shiftIds);
-        if (!bills?.length) { setRows([]); return; }
+        const [{ data: bills }, { data: staffCharges }] = await Promise.all([
+          supabase.from("bills")
+            .select("id,order_id,discount_amount,member_discount_amount,paid_at")
+            .in("status", ["paid", "partial_refund", "refunded"])
+            .in("shift_id", shiftIds)
+            .not("is_test", "is", true),
+          (supabase as any).from("staff_tab_charges")
+            .select("order_id,staff_id,charged_by,charged_at,discount_amount,discount_type,discount_value")
+            .in("shift_id", shiftIds)
+            .neq("status", "voided"),
+        ]);
+        if (!bills?.length && !staffCharges?.length) { setRows([]); return; }
 
-        const billIds  = bills.map(b => b.id);
-        const orderIds = [...new Set(bills.map(b => b.order_id).filter(Boolean))] as string[];
+        const billIds  = (bills ?? []).map(b => b.id);
+        const orderIds = [...new Set([
+          ...(bills ?? []).map(b => b.order_id),
+          ...(staffCharges ?? []).map((row: any) => row.order_id),
+        ].filter(Boolean))] as string[];
 
-        const [{ data: discounts }, { data: orders }, { data: staffRows }] = await Promise.all([
-          (supabase as any).from("bill_discounts")
+        const [{ data: discounts }, { data: itemDiscounts }, { data: orders }, { data: staffRows }] = await Promise.all([
+          billIds.length ? (supabase as any).from("bill_discounts")
             .select("bill_id,type,percent_value,fixed_value,free_item_name,amount,applied_by,applied_at")
-            .in("bill_id", billIds),
-          supabase.from("orders").select("id,table_id,source,order_number").in("id", orderIds),
+            .in("bill_id", billIds) : Promise.resolve({ data: [] }),
+          billIds.length ? (supabase as any).from("order_item_discounts")
+            .select("bill_id,order_item_id,item_name_th,item_name_en,qty,type,value,amount,reason,applied_by,created_at")
+            .in("bill_id", billIds) : Promise.resolve({ data: [] }),
+          orderIds.length
+            ? supabase.from("orders").select("id,table_id,source,order_number").in("id", orderIds)
+            : Promise.resolve({ data: [] }),
           supabase.from("staff").select("id,name"),
         ]);
 
@@ -91,7 +108,7 @@ function DiscountsDetail() {
         const staffMap  = new Map((staffRows ?? []).map((s: any) => [s.id, s.name]));
         const tblMap    = new Map((tables  ?? []).map((t: any) => [t.id, t.code]));
         const orderMap  = new Map((orders  ?? []).map((o: any) => [o.id, o]));
-        const billMap   = new Map(bills.map(b => [b.id, b]));
+        const billMap   = new Map((bills ?? []).map(b => [b.id, b]));
 
         const getTableCode = (billId: string): string => {
           const bill  = billMap.get(billId);
@@ -120,7 +137,24 @@ function DiscountsDetail() {
           });
         }
 
-        for (const b of bills) {
+        for (const d of (itemDiscounts as any[] ?? [])) {
+          const itemName = lang === "th"
+            ? (d.item_name_th || d.item_name_en || t("disc_free_item"))
+            : (d.item_name_en || d.item_name_th || t("disc_free_item"));
+          const type = d.type === "percent" ? "percent" : "fixed";
+          const valueLabel = type === "percent" ? `${Number(d.value)}%` : thb(Number(d.value));
+          result.push({
+            type,
+            label: `${itemName} · ${valueLabel}`,
+            amount: Number(d.amount),
+            staffName: d.applied_by ? (staffMap.get(d.applied_by) ?? "—") : "—",
+            tableCode: getTableCode(d.bill_id),
+            billId: d.bill_id,
+            appliedAt: d.created_at ?? "",
+          });
+        }
+
+        for (const b of (bills ?? [])) {
           if (Number(b.member_discount_amount) > 0) {
             result.push({
               type: "member", label: t("disc_member"), amount: Number(b.member_discount_amount),
@@ -130,6 +164,39 @@ function DiscountsDetail() {
               appliedAt: b.paid_at ?? "",
             });
           }
+
+          const recorded = [...(discounts as any[] ?? []), ...(itemDiscounts as any[] ?? [])]
+            .filter((row) => row.bill_id === b.id)
+            .reduce((sum, row) => sum + Number(row.amount ?? 0), 0);
+          const unitemized = Math.max(0, Number(b.discount_amount ?? 0) - recorded);
+          if (unitemized > 0.005) {
+            result.push({
+              type: "fixed", label: t("discount"), amount: unitemized,
+              staffName: "—",
+              tableCode: getTableCode(b.id),
+              billId: b.id,
+              appliedAt: b.paid_at ?? "",
+            });
+          }
+        }
+
+        for (const charge of (staffCharges as any[] ?? [])) {
+          const amount = Number(charge.discount_amount ?? 0);
+          if (amount <= 0) continue;
+          const ord = orderMap.get(charge.order_id);
+          const type = charge.discount_type === "percent" ? "percent" : "fixed";
+          const valueLabel = type === "percent"
+            ? `${Number(charge.discount_value ?? 0)}%`
+            : thb(Number(charge.discount_value ?? amount));
+          result.push({
+            type,
+            label: `${staffMap.get(charge.staff_id) ?? "Staff"} · ${valueLabel}`,
+            amount,
+            staffName: charge.charged_by ? (staffMap.get(charge.charged_by) ?? "—") : "—",
+            tableCode: ord?.order_number ?? "ST",
+            orderId: charge.order_id,
+            appliedAt: charge.charged_at ?? "",
+          });
         }
 
         result.sort((a, b) => new Date(b.appliedAt).getTime() - new Date(a.appliedAt).getTime());
@@ -183,8 +250,8 @@ function DiscountsDetail() {
                 <p className="text-center text-muted-foreground py-6 text-sm">{t("no_discounts_period")}</p>
               ) : (
                 <div className="space-y-1.5">
-                  {rows.map((r, i) => (
-                    <Link key={i} to="/payment/$billId" params={{ billId: r.billId }}>
+                  {rows.map((r, i) => {
+                    const content = (
                       <div className="flex items-center gap-3 text-sm hover:bg-muted/40 rounded-lg px-2 py-2 transition-colors">
                         <div className="text-xs text-muted-foreground shrink-0 w-24 tabular-nums">
                           <div>{r.appliedAt ? new Date(r.appliedAt).toLocaleDateString() : ""}</div>
@@ -199,8 +266,11 @@ function DiscountsDetail() {
                         <span className="font-bold tabular-nums text-destructive shrink-0">- {thb(r.amount)}</span>
                         <Tag className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                       </div>
-                    </Link>
-                  ))}
+                    );
+                    if (r.billId) return <Link key={i} to="/payment/$billId" params={{ billId: r.billId }}>{content}</Link>;
+                    if (r.orderId) return <Link key={i} to="/order/$orderId" params={{ orderId: r.orderId }}>{content}</Link>;
+                    return <div key={i}>{content}</div>;
+                  })}
                 </div>
               )}
             </CardContent>
