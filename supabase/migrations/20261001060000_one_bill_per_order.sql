@@ -33,7 +33,7 @@ with safe_duplicates as (
     and not exists (select 1 from public.loyalty_claim_tokens t where t.bill_id = b.id)
     and not exists (select 1 from public.member_point_ledger l where l.bill_id = b.id)
     and not exists (select 1 from public.refunds r where r.bill_id = b.id)
-), archive_duplicates as (
+), archived as (
   insert into public.bill_duplicate_cleanup_audit (
     duplicate_bill_id, order_id, bill_snapshot, reason
   )
@@ -41,15 +41,11 @@ with safe_duplicates as (
          'Removed inert duplicate bill before enforcing one bill per order'
   from safe_duplicates
   on conflict (duplicate_bill_id) do nothing
+  returning duplicate_bill_id
 )
 delete from public.bills b
-using safe_duplicates d
-where b.id = d.id
-  and exists (
-    select 1
-    from public.bill_duplicate_cleanup_audit a
-    where a.duplicate_bill_id = d.id
-  );
+using archived a
+where b.id = a.duplicate_bill_id;
 
 create unique index if not exists bills_one_per_order_idx
   on public.bills (order_id);
