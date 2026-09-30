@@ -652,12 +652,24 @@ function OrderPage() {
       const { data: settings } = await supabase.from("settings").select("vat_mode,vat_rate").eq("id", 1).single();
       const subtotal = live.reduce((s, i) => s + i.qty * Number(i.unit_price), 0);
       const { data: ord } = await supabase.from("orders").select("table_id, shift_id, is_test").eq("id", orderId).single();
-      const { data: nb } = await supabase.from("bills").insert({
+      const { data: nb, error: createError } = await supabase.from("bills").insert({
         order_id: orderId, shift_id: ord?.shift_id, subtotal, total: subtotal,
         vat_mode: settings?.vat_mode || "inclusive", vat_rate: settings?.vat_rate || 7,
         is_test: (ord as any)?.is_test ?? false,
       }).select("id").single();
-      bill = nb;
+      if (createError?.code === "23505") {
+        const { data: existingBill, error: reloadError } = await supabase
+          .from("bills")
+          .select("id")
+          .eq("order_id", orderId)
+          .single();
+        if (reloadError) throw reloadError;
+        bill = existingBill;
+      } else if (createError) {
+        throw createError;
+      } else {
+        bill = nb;
+      }
     }
     if (bill?.id) setCurrentBillId(bill.id);
     return bill?.id ?? null;
