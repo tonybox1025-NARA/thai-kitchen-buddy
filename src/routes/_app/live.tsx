@@ -53,6 +53,15 @@ function fmtOrderTime(iso: string | null, lang: "th" | "en"): string {
   });
 }
 
+function bangkokHour(iso: string): number {
+  const hour = new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    hourCycle: "h23",
+    timeZone: "Asia/Bangkok",
+  }).format(new Date(iso));
+  return Number(hour);
+}
+
 function itemRoundKey(item: TableItemLine): string {
   return `${item.orderId}:${item.roundNumber ?? "pending"}`;
 }
@@ -114,7 +123,7 @@ function LivePage() {
     const [{ data: tbls }, { data: openOrders }, { data: shift }] = await Promise.all([
       supabase.from("restaurant_tables").select("id,code,capacity,status,guests").not("is_test", "is", true).order("code"),
       supabase.from("orders").select("id,table_id,shift_id,opened_at").eq("status", "open").not("table_id", "is", null).not("is_test", "is", true),
-      supabase.from("shifts").select("id").eq("status", "open").order("opened_at", { ascending: false }).limit(1),
+      supabase.from("shifts").select("id,opened_at").eq("status", "open").order("opened_at", { ascending: false }).limit(1),
     ]);
     const currentShift = shift?.[0] ?? null;
     const openOrderRows = ((openOrders ?? []) as OpenOrder[])
@@ -217,16 +226,20 @@ function LivePage() {
       const refunded = (refunds ?? []).reduce((s, row) => s + Number(row.amount), 0);
       setSalesNet(customerSales + staffSales - refunded);
 
-      // Hourly customer flow (by bill paid_at, local hour)
+      // Hourly customer flow in business-day order. A restaurant shift crosses
+      // midnight, so numeric sorting (00 before 15) is not chronological.
       const hMap = new Map<number, { count: number; total: number }>();
       for (const b of (bills ?? []) as { total: number; paid_at: string | null }[]) {
         if (!b.paid_at) continue;
-        const h = new Date(b.paid_at).getHours();
+        const h = bangkokHour(b.paid_at);
         const cur = hMap.get(h) ?? { count: 0, total: 0 };
         cur.count += 1; cur.total += Number(b.total);
         hMap.set(h, cur);
       }
-      setHourly([...hMap.entries()].map(([hour, v]) => ({ hour, ...v })).sort((a, b) => a.hour - b.hour));
+      const shiftOpenHour = bangkokHour(currentShift.opened_at);
+      setHourly([...hMap.entries()]
+        .map(([hour, v]) => ({ hour, ...v }))
+        .sort((a, b) => ((a.hour - shiftOpenHour + 24) % 24) - ((b.hour - shiftOpenHour + 24) % 24)));
 
       const [{ data: pays }, { data: shiftOrders }] = await Promise.all([
         ids.length
