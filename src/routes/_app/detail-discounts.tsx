@@ -35,12 +35,13 @@ const TYPE_CLS: Record<string, string> = {
 };
 
 function DiscountsDetail() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const { range: initialRange } = Route.useSearch();
   const [range, setRange] = useState<DashRange>(initialRange);
   const [custom, setCustom] = useState<DateRange | undefined>();
   const [rows, setRows] = useState<DiscRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   // Translated type labels — defined inside component so they react to lang changes
   const typeLabel: Record<string, string> = {
@@ -63,6 +64,7 @@ function DiscountsDetail() {
   useEffect(() => {
     if (range === "custom" && !custom?.from) return;
     setLoading(true);
+    setLoadError(false);
     (async () => {
       try {
         const shiftIds = await shiftIdsFor(range, bounds);
@@ -201,9 +203,13 @@ function DiscountsDetail() {
 
         result.sort((a, b) => new Date(b.appliedAt).getTime() - new Date(a.appliedAt).getTime());
         setRows(result);
+      } catch (error) {
+        console.error("Could not load discount details", error);
+        setRows([]);
+        setLoadError(true);
       } finally { setLoading(false); }
     })();
-  }, [bounds, range, custom]);
+  }, [bounds, range, custom, lang]);
 
   const totals = useMemo(() => {
     const tot = { percent: 0, fixed: 0, free_item: 0, coupon: 0, member: 0, grand: 0 };
@@ -221,7 +227,13 @@ function DiscountsDetail() {
         <DashRangeBar range={range} onRange={setRange} custom={custom} onCustom={setCustom} />
       </div>
 
-      {loading ? <p className="text-muted-foreground text-sm text-center py-8">{t("loading")}</p> : (
+      {loading ? <p className="text-muted-foreground text-sm text-center py-8">{t("loading")}</p> : loadError ? (
+        <Card>
+          <CardContent className="py-10 text-center text-destructive">
+            Could not load discount details. Please refresh and try again.
+          </CardContent>
+        </Card>
+      ) : (
         <>
           {/* Summary */}
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
