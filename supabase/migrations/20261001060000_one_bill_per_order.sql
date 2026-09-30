@@ -32,7 +32,6 @@ with safe_duplicates as (
     and not exists (select 1 from public.order_item_discounts d where d.bill_id = b.id)
     and not exists (select 1 from public.loyalty_claim_tokens t where t.bill_id = b.id)
     and not exists (select 1 from public.member_point_ledger l where l.bill_id = b.id)
-    and not exists (select 1 from public.payment_corrections c where c.bill_id = b.id)
     and not exists (select 1 from public.refunds r where r.bill_id = b.id)
 ), archive_duplicates as (
   insert into public.bill_duplicate_cleanup_audit (
