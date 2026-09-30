@@ -18,6 +18,7 @@ import { Plus, RefreshCw, ShoppingCart, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { tableLabel } from "@/lib/table";
 import { isFrontCounterCategory } from "@/lib/print/routing";
+import { openTableOrder } from "@/lib/open-table-order";
 
 export const Route = createFileRoute("/_app/crew")({ component: CrewPage });
 
@@ -89,6 +90,7 @@ function CrewPage() {
           openTable: "เปิดโต๊ะ",
           opening: "กำลังเปิดโต๊ะ…",
           openRegisterFirst: "กรุณาเปิดกะที่แคชเชียร์ก่อน",
+          connectionUnavailable: "ไม่สามารถเชื่อมต่อได้ กรุณาตรวจสอบอินเทอร์เน็ต",
         }
       : {
           title: "Tables",
@@ -124,6 +126,7 @@ function CrewPage() {
           openTable: "Open table",
           opening: "Opening table…",
           openRegisterFirst: "Open the register shift first",
+          connectionUnavailable: "Connection unavailable. Check the internet connection.",
         };
   const [tables, setTables] = useState<CrewTable[]>([]);
   const [loading, setLoading] = useState(true);
@@ -238,8 +241,10 @@ function CrewPage() {
     };
   }, []);
 
-  const openOrder = (table: CrewTable) => {
-    window.location.href = `/menu/${encodeURIComponent(table.code)}?crew=1`;
+  const openOrder = (table: CrewTable, orderId?: string) => {
+    const params = new URLSearchParams({ crew: "1" });
+    if (orderId) params.set("order_id", orderId);
+    window.location.href = `/menu/${encodeURIComponent(table.code)}?${params.toString()}`;
   };
   const requestOpenTable = (table: CrewTable) => {
     setGuestCount(1);
@@ -260,36 +265,25 @@ function CrewPage() {
       setOpening(false);
       return;
     }
-    const { data: order, error: orderError } = await supabase
-      .from("orders")
-      .insert({
-        table_id: openingTable.id,
+    let orderId: string;
+    try {
+      const opened = await openTableOrder({
+        tableId: openingTable.id,
         guests: guestCount,
-        opened_by: staff.id,
-        shift_id: shift.id,
+        openedBy: staff.id,
+        shiftId: shift.id,
         source: "pos",
-      })
-      .select("id")
-      .single();
-    if (orderError || !order) {
-      toast.error(orderError?.message || "Failed to open table");
-      setOpening(false);
-      return;
-    }
-    const { error: tableError } = await supabase
-      .from("restaurant_tables")
-      .update({ status: "occupied", guests: guestCount })
-      .eq("id", openingTable.id)
-      .eq("status", "available");
-    if (tableError) {
-      toast.error(tableError.message);
+      });
+      orderId = opened.orderId;
+    } catch {
+      toast.error(c.connectionUnavailable);
       setOpening(false);
       return;
     }
     const table = openingTable;
     setOpeningTable(null);
     setOpening(false);
-    openOrder(table);
+    openOrder(table, orderId);
   };
   const requestVoid = (item: CrewItem) => {
     if (selected?.billStatus === "paid") {

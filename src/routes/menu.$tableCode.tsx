@@ -168,7 +168,7 @@ const T = {
     add_ons: "ท็อปปิ้ง / เพิ่มเติม",
     required: "จำเป็น",
     required_missing: "กรุณาเลือกตัวเลือกที่จำเป็นก่อนเพิ่มรายการ",
-    submit_slow: "การเชื่อมต่อช้า ยังไม่ได้ส่งออเดอร์ ลองอีกครั้งหรือแจ้งพนักงานค่ะ",
+    submit_slow: "อินเทอร์เน็ตขัดข้องชั่วคราว รายการในตะกร้ายังถูกเก็บไว้ค่ะ",
     request_bill: "เรียกเก็บเงิน",
     checkout: "ชำระเงิน / ใช้แต้ม",
     member_points: "แต้มสมาชิก",
@@ -213,7 +213,7 @@ const T = {
     add_ons: "Add-ons",
     required: "Required",
     required_missing: "Please choose all required options before adding this item.",
-    submit_slow: "Connection is slow — your order was not sent. Please try again or tell staff.",
+    submit_slow: "The internet connection is temporarily unavailable. Your cart is still saved.",
     request_bill: "Request bill",
     checkout: "Pay / use points",
     member_points: "Member points",
@@ -981,28 +981,42 @@ function CustomerMenu() {
     // print jobs atomically and treats a repeated id as the same submission.
     const submissionId = pendingSubmissionId.current ?? crypto.randomUUID();
     pendingSubmissionId.current = submissionId;
-    const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), 15000);
     try {
-      const res = await fetch("/api/public/qr-order", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: ac.signal,
-        body: JSON.stringify({
-          table_code: tableCode,
-          order_id: activeOrderId,
-          submission_id: submissionId,
-          assisted_by_staff: crewMode,
-          items: cart.map((c) => ({
-            menu_id: c.menu_id,
-            qty: c.qty,
-            notes: c.notes ?? null,
-            set_config: c.set_config ?? null,
-            addons: (c.addons ?? []).map((a) => ({ option_id: a.option_id })),
-          })),
-        }),
-      });
-      if (!res.ok) throw new Error(await res.text());
+      let res: Response | null = null;
+      let lastError: unknown = null;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const ac = new AbortController();
+        const timer = window.setTimeout(() => ac.abort(), 12_000);
+        try {
+          res = await fetch("/api/public/qr-order", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            signal: ac.signal,
+            body: JSON.stringify({
+              table_code: tableCode,
+              order_id: activeOrderId,
+              submission_id: submissionId,
+              assisted_by_staff: crewMode,
+              items: cart.map((c) => ({
+                menu_id: c.menu_id,
+                qty: c.qty,
+                notes: c.notes ?? null,
+                set_config: c.set_config ?? null,
+                addons: (c.addons ?? []).map((a) => ({ option_id: a.option_id })),
+              })),
+            }),
+          });
+          if (res.ok || res.status < 500) break;
+          lastError = new Error(await res.text());
+        } catch (error) {
+          lastError = error;
+        } finally {
+          window.clearTimeout(timer);
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 300 * (attempt + 1)));
+      }
+      if (!res) throw lastError ?? new Error("Failed to fetch");
+      if (!res.ok) throw lastError ?? new Error(await res.text());
       const result = (await res.json()) as { order_id?: string | null };
       const submittedOrderId = result.order_id ?? null;
       bindToOrder(submittedOrderId);
@@ -1015,7 +1029,6 @@ function CustomerMenu() {
       const slow = err.name === "AbortError" || err.message === "Failed to fetch";
       toast.error(slow ? tr.submit_slow : String(err.message));
     } finally {
-      clearTimeout(timer);
       setSubmitting(false);
     }
   };

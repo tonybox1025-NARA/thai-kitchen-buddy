@@ -14,6 +14,7 @@ import { playAlertBeep } from "@/lib/audio-alert";
 import { printCounter } from "@/lib/counter-printer";
 import { isOffline } from "@/lib/online-status";
 import { tableLabel } from "@/lib/table";
+import { openTableOrder as ensureTableOrder } from "@/lib/open-table-order";
 import { publicBaseUrl } from "@/lib/public-url";
 import { readDeviceCache, writeDeviceCache } from "@/lib/device-cache";
 
@@ -53,7 +54,6 @@ function PosPage() {
   const cachedTables = readDeviceCache<TablesCache>(TABLES_CACHE_KEY);
   const [tables, setTables] = useState<RTable[]>(() => cachedTables?.tables ?? []);
   const [openOrderByTable, setOpenOrderByTable] = useState<Record<string, string>>(() => cachedTables?.openOrderByTable ?? {});
-  const [duplicateOrderTableIds, setDuplicateOrderTableIds] = useState<string[]>([]);
   const [openTable, setOpenTable] = useState<RTable | null>(null);
   const [openTableBusy, setOpenTableBusy] = useState<"start" | "qr" | null>(null);
   const [guests, setGuests] = useState(2);
@@ -86,15 +86,10 @@ function PosPage() {
     ]);
     if (data) setTables(data as RTable[]);
     const map: Record<string, string> = {};
-    const counts: Record<string, number> = {};
     for (const order of openOrders ?? []) {
       if (!order.table_id) continue;
-      counts[order.table_id] = (counts[order.table_id] ?? 0) + 1;
       if (!map[order.table_id]) map[order.table_id] = order.id;
     }
-    setDuplicateOrderTableIds(
-      Object.entries(counts).filter(([, count]) => count > 1).map(([tableId]) => tableId),
-    );
     setOpenOrderByTable(map);
     if (data) writeDeviceCache<TablesCache>(TABLES_CACHE_KEY, {
       tables: data as RTable[], openOrderByTable: map,
@@ -151,15 +146,6 @@ function PosPage() {
   }, [banner]);
 
   const onTableClick = async (tbl: RTable) => {
-    if (duplicateOrderTableIds.includes(tbl.id)) {
-      toast.error(
-        lang === "th"
-          ? `โต๊ะ ${tableLabel(tbl.code)} มีออเดอร์เปิดซ้ำ กรุณาหยุดรับชำระเงินและแจ้งผู้จัดการ`
-          : `Table ${tableLabel(tbl.code)} has duplicate open orders. Stop checkout and contact a manager.`,
-        { duration: 12_000 },
-      );
-      return;
-    }
     if (tbl.status === "available") {
       setOpenTable(tbl);
       setGuests(0); // keypad starts empty so the tapped number lands directly
@@ -169,21 +155,16 @@ function PosPage() {
         nav({ to: "/order/$orderId", params: { orderId: prefetched } });
         return;
       }
-      // Use limit(1) + data?.[0] instead of maybeSingle() so that duplicate
-      // open orders (e.g. from a previous crashed session) don't return null.
-      // IMPORTANT: orders table uses "opened_at", not "created_at".
-      const { data: orders, error: orderErr } = await supabase
+      const { data: order, error: orderErr } = await supabase
         .from("orders")
         .select("id")
         .eq("table_id", tbl.id)
         .eq("status", "open")
-        .order("opened_at", { ascending: false })
-        .limit(1);
+        .maybeSingle();
       if (orderErr) {
         toast.error(orderErr.message);
         return;
       }
-      const order = orders?.[0] ?? null;
       if (order) {
         nav({ to: "/order/$orderId", params: { orderId: order.id } });
       } else {
@@ -196,29 +177,26 @@ function PosPage() {
   const openTableOrder = async (): Promise<string | null> => {
     if (!openTable || !staff) return null;
     if (isOffline()) { toast.error(t("err_offline")); return null; }
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 8_000);
-    const { data, error } = await supabase.rpc("open_table_order_safely", {
-      p_table_id: openTable.id, p_shift_id: null, p_guests: guests,
-      p_opened_by: staff.id, p_source: "pos",
-      p_is_test: openTable.is_test ?? openTable.code === "TEST",
-    }).abortSignal(controller.signal);
-    window.clearTimeout(timeout);
-    const order = data?.[0];
-    if (error || !order) {
-      const message = error?.message ?? "No response";
-      if (/abort|fetch|network/i.test(message)) {
-        toast.error("No confirmation from the server. Tap again — it is safe and will not create a duplicate.", { duration: 8_000 });
-      } else if (/No open shift/i.test(message)) {
+    try {
+      const order = await ensureTableOrder({
+        tableId: openTable.id,
+        guests,
+        openedBy: staff.id,
+        source: "pos",
+        isTest: openTable.is_test ?? openTable.code === "TEST",
+      });
+      return order.orderId;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/No open shift/i.test(message)) {
         toast.error(t("rep_open_register_first"));
         setOpenTable(null);
         nav({ to: "/register" });
       } else {
-        toast.error(`Could not open the table: ${message}. Tap again safely.`, { duration: 8_000 });
+        toast.error(t("err_offline"));
       }
       return null;
     }
-    return order.order_id;
   };
 
   const startTable = async () => {
@@ -462,9 +440,6 @@ function PosPage() {
   const isExtraTable = (tbl: RTable) => tbl.is_test ?? tbl.code === "TEST";
   const floorTables = visibleTables.filter((x) => !isExtraTable(x));
   const extraTables = visibleTables.filter(isExtraTable);
-  const duplicateTableCodes = duplicateOrderTableIds
-    .map((tableId) => tables.find((table) => table.id === tableId)?.code)
-    .filter((code): code is string => Boolean(code));
 
   const renderTable = (tbl: RTable, placed: boolean) => {
     const isTest = tbl.is_test ?? tbl.code === "TEST";
@@ -511,19 +486,6 @@ function PosPage() {
 
   return (
     <div className="pos-surface min-h-[calc(100dvh-3.5rem)] p-6">
-      {duplicateTableCodes.length > 0 && (
-        <div
-          className="sticky top-14 z-30 mb-4 rounded-xl border-2 border-destructive bg-destructive px-4 py-3 text-destructive-foreground shadow-lg"
-          role="alert"
-        >
-          <div className="font-bold">
-            {lang === "th" ? "หยุดรับชำระเงิน — พบออเดอร์โต๊ะซ้ำ" : "STOP CHECKOUT — duplicate table orders detected"}
-          </div>
-          <div className="text-sm">
-            {duplicateTableCodes.map(tableLabel).join(", ")} · {lang === "th" ? "กรุณาแจ้งผู้จัดการทันที" : "Contact a manager immediately"}
-          </div>
-        </div>
-      )}
       {banner && (
         <div
           key={banner.key}
