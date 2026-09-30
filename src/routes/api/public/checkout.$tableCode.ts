@@ -126,8 +126,14 @@ async function ensureBill(
       })
       .select("*")
       .single();
-    if (created.error) throw created.error;
-    bill = created.data;
+    if (created.error?.code === "23505") {
+      const existing = await sb.from("bills").select("*").eq("order_id", order.id).single();
+      if (existing.error) throw existing.error;
+      bill = existing.data;
+    } else {
+      if (created.error) throw created.error;
+      bill = created.data;
+    }
   } else if (Number(bill.subtotal) !== subtotal) {
     const discount = Number((bill as any).loyalty_discount_amount ?? 0);
     const updated = await sb
