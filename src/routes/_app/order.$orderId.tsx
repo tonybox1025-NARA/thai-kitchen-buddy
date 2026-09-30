@@ -776,47 +776,15 @@ function OrderPage() {
     if (unpaid.length > 0 && !closeReason.trim()) return;
 
     const reason = closeReason.trim() || (lang === "th" ? "ปิดโต๊ะ" : "Table closed");
-    const now = new Date().toISOString();
+    const { error: cancelErr } = await supabase.rpc("cancel_table_order_safely", {
+      p_order_id: orderId,
+      p_reason: reason,
+      p_closed_by: staff?.id ?? null,
+    });
 
-    // Fetch shift_id so voids are attributed to this shift
-    const { data: ord } = await supabase.from("orders").select("shift_id").eq("id", orderId).single();
-    const shiftId = ord?.shift_id;
-
-    if (unpaid.length > 0) {
-      const unpaidIds = unpaid.map((i) => i.id);
-      await supabase.from("order_items").update({
-        status: "voided", void_reason: reason, voided_by: staff?.id, voided_at: now,
-      }).in("id", unpaidIds);
-
-      // Insert void records — these flow into Z-report "Voids total"
-      if (shiftId) {
-        await supabase.from("voids").insert(
-          unpaid.map((i) => ({
-            order_item_id: i.id,
-            reason,
-            voided_by: staff?.id,
-            amount: i.qty * Number(i.unit_price),
-            shift_id: shiftId,
-          }))
-        );
-      }
-    }
-
-    // Step 1 — always-safe fields (no new columns required)
-    const { error: cancelErr } = await supabase.from("orders").update({
-      status: "cancelled", closed_at: now,
-    }).eq("id", orderId);
-
-    if (cancelErr) { toast.error(t("ord_close_failed")); return; }
-
-    // Step 2 — extended fields added by migration 20260521000002
-    // Silently ignored if migration hasn't run yet; will work once columns exist
-    await supabase.from("orders").update({
-      cancel_reason: reason, closed_by: staff?.id,
-    } as any).eq("id", orderId);
-
-    if (tableId) {
-      await supabase.from("restaurant_tables").update({ status: "available", guests: 0, has_qr_alert: false }).eq("id", tableId);
+    if (cancelErr) {
+      toast.error(cancelErr.message || t("ord_close_failed"));
+      return;
     }
 
     setCloseTableOpen(false);
@@ -828,15 +796,22 @@ function OrderPage() {
 
   const doMoveTable = async (targetId: string) => {
     if (!tableId) return;
-    const { data: ord } = await supabase.from("orders").select("guests").eq("id", orderId).single();
-    await supabase.from("orders").update({ table_id: targetId }).eq("id", orderId);
-    await supabase.from("restaurant_tables").update({ status: "available", guests: 0, has_qr_alert: false }).eq("id", tableId);
-    await supabase.from("restaurant_tables").update({ status: "occupied", guests: ord?.guests ?? 1 }).eq("id", targetId);
-    const { data: newTbl } = await supabase.from("restaurant_tables").select("code").eq("id", targetId).single();
+    const { data, error } = await supabase.rpc("move_table_order_safely", {
+      p_order_id: orderId,
+      p_target_table_id: targetId,
+      p_moved_by: staff?.id ?? null,
+    });
+    const moved = data?.[0];
+    if (error || !moved) {
+      toast.error(error?.message ?? (lang === "th" ? "ย้ายโต๊ะไม่สำเร็จ" : "Could not move table"));
+      await loadOrderState();
+      return;
+    }
     setTableId(targetId);
-    if (newTbl) setTableCode(newTbl.code);
+    setTableCode(tableLabel(moved.target_table_code));
+    setTableRawCode(moved.target_table_code);
     setMoveTableOpen(false);
-    toast.success(lang === "th" ? `ย้ายไปโต๊ะ ${newTbl?.code ?? ""}` : `Moved to table ${newTbl?.code ?? ""}`);
+    toast.success(lang === "th" ? `ย้ายไปโต๊ะ ${moved.target_table_code}` : `Moved to table ${moved.target_table_code}`);
   };
 
   const liveItems = items.filter((i) => i.status !== "voided");
