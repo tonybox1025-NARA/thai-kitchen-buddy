@@ -559,7 +559,9 @@ function CustomerMenu() {
   const pageParams =
     typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
   const crewMode = pageParams?.get("crew") === "1";
-  const boundOrderId = pageParams?.get("order_id") ?? null;
+  const [activeOrderId, setActiveOrderId] = useState<string | null>(
+    () => pageParams?.get("order_id") ?? null,
+  );
   const [lang, setLang] = useState<Lang>("th");
   const [data, setData] = useState<{
     table: { id: string; code: string };
@@ -580,6 +582,7 @@ function CustomerMenu() {
   const [selectedAddons, setSelectedAddons] = useState<Map<string, SelectedAddon>>(new Map());
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const pendingSubmissionId = useRef<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [orderHistory, setOrderHistory] = useState<CurrentOrder>({
     order_id: null,
@@ -601,22 +604,38 @@ function CustomerMenu() {
   const catBarRef = useRef<HTMLDivElement>(null);
   const tr = T[lang];
 
+  // A fixed table QR may begin without an order id. Once the server resolves
+  // the table, pin this browser to that immutable order id so later rounds
+  // follow the same bill even if staff moves the table.
+  const bindToOrder = (orderId: string | null) => {
+    if (!orderId || orderId === activeOrderId) return;
+    setActiveOrderId(orderId);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("order_id", orderId);
+      window.history.replaceState(window.history.state, "", url);
+    }
+  };
+
   const checkoutEndpoint = (guestToken?: string) => {
     const params = new URLSearchParams();
     if (guestToken) params.set("guest_token", guestToken);
-    if (boundOrderId) params.set("order_id", boundOrderId);
+    if (activeOrderId) params.set("order_id", activeOrderId);
     const query = params.toString();
     return `/api/public/checkout/${encodeURIComponent(tableCode)}${query ? `?${query}` : ""}`;
   };
 
-  const loadOrderHistory = async () => {
+  const loadOrderHistory = async (orderIdOverride?: string | null) => {
     setHistoryLoading(true);
     try {
+      const resolvedOrderId = orderIdOverride ?? activeOrderId;
       const response = await fetch(
-        `/api/public/qr-order?table_code=${encodeURIComponent(tableCode)}${boundOrderId ? `&order_id=${encodeURIComponent(boundOrderId)}` : ""}`,
+        `/api/public/qr-order?table_code=${encodeURIComponent(tableCode)}${resolvedOrderId ? `&order_id=${encodeURIComponent(resolvedOrderId)}` : ""}`,
       );
       if (!response.ok) throw new Error(await response.text());
-      setOrderHistory(await response.json());
+      const next = (await response.json()) as CurrentOrder;
+      bindToOrder(next.order_id);
+      setOrderHistory(next);
     } catch (historyError) {
       console.error("Unable to load current QR order", historyError);
     } finally {
@@ -958,9 +977,10 @@ function CustomerMenu() {
   const submit = async () => {
     if (cart.length === 0) return;
     setSubmitting(true);
-    // Time out after 15s so a stalled connection shows a clear message instead of
-    // spinning forever. No auto-retry (would risk double-submitting the order) —
-    // the customer taps again, warned that it may not have gone through.
+    // Keep the same id across timeout/retry. The server commits the items and
+    // print jobs atomically and treats a repeated id as the same submission.
+    const submissionId = pendingSubmissionId.current ?? crypto.randomUUID();
+    pendingSubmissionId.current = submissionId;
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), 15000);
     try {
@@ -970,7 +990,8 @@ function CustomerMenu() {
         signal: ac.signal,
         body: JSON.stringify({
           table_code: tableCode,
-          order_id: boundOrderId,
+          order_id: activeOrderId,
+          submission_id: submissionId,
           assisted_by_staff: crewMode,
           items: cart.map((c) => ({
             menu_id: c.menu_id,
@@ -982,8 +1003,12 @@ function CustomerMenu() {
         }),
       });
       if (!res.ok) throw new Error(await res.text());
-      await loadOrderHistory();
+      const result = (await res.json()) as { order_id?: string | null };
+      const submittedOrderId = result.order_id ?? null;
+      bindToOrder(submittedOrderId);
+      await loadOrderHistory(submittedOrderId);
       setCart([]);
+      pendingSubmissionId.current = null;
       setSubmitted(true);
     } catch (e) {
       const err = e as Error;

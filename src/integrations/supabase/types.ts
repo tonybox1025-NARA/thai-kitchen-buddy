@@ -2134,6 +2134,18 @@ export type Database = {
         }
         Returns: Json
       }
+      cancel_table_order_safely: {
+        Args: {
+          p_closed_by?: string | null
+          p_order_id: string
+          p_reason: string
+        }
+        Returns: {
+          order_id: string
+          table_code: string
+          voided_items: number
+        }[]
+      }
       adjust_member_points: {
         Args: {
           p_delta: number
@@ -2156,13 +2168,25 @@ export type Database = {
           p_guests: number
           p_is_test?: boolean
           p_opened_by?: string | null
-          p_shift_id: string
+          p_shift_id: string | null
           p_source?: Database["public"]["Enums"]["order_source"]
           p_table_id: string
         }
         Returns: {
           created: boolean
           order_id: string
+        }[]
+      }
+      move_table_order_safely: {
+        Args: {
+          p_moved_by?: string | null
+          p_order_id: string
+          p_target_table_id: string
+        }
+        Returns: {
+          order_id: string
+          source_table_code: string
+          target_table_code: string
         }[]
       }
       claim_receipt_loyalty_points: {

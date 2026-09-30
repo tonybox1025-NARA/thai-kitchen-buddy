@@ -53,6 +53,7 @@ function PosPage() {
   const cachedTables = readDeviceCache<TablesCache>(TABLES_CACHE_KEY);
   const [tables, setTables] = useState<RTable[]>(() => cachedTables?.tables ?? []);
   const [openOrderByTable, setOpenOrderByTable] = useState<Record<string, string>>(() => cachedTables?.openOrderByTable ?? {});
+  const [duplicateOrderTableIds, setDuplicateOrderTableIds] = useState<string[]>([]);
   const [openTable, setOpenTable] = useState<RTable | null>(null);
   const [openTableBusy, setOpenTableBusy] = useState<"start" | "qr" | null>(null);
   const [guests, setGuests] = useState(2);
@@ -85,7 +86,15 @@ function PosPage() {
     ]);
     if (data) setTables(data as RTable[]);
     const map: Record<string, string> = {};
-    for (const order of openOrders ?? []) if (order.table_id && !map[order.table_id]) map[order.table_id] = order.id;
+    const counts: Record<string, number> = {};
+    for (const order of openOrders ?? []) {
+      if (!order.table_id) continue;
+      counts[order.table_id] = (counts[order.table_id] ?? 0) + 1;
+      if (!map[order.table_id]) map[order.table_id] = order.id;
+    }
+    setDuplicateOrderTableIds(
+      Object.entries(counts).filter(([, count]) => count > 1).map(([tableId]) => tableId),
+    );
     setOpenOrderByTable(map);
     if (data) writeDeviceCache<TablesCache>(TABLES_CACHE_KEY, {
       tables: data as RTable[], openOrderByTable: map,
@@ -142,6 +151,15 @@ function PosPage() {
   }, [banner]);
 
   const onTableClick = async (tbl: RTable) => {
+    if (duplicateOrderTableIds.includes(tbl.id)) {
+      toast.error(
+        lang === "th"
+          ? `โต๊ะ ${tableLabel(tbl.code)} มีออเดอร์เปิดซ้ำ กรุณาหยุดรับชำระเงินและแจ้งผู้จัดการ`
+          : `Table ${tableLabel(tbl.code)} has duplicate open orders. Stop checkout and contact a manager.`,
+        { duration: 12_000 },
+      );
+      return;
+    }
     if (tbl.status === "available") {
       setOpenTable(tbl);
       setGuests(0); // keypad starts empty so the tapped number lands directly
@@ -444,6 +462,9 @@ function PosPage() {
   const isExtraTable = (tbl: RTable) => tbl.is_test ?? tbl.code === "TEST";
   const floorTables = visibleTables.filter((x) => !isExtraTable(x));
   const extraTables = visibleTables.filter(isExtraTable);
+  const duplicateTableCodes = duplicateOrderTableIds
+    .map((tableId) => tables.find((table) => table.id === tableId)?.code)
+    .filter((code): code is string => Boolean(code));
 
   const renderTable = (tbl: RTable, placed: boolean) => {
     const isTest = tbl.is_test ?? tbl.code === "TEST";
@@ -490,6 +511,19 @@ function PosPage() {
 
   return (
     <div className="pos-surface min-h-[calc(100dvh-3.5rem)] p-6">
+      {duplicateTableCodes.length > 0 && (
+        <div
+          className="sticky top-14 z-30 mb-4 rounded-xl border-2 border-destructive bg-destructive px-4 py-3 text-destructive-foreground shadow-lg"
+          role="alert"
+        >
+          <div className="font-bold">
+            {lang === "th" ? "หยุดรับชำระเงิน — พบออเดอร์โต๊ะซ้ำ" : "STOP CHECKOUT — duplicate table orders detected"}
+          </div>
+          <div className="text-sm">
+            {duplicateTableCodes.map(tableLabel).join(", ")} · {lang === "th" ? "กรุณาแจ้งผู้จัดการทันที" : "Contact a manager immediately"}
+          </div>
+        </div>
+      )}
       {banner && (
         <div
           key={banner.key}

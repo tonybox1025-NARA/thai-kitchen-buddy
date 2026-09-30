@@ -29,6 +29,7 @@ function createPublicServerClient() {
 const Schema = z.object({
   table_code: z.string().min(1).max(20),
   order_id: z.string().uuid().optional().nullable(),
+  submission_id: z.string().uuid().optional(),
   guests: z.number().int().min(1).max(30).optional(),
   assisted_by_staff: z.boolean().optional().default(false),
   items: z
@@ -127,7 +128,31 @@ export const Route = createFileRoute("/api/public/qr-order")({
         const parsed = Schema.safeParse(body);
         if (!parsed.success)
           return Response.json({ error: parsed.error.flatten() }, { status: 400 });
-        const { table_code, order_id, guests, items, assisted_by_staff } = parsed.data;
+        const { table_code, order_id, submission_id, guests, items, assisted_by_staff } = parsed.data;
+        // Keep already-open QR pages from the prior release working. New pages
+        // provide a stable id that also makes a timeout retry idempotent.
+        const effectiveSubmissionId = submission_id ?? crypto.randomUUID();
+
+        // A timed-out browser retries with the same submission id. Resolve that
+        // receipt before looking at the table, because staff may have moved or
+        // closed the table after the original request committed.
+        const { data: previousSubmission, error: previousSubmissionError } = await (supabase as any)
+          .from("order_submissions")
+          .select("order_id,round_number,item_count")
+          .eq("id", effectiveSubmissionId)
+          .maybeSingle();
+        if (previousSubmissionError) {
+          return new Response(`DB error: ${previousSubmissionError.message}`, { status: 500 });
+        }
+        if (previousSubmission) {
+          return Response.json({
+            ok: true,
+            order_id: previousSubmission.order_id,
+            count: Number(previousSubmission.item_count),
+            round_number: Number(previousSubmission.round_number),
+            deduplicated: true,
+          });
+        }
 
         let { data: table, error: tableErr } = await supabase
           .from("restaurant_tables")
@@ -283,15 +308,9 @@ export const Route = createFileRoute("/api/public/qr-order")({
           orderType = existingItems && existingItems.length > 0 ? "added" : "new";
         }
 
-        // Insert items as already-sent — kitchen gets the ticket automatically, no staff confirmation needed
+        // Prepare items as already-sent. The atomic submission RPC below saves
+        // them together with all print jobs and deduplicates network retries.
         const sentAt = new Date().toISOString();
-        const { data: allocatedRound, error: roundError } = await (supabase as any).rpc(
-          "allocate_order_round",
-          { p_order_id: order.id },
-        );
-        if (roundError || !allocatedRound)
-          return new Response(roundError?.message ?? "Round allocation failed", { status: 500 });
-        const roundNumber = Number(allocatedRound);
         const categoryIds = [
           ...new Set((menus ?? []).map((m: any) => m.category_id).filter(Boolean)),
         ] as string[];
@@ -355,17 +374,13 @@ export const Route = createFileRoute("/api/public/qr-order")({
               unit_cost: sc ? setCostFromLabels(sc) : Number((m as any).cost ?? 0),
               notes: baseNotes,
               modifiers: modifiers.length > 0 ? modifiers : null,
-              status: "sent" as const,
               sent_at: sentAt,
-              round_number: roundNumber,
               round_source: assisted_by_staff ? "pos" : "qr",
               set_config: it.set_config ?? null,
             },
           };
         });
         const rows = rowEntries.map((entry) => entry.row);
-        const { error: itemsErr } = await (supabase as any).from("order_items").insert(rows);
-        if (itemsErr) return new Response(itemsErr.message, { status: 500 });
 
         // Queue kitchen + counter print jobs (same format as sendToKitchen in order.$orderId.tsx)
         const lines = rowEntries.map((entry) => ({
@@ -392,7 +407,6 @@ export const Route = createFileRoute("/api/public/qr-order")({
           source: assisted_by_staff ? "pos" : "qr",
           order_type: orderType,
           sent_at: sentAt,
-          round_number: roundNumber,
         };
         const grouped = new Map<string, { zoneLabel: string; lines: TicketLine[] }>();
         for (const line of lines) {
@@ -461,17 +475,21 @@ export const Route = createFileRoute("/api/public/qr-order")({
           },
         }));
 
-        // Insert the complete print plan in one request. The native POS queue
-        // serializes jobs per device and adds the printer cooldown. Waiting 750ms
-        // between cloud inserts made every customer order feel slow and did not
-        // add reliability when Realtime briefly disconnected.
         const printJobs = [...counterJobs, ...kitchenJobs];
-        if (printJobs.length > 0) {
-          const { error: printErr } = await (supabase as any)
-            .from("print_jobs")
-            .insert(printJobs);
-          if (printErr) return new Response(`Print queue error: ${printErr.message}`, { status: 500 });
+        const { data: submitted, error: submitError } = await (supabase as any).rpc(
+          "submit_order_round_safely",
+          {
+            p_submission_id: effectiveSubmissionId,
+            p_order_id: order.id,
+            p_items: rows,
+            p_print_jobs: printJobs,
+          },
+        );
+        const submission = submitted?.[0];
+        if (submitError || !submission) {
+          return new Response(submitError?.message ?? "Order submission failed", { status: 500 });
         }
+        const roundNumber = Number(submission.round_number);
 
         // Mark table occupied + raise QR alert flag (the POS realtime listener will react)
         await supabase
@@ -483,8 +501,9 @@ export const Route = createFileRoute("/api/public/qr-order")({
           })
           .eq("id", table.id);
 
-        // Insert a synthetic 'qr' source marker order if table previously had a pos order — emit notification
-        // (POS already listens to source=qr inserts on `orders`; emit a no-op event for existing reused orders)
+        // Preserve the existing UI/report convention that marks a table order
+        // after it receives a customer QR round. order_items.round_source remains
+        // the authoritative per-round provenance.
         if (order && !assisted_by_staff) {
           await supabase
             .from("orders")
@@ -497,8 +516,9 @@ export const Route = createFileRoute("/api/public/qr-order")({
         return Response.json({
           ok: true,
           order_id: order.id,
-          count: rows.length,
+          count: Number(submission.item_count),
           round_number: roundNumber,
+          deduplicated: !submission.created,
           print_routing: { kitchen: foodLines.length, front: frontLines.length },
         });
       },
