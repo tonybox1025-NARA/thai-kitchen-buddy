@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Plus, Minus, Trash2, ChefHat, Receipt, ArrowLeft, AlertTriangle, ArrowLeftRight, X, Printer, Eye, Layers, Bell, QrCode, Check, ShoppingBag, Tag, Users } from "lucide-react";
 import { SetMenuDialog } from "@/components/SetMenuDialog";
 import { SETS, buildSetDef, formatSetKitchenNotes, setConfigCost, type SetConfig, type SetDef, type SetItemRow } from "@/lib/set-menu";
-import { printCounter, printCounterJobs, printKitchenJobs, type CounterPrintPayload } from "@/lib/counter-printer";
+import { canPrintDirect, enqueueDurablePrint, getPrintTransport, printCounter, printCounterJobs, printKitchenJobs, type CounterPrintPayload } from "@/lib/counter-printer";
 import { isFrontCounterCategory } from "@/lib/print/routing";
 import { isOffline } from "@/lib/online-status";
 import { tableLabel } from "@/lib/table";
