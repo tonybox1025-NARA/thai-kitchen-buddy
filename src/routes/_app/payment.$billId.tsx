@@ -926,6 +926,9 @@ function PaymentPage() {
     const receiptPayments = latestPayment && !payments.some((payment) => payment.id === latestPayment.id)
       ? [...payments, latestPayment]
       : payments;
+    // Payment is already committed. The receipt is recorded under a key derived
+    // from the bill, so retries/recovery never produce a second receipt.
+    try {
     await printCounter({
       kind: "receipt", bill_id: bill.id, restaurant: restName, table: tableCode,
       logoUrl: receiptLogoUrl || undefined,
@@ -953,10 +956,52 @@ function PaymentPage() {
       loyaltyClaimUrl: loyaltyClaim?.url,
       loyaltyClaimCode: loyaltyClaim?.token,
       loyaltyEarnPoints: loyaltyClaim?.points,
-    });
+    }, { jobKey: `receipt:${bill.id}`, sourceType: "receipt", sourceId: bill.id });
+    } catch {
+      // Recorded on next load by the paid-receipt recovery effect.
+    }
     toast.success(t("paid"));
     await load();
     return true;
+  };
+
+  // Records the paid receipt from committed bill state under the given key.
+  const enqueuePaidReceipt = async (jobKey: string) => {
+    if (!bill) return;
+    const { data: loyaltyClaim } = await supabase
+      .from("loyalty_claim_tokens")
+      .select("token,claim_points")
+      .eq("bill_id", bill.id)
+      .maybeSingle();
+
+    await printCounter({
+      kind: "receipt", bill_id: bill.id, restaurant: restName, table: tableCode,
+      logoUrl: receiptLogoUrl || undefined,
+      address: receiptAddress || undefined,
+      promo: receiptPromo || undefined,
+      items: items.map((item) => {
+        const itemDiscount = itemDiscounts.find((discount) => discount.order_item_id === item.id);
+        return {
+          ...item,
+          discount_amount: itemDiscount?.amount ?? 0,
+          discount_label: itemDiscount
+            ? `${lang === "th" ? "ส่วนลดรายการ" : "Item discount"}${itemDiscount.reason ? `: ${itemDiscount.reason}` : ""}`
+            : undefined,
+        };
+      }),
+      total: Number(bill.total),
+      vatAmount: bill.vat_mode === "exclusive" ? Number(bill.vat_amount ?? 0) : 0,
+      vatRate: Number(bill.vat_rate) || 7,
+      vat_mode: bill.vat_mode, payments, language: lang,
+      discountAmount: Number(bill.discount_amount ?? 0),
+      memberDiscountAmount: Number(bill.member_discount_amount ?? 0),
+      pointsDiscountAmount: Number(bill.loyalty_discount_amount ?? 0),
+      serviceFeeAmount: Number(bill.service_fee_amount ?? 0),
+      roundingAdjustment: Number(bill.rounding_adjustment ?? 0),
+      loyaltyClaimUrl: loyaltyClaim?.token ? `${publicBaseUrl()}/loyalty/claim/${loyaltyClaim.token}` : undefined,
+      loyaltyClaimCode: loyaltyClaim?.token,
+      loyaltyEarnPoints: loyaltyClaim ? Number(loyaltyClaim.claim_points ?? 0) : undefined,
+    }, { jobKey, sourceType: jobKey.startsWith("receipt:") ? "receipt" : "receipt_reprint", sourceId: bill.id });
   };
 
   const reprintPaidReceipt = async () => {
@@ -964,40 +1009,7 @@ function PaymentPage() {
     if (isOffline()) { toast.error(t("err_offline")); return; }
     setReprintingReceipt(true);
     try {
-      const { data: loyaltyClaim } = await supabase
-        .from("loyalty_claim_tokens")
-        .select("token,claim_points")
-        .eq("bill_id", bill.id)
-        .maybeSingle();
-
-      await printCounter({
-        kind: "receipt", bill_id: bill.id, restaurant: restName, table: tableCode,
-        logoUrl: receiptLogoUrl || undefined,
-        address: receiptAddress || undefined,
-        promo: receiptPromo || undefined,
-        items: items.map((item) => {
-          const itemDiscount = itemDiscounts.find((discount) => discount.order_item_id === item.id);
-          return {
-            ...item,
-            discount_amount: itemDiscount?.amount ?? 0,
-            discount_label: itemDiscount
-              ? `${lang === "th" ? "ส่วนลดรายการ" : "Item discount"}${itemDiscount.reason ? `: ${itemDiscount.reason}` : ""}`
-              : undefined,
-          };
-        }),
-        total: Number(bill.total),
-        vatAmount: bill.vat_mode === "exclusive" ? Number(bill.vat_amount ?? 0) : 0,
-        vatRate: Number(bill.vat_rate) || 7,
-        vat_mode: bill.vat_mode, payments, language: lang,
-        discountAmount: Number(bill.discount_amount ?? 0),
-        memberDiscountAmount: Number(bill.member_discount_amount ?? 0),
-        pointsDiscountAmount: Number(bill.loyalty_discount_amount ?? 0),
-        serviceFeeAmount: Number(bill.service_fee_amount ?? 0),
-        roundingAdjustment: Number(bill.rounding_adjustment ?? 0),
-        loyaltyClaimUrl: loyaltyClaim?.token ? `${publicBaseUrl()}/loyalty/claim/${loyaltyClaim.token}` : undefined,
-        loyaltyClaimCode: loyaltyClaim?.token,
-        loyaltyEarnPoints: loyaltyClaim ? Number(loyaltyClaim.claim_points ?? 0) : undefined,
-      });
+      await enqueuePaidReceipt(`receipt-reprint:${bill.id}:${crypto.randomUUID()}`);
       toast.success(lang === "th" ? "พิมพ์ใบเสร็จซ้ำแล้ว" : "Receipt reprinted");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Receipt reprint failed");
