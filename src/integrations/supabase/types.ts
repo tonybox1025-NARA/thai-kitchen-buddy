@@ -164,6 +164,33 @@ export type Database = {
         }
         Relationships: []
       }
+      bill_quarantine_audit: {
+        Row: {
+          bill_id: string
+          bill_snapshot: Json
+          id: string
+          order_id: string
+          quarantined_at: string
+          reason: string
+        }
+        Insert: {
+          bill_id: string
+          bill_snapshot: Json
+          id?: string
+          order_id: string
+          quarantined_at?: string
+          reason: string
+        }
+        Update: {
+          bill_id?: string
+          bill_snapshot?: Json
+          id?: string
+          order_id?: string
+          quarantined_at?: string
+          reason?: string
+        }
+        Relationships: []
+      }
       bills: {
         Row: {
           cashier_id: string | null
@@ -180,6 +207,7 @@ export type Database = {
           order_id: string
           paid_at: string | null
           points_redeemed: number
+          quarantined_at: string | null
           rounding_adjustment: number
           rounding_mode: string
           service_fee_amount: number
@@ -207,6 +235,7 @@ export type Database = {
           order_id: string
           paid_at?: string | null
           points_redeemed?: number
+          quarantined_at?: string | null
           rounding_adjustment?: number
           rounding_mode?: string
           service_fee_amount?: number
@@ -234,6 +263,7 @@ export type Database = {
           order_id?: string
           paid_at?: string | null
           points_redeemed?: number
+          quarantined_at?: string | null
           rounding_adjustment?: number
           rounding_mode?: string
           service_fee_amount?: number
@@ -2317,6 +2347,10 @@ export type Database = {
         }[]
       }
       allocate_order_round: { Args: { p_order_id: string }; Returns: number }
+      bill_is_financially_inert: {
+        Args: { p_bill_id: string }
+        Returns: boolean
+      }
       cancel_table_order_safely: {
         Args: { p_closed_by?: string; p_order_id: string; p_reason: string }
         Returns: {
@@ -2585,6 +2619,10 @@ export type Database = {
           redeemed: number
         }[]
       }
+      quarantine_inert_orphan_bill: {
+        Args: { p_bill_id: string; p_reason?: string }
+        Returns: boolean
+      }
       record_bill_payment: {
         Args: {
           p_amount: number
@@ -2798,6 +2836,19 @@ export type Database = {
           p_items: Json
           p_order_id: string
           p_print_jobs: Json
+          p_submission_id: string
+        }
+        Returns: {
+          created: boolean
+          item_count: number
+          round_number: number
+        }[]
+      }
+      submit_pos_round_safely: {
+        Args: {
+          p_item_ids: string[]
+          p_order_id: string
+          p_print_jobs?: Json
           p_submission_id: string
         }
         Returns: {
