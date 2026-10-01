@@ -21,12 +21,12 @@ import { format } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import { PencilLine, ArrowRight, CalendarIcon, Download, XCircle, Printer } from "lucide-react";
 import { bucketizeQr, parseBuckets, type QrBucketTotal, type QrTimeBucket } from "@/lib/qr-buckets";
-import { canPrintDirect, printDirect } from "@/lib/counter-printer";
+import { canPrintDirect, printDirect, enqueueDurablePrint, preparePayloadForOutbox, type CounterPrintPayload } from "@/lib/counter-printer";
 import { shiftIdsFor } from "@/lib/dash-range";
 import { bangkokDateKey } from "@/lib/business-day";
 import { CASH_DENOMINATIONS as DENOMS } from "@/lib/cash-denominations";
 import { CashDenominationGrid as DenomGrid } from "@/components/CashDenominationGrid";
-import { closeShiftSafely, getShiftCloseBlockers, shiftCloseBlockedMessage } from "@/lib/shift-close";
+import { closeShiftWithTicket, getShiftCloseBlockers, openShiftSafely, shiftCloseBlockedMessage } from "@/lib/shift-close";
 
 export const Route = createFileRoute("/_app/reports")({ component: Reports });
 
@@ -513,53 +513,43 @@ function Reports() {
     });
   };
 
+  // Native OPENING tickets are built up-front and committed in the same
+  // transaction as the shift, so a printer outage can never lose them.
+  const buildOpeningJobs = (counts: Record<number, number>, businessDay: string) => {
+    if (!canPrintDirect()) return [];
+    const at = new Date().toISOString();
+    const total = DENOMS.reduce((sum, d) => sum + d * (counts[d] || 0), 0);
+    const countRows = DENOMS.filter((d) => (counts[d] ?? 0) > 0)
+      .map((d) => ({ label: `${d} THB x ${counts[d]}`, value: thb(d * counts[d]) }));
+    const base = { kind: "report", restaurant: restaurantName || "Restaurant", report_type: "OPEN", business_day: businessDay, printed_at: at };
+    return [
+      { printer: "counter" as const, payload: preparePayloadForOutbox({ ...base, sections: [{ title: t("cash_count"), rows: [...countRows, { label: t("starting_cash"), value: thb(total), bold: true }] }] } as CounterPrintPayload) },
+      { printer: "kitchen" as const, payload: preparePayloadForOutbox({ ...base, sections: [{ title: "OPENING PRINTER CHECK", rows: [
+        { label: "Kitchen printer", value: "READY", bold: true },
+        { label: "เครื่องพิมพ์ครัว", value: "พร้อม", bold: true },
+      ] }] } as CounterPrintPayload) },
+    ];
+  };
+
   const openShift = async () => {
     if (openingShiftRef.current) return;
     openingShiftRef.current = true;
     setOpeningShift(true);
     try {
-    const { data: existing } = await supabase.from("shifts").select("*")
-      .eq("status", "open").order("opened_at", { ascending: false }).limit(1);
-    if (existing?.[0]) {
-      setShift(existing[0] as Shift);
+      const today = bangkokDateKey();
+      const counts = openCashCount;
+      const result = await openShiftSafely<Shift>({
+        openedBy: staff?.id, openingFloat: openTotal, businessDay: today,
+        printJobs: buildOpeningJobs(counts, today),
+      });
+      setShift(result.shift);
       setOpenDlg(false);
+      setOpenCashCount({});
+      // Web (no native printer): keep the browser slip for a freshly opened shift.
+      if (result.created && !canPrintDirect()) void printOpenSlip(result.shift, counts).catch(() => {});
       toast.success(t("rep_shift_opened"));
-      return;
-    }
-    const today = bangkokDateKey();
-    const { data: newShift, error } = await supabase.from("shifts")
-      .insert({ business_day: today, opened_by: staff?.id, opening_float: openTotal })
-      .select("*").single();
-    if (error || !newShift) {
-      if ((error as any)?.code === "23505") {
-        const { data: raced } = await supabase.from("shifts").select("*")
-          .eq("status", "open").order("opened_at", { ascending: false }).limit(1);
-        if (raced?.[0]) {
-          setShift(raced[0] as Shift);
-          setOpenDlg(false);
-          toast.success(t("rep_shift_opened"));
-          return;
-        }
-      }
-      toast.error(error?.message ?? t("rep_load_failed"));
-      return;
-    }
-    setShift(newShift as Shift);
-    const [counterResult, kitchenResult] = await Promise.allSettled([
-      printOpenSlip(newShift as Shift, openCashCount),
-      printOpeningKitchenCheck(newShift as Shift),
-    ]);
-    const failed = [
-      counterResult.status === "rejected" ? "counter" : null,
-      kitchenResult.status === "rejected" ? "kitchen" : null,
-    ].filter(Boolean);
-    if (failed.length > 0) {
-      toast.error(`Shift opened, but ${failed.join(" and ")} printer check failed. Check paper/power and use Confirm & Print again.`, { duration: 15_000 });
-    } else {
-      toast.success("Shift opened · counter and kitchen printers ready");
-    }
-    setOpenDlg(false); setOpenCashCount({});
-    toast.success(t("rep_shift_opened"));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("rep_load_failed"));
     } finally {
       openingShiftRef.current = false;
       setOpeningShift(false);
@@ -611,15 +601,20 @@ function Reports() {
     }
     const { cashTotal, expected, overShort } = calcCashSummary(cashCount, report);
     try {
-      const result = await closeShiftSafely({
+      let printPayload: unknown = null;
+      if (canPrintDirect()) {
+        await openPrintWindow("Z", report, shift, cashCount, restaurantName, async (p) => { printPayload = preparePayloadForOutbox(p); });
+      }
+      const result = await closeShiftWithTicket({
         shiftId: shift.id, closedBy: staff?.id, cashCount,
         totals: { ...report, cashTotal, expected, overShort },
+        printPayload,
       });
       if (!result.closed) {
         if (result.reason === "blocked" && result.blockers) {
           toast.error(shiftCloseBlockedMessage(result.blockers), { duration: 12_000 });
         } else {
-          toast.error("This shift is already closed. Refresh the page before continuing.");
+          toast.error("Z report was not saved.");
         }
         return false;
       }
@@ -851,7 +846,7 @@ function Reports() {
                 const shiftToPrint = shift;
                 const cashCountToPrint = cashCount;
                 const closed = await submitZ();
-                if (closed) await openPrintWindow("Z", reportToPrint, shiftToPrint, cashCountToPrint, restaurantName);
+                if (closed && !canPrintDirect()) await openPrintWindow("Z", reportToPrint, shiftToPrint, cashCountToPrint, restaurantName);
               } catch (error) {
                 toast.error(error instanceof Error ? error.message : "Print failed");
               }
@@ -1159,7 +1154,10 @@ function ZReportHistoryTab({ restaurantName }: { restaurantName: string }) {
       const counts = Object.fromEntries(
         Object.entries(shift.cash_count ?? {}).map(([denom, count]) => [Number(denom), Number(count)]),
       ) as Record<number, number>;
-      await openPrintWindow("Z", report, shift, counts, restaurantName);
+      // Reprint is its own explicit job key and never touches shift data.
+      await openPrintWindow("Z", report, shift, counts, restaurantName, canPrintDirect()
+        ? async (p) => { await enqueueDurablePrint({ jobKey: `z-reprint:${shift.id}:${crypto.randomUUID()}`, printer: "counter", payload: p, sourceType: "z_reprint", sourceId: shift.id }); }
+        : undefined);
       toast.success(`Z report ${shift.business_day} sent to printer`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not print Z report");
