@@ -110,17 +110,6 @@ export function invalidatePrinterIps() {
 
 // ── Transports ────────────────────────────────────────────────────────────────
 
-/** Today's path: hand the job to print_jobs for the bridge to print. */
-export async function queuePrintJob(printer: PrinterName, payload: CounterPrintPayload) {
-  const prepared = preparePrintPayload(payload);
-  const { error } = await supabase.from("print_jobs").insert({
-    printer,
-    payload: prepared as Json,
-  });
-  if (error) throw error;
-  return { ok: true as const, via: "print_jobs" as const };
-}
-
 /** Compose ESC/POS in the app and write it to the printer over the native bridge. */
 export async function printDirect(printer: PrinterName, payload: CounterPrintPayload) {
   const prepared = preparePrintPayload(payload);
@@ -199,95 +188,82 @@ export async function openCashDrawer() {
 }
 
 /**
- * Send one job by whichever transport this device is set to.
- * Falls back to the queue whenever direct printing is unavailable, so a
- * misconfigured tablet degrades to today's behaviour instead of losing the ticket.
+ * Operational printing. Every operational ticket is recorded durably in the
+ * print_jobs outbox first (idempotent per job key) and delivered by the
+ * native leased worker or the print bridge with automatic retries. Direct
+ * printer writes are reserved for test prints and the cash drawer.
+ *
+ * Pass a deterministic `jobKey` for anything that may be retried (receipts,
+ * tickets). Explicit reprints should pass their own fresh key.
  */
-export async function printJob(printer: PrinterName, payload: CounterPrintPayload) {
-  if (getPrintTransport() === "direct" && canPrintDirect()) {
-    return printDirect(printer, payload);
-  }
-  return queuePrintJob(printer, payload);
+export type OperationalPrintOptions = {
+  jobKey?: string;
+  sourceType?: string;
+  sourceId?: string | null;
+  batchId?: string | null;
+};
+
+function operationalKey(prefix: string, opts?: OperationalPrintOptions) {
+  return opts?.jobKey ?? `${prefix}:${crypto.randomUUID()}`;
 }
 
-/** Send a batch of kitchen tickets (one per zone) by the active transport. */
+export async function printJob(printer: PrinterName, payload: CounterPrintPayload, opts?: OperationalPrintOptions) {
+  const id = await enqueueDurablePrint({
+    jobKey: operationalKey(`adhoc:${printer}`, opts),
+    printer,
+    payload,
+    sourceType: opts?.sourceType ?? "adhoc",
+    sourceId: opts?.sourceId ?? null,
+    batchId: opts?.batchId ?? null,
+  });
+  return { ok: true as const, via: "outbox" as const, id };
+}
+
+/** Record kitchen tickets (one per zone) in the durable outbox. */
 export async function printKitchenJobs(
   jobs: { printer: PrinterName; payload: CounterPrintPayload }[],
+  opts?: OperationalPrintOptions,
 ) {
-  if (jobs.length === 0) return;
-
-  if (getPrintTransport() === "direct" && canPrintDirect()) {
-    for (const job of jobs) await printDirect(job.printer, job.payload);
-    return;
+  const base = operationalKey("kitchen", opts);
+  for (const [i, job] of jobs.entries()) {
+    await enqueueDurablePrint({
+      jobKey: `${base}:${job.printer}:${i + 1}`,
+      printer: job.printer,
+      payload: job.payload,
+      sourceType: opts?.sourceType ?? "adhoc",
+      sourceId: opts?.sourceId ?? null,
+    });
   }
-
-  const { error } = await supabase
-    .from("print_jobs")
-    .insert(
-      jobs.map((j) => ({ printer: j.printer, payload: preparePrintPayload(j.payload) as Json })),
-    );
-  if (error) throw error;
 }
 
 /**
- * Print several counter tickets reliably and in order. For direct printing the
- * ESC/POS documents are sent in one transport write; each document already ends
- * with its own cut command, so they still come out as separate paper tickets.
+ * Record several counter tickets as one outbox batch so the worker delivers
+ * them in a single transport write (each document carries its own cut).
  */
-export async function printCounterJobs(payloads: CounterPrintPayload[]) {
+export async function printCounterJobs(payloads: CounterPrintPayload[], opts?: OperationalPrintOptions) {
   if (payloads.length === 0) return;
-
-  if (getPrintTransport() === "direct" && canPrintDirect()) {
-    const documents = await Promise.all(
-      payloads.map((payload) =>
-        buildEscPos(preparePrintPayload(payload) as unknown as PrintPayload, "counter"),
-      ),
-    );
-    const byteLength = documents.reduce((total, document) => total + document.length, 0);
-    const batch = new Uint8Array(byteLength);
-    let offset = 0;
-    for (const document of documents) {
-      batch.set(document, offset);
-      offset += document.length;
-    }
-    const data = toBase64(batch);
-
-    if (getCounterLink() === "usb") {
-      await PosPrinter.printUsb({ data });
-      return;
-    }
-
-    const { counter: host } = await loadPrinterIps(true);
-    if (host) {
-      await PosPrinter.printTcp({ host, data });
-      return;
-    }
-
-    const { available } = await PosPrinter.sunmiStatus().catch(() => ({ available: false }));
-    if (available) {
-      await PosPrinter.printSunmi({ data });
-      return;
-    }
-
-    throw new Error("No counter printer configured — set its IP or switch it to USB.");
+  const base = operationalKey("counter", opts);
+  const batchId = payloads.length > 1 ? crypto.randomUUID() : null;
+  for (const [i, payload] of payloads.entries()) {
+    await enqueueDurablePrint({
+      jobKey: `${base}:counter:${i + 1}`,
+      printer: "counter",
+      payload,
+      sourceType: opts?.sourceType ?? "adhoc",
+      sourceId: opts?.sourceId ?? null,
+      batchId,
+    });
   }
-
-  const { error } = await supabase.from("print_jobs").insert(
-    payloads.map((payload) => ({
-      printer: "counter" as const,
-      payload: preparePrintPayload(payload) as Json,
-    })),
-  );
-  if (error) throw error;
 }
 
 // ── Back-compat entry points ──────────────────────────────────────────────────
 
-/** Counter/receipt print. Routes through the active transport. */
-export async function printCounter(payload: CounterPrintPayload) {
-  return printJob("counter", payload);
+/** Counter/receipt print, recorded durably in the outbox. */
+export async function printCounter(payload: CounterPrintPayload, opts?: OperationalPrintOptions) {
+  return printJob("counter", payload, opts);
 }
 
+/** Test-print only: writes straight to the printer / local bridge. */
 export async function printCounterViaAndroidBridge(payload: CounterPrintPayload) {
   // In the APK there is no loopback bridge to talk to — print natively instead.
   if (canPrintDirect()) {

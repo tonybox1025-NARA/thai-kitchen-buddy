@@ -20,7 +20,7 @@ import { format } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import { PencilLine, ArrowRight, CalendarIcon, XCircle, Printer } from "lucide-react";
 import { bucketizeQr, parseBuckets, type QrBucketTotal, type QrTimeBucket } from "@/lib/qr-buckets";
-import { canPrintDirect, printDirect, enqueueDurablePrint, preparePayloadForOutbox, type CounterPrintPayload } from "@/lib/counter-printer";
+import { canPrintDirect, enqueueDurablePrint, preparePayloadForOutbox, type CounterPrintPayload } from "@/lib/counter-printer";
 import { shiftIdsFor } from "@/lib/dash-range";
 import { bangkokDateKey } from "@/lib/business-day";
 import { CASH_DENOMINATIONS as DENOMS } from "@/lib/cash-denominations";
@@ -157,7 +157,7 @@ async function openPrintWindow(
     ];
     const reportPayload = { kind: "report", restaurant: restaurantName || "Restaurant", report_type: kind, business_day: shift.business_day, printed_at: now.toISOString(), sections } as CounterPrintPayload;
     if (sink) await sink(reportPayload);
-    else await printDirect("counter", reportPayload);
+    else await enqueueDurablePrint({ jobKey: `${kind.toLowerCase()}-print:${shift.id}:${crypto.randomUUID()}`, printer: "counter", payload: reportPayload, sourceType: kind === "Z" ? "z_reprint" : "x_report", sourceId: shift.id });
     return;
   }
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>${kind} Report</title>
@@ -372,7 +372,7 @@ function Register() {
     if (canPrintDirect()) {
       const countRows = DENOMS.filter((d) => (counts[d] ?? 0) > 0)
         .map((d) => ({ label: `${d} THB x ${counts[d]}`, value: thb(d * counts[d]) }));
-      await printDirect("counter", {
+      await enqueueDurablePrint({ jobKey: `opening:${s.id}:counter:1`, printer: "counter", sourceType: "opening", sourceId: s.id, payload: {
         kind: "report",
         restaurant: restaurantName || "Restaurant",
         report_type: "OPEN",
@@ -382,7 +382,7 @@ function Register() {
           title: t("cash_count"),
           rows: [...countRows, { label: t("starting_cash"), value: thb(total), bold: true }],
         }],
-      });
+      } as CounterPrintPayload });
       return;
     }
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>Open Shift</title>

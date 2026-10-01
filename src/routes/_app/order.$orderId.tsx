@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n, pickName } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth";
@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Plus, Minus, Trash2, ChefHat, Receipt, ArrowLeft, AlertTriangle, ArrowLeftRight, X, Printer, Eye, Layers, Bell, QrCode, Check, ShoppingBag, Tag, Users } from "lucide-react";
 import { SetMenuDialog } from "@/components/SetMenuDialog";
 import { SETS, buildSetDef, formatSetKitchenNotes, setConfigCost, type SetConfig, type SetDef, type SetItemRow } from "@/lib/set-menu";
-import { canPrintDirect, enqueueDurablePrint, getPrintTransport, printCounter, printCounterJobs, printKitchenJobs, type CounterPrintPayload } from "@/lib/counter-printer";
+import { preparePayloadForOutbox, printCounter, type CounterPrintPayload } from "@/lib/counter-printer";
 import { isFrontCounterCategory } from "@/lib/print/routing";
 import { isOffline } from "@/lib/online-status";
 import { tableLabel } from "@/lib/table";
@@ -166,6 +166,8 @@ function OrderPage() {
   const [activeCat, setActiveCat] = useState<string | "all">(() => cachedCatalog?.categories[0]?.id ?? "all");
   const [categoryPage, setCategoryPage] = useState(0);
   const [items, setItems] = useState<Item[]>([]);
+  const sendAttemptRef = useRef<{ idsKey: string; submissionId: string } | null>(null);
+  const sendingRoundRef = useRef(false);
   const [selected, setSelected] = useState<Menu | null>(null);
   const [qty, setQty] = useState(1);
   const [notes, setNotes] = useState("");
@@ -507,12 +509,16 @@ function OrderPage() {
     if (isOffline()) { toast.error(t("err_offline")); return; }
     const orderType = items.some((i) => i.status === "sent") ? "added" : "new";
     const ids = pending.map((p) => p.id);
+    // One stable submission id per send action: a timeout/retry of the same
+    // unsent items reuses it, so the DB returns the original committed round.
+    const idsKey = [...ids].sort().join(",");
+    if (sendAttemptRef.current?.idsKey !== idsKey) sendAttemptRef.current = { idsKey, submissionId: crypto.randomUUID() };
+    const submissionId = sendAttemptRef.current.submissionId;
+    if (sendingRoundRef.current) return;
+    sendingRoundRef.current = true;
+    try {
     const sentAt = new Date().toISOString();
-    const { data: allocatedRound, error: roundError } = await (supabase as any).rpc("allocate_order_round", { p_order_id: orderId });
-    if (roundError || !allocatedRound) { toast.error(roundError?.message ?? "Round allocation failed"); return; }
-    const roundNumber = Number(allocatedRound);
-    const { error: sendError } = await (supabase as any).from("order_items").update({ status: "sent", sent_at: sentAt, round_number: roundNumber, round_source: "pos" }).in("id", ids);
-    if (sendError) { toast.error(sendError.message); return; }
+    const roundNumber = 0; // authoritative round is assigned by the database
     // Queue print jobs — kitchen (Burmese) + counter (order copy)
     type Zone = { id: string; name_th: string; name_en: string; sort: number; print_to_kitchen: boolean; counter_group: string };
     const zoneById = new Map<string, Zone>();
@@ -597,37 +603,29 @@ function OrderPage() {
       station: "COUNTER",
       footer: "counter",
     });
-    // Route through the active transport: direct raster print in the APK, or the
-    // print_jobs queue (picked up by the bridge) otherwise — same as before on web.
-    // The printers are independent. A kitchen connection failure must not prevent
-    // the counter copy (and vice versa), otherwise one offline device silently
-    // loses every ticket that follows it in the function.
-    // Native till: record every ticket durably under a deterministic round key
-    // first; the outbox worker delivers and retries. Counter tickets share one
-    // batch so they still go out in a single transport write.
-    if (canPrintDirect() && getPrintTransport() === "direct") {
-      const counterBatch = crypto.randomUUID();
-      const results = await Promise.allSettled([
-        ...kitchenJobs.map((job, i) => enqueueDurablePrint({ jobKey: `round:${orderId}:${roundNumber}:kitchen:${i + 1}`, printer: "kitchen", payload: job.payload, sourceType: "round", sourceId: orderId })),
-        ...counterTickets.map((payload, i) => enqueueDurablePrint({ jobKey: `round:${orderId}:${roundNumber}:counter:${i + 1}`, printer: "counter", payload, sourceType: "round", sourceId: orderId, batchId: counterBatch })),
-      ]);
-      const failed = results.find((r) => r.status === "rejected");
-      if (failed) toast.error(`Tickets not recorded: ${String((failed as PromiseRejectedResult).reason)}`, { duration: 12_000 });
-      else toast.success(t("send_to_kitchen") + " ✓");
+    // Items, round, submission receipt, and every ticket commit in one
+    // transaction. Printer state never affects whether the round is sent.
+    const printJobs = [
+      ...kitchenJobs.map((job) => ({ printer: "kitchen" as const, payload: preparePayloadForOutbox(job.payload as CounterPrintPayload), batch: false })),
+      ...counterTickets.map((payload) => ({ printer: "counter" as const, payload: preparePayloadForOutbox(payload), batch: true })),
+    ];
+    const { data: submitted, error: submitError } = await (supabase as any).rpc("submit_pos_round_safely", {
+      p_submission_id: submissionId,
+      p_order_id: orderId,
+      p_item_ids: ids,
+      p_print_jobs: printJobs,
+    });
+    if (submitError || !submitted?.[0]) {
+      toast.error(submitError?.message ?? "Send failed — tap again to retry");
       return;
     }
-    const [kitchenResult, counterResult] = await Promise.allSettled([
-      printKitchenJobs(kitchenJobs),
-      printCounterJobs(counterTickets),
-    ]);
-    const failures = [
-      kitchenResult.status === "rejected" ? `Kitchen: ${String(kitchenResult.reason)}` : null,
-      counterResult.status === "rejected" ? `Counter: ${String(counterResult.reason)}` : null,
-    ].filter(Boolean);
-    if (failures.length > 0) {
-      toast.error(`Print failed — ${failures.join(" · ")}`, { duration: 12_000 });
-    } else {
-      toast.success(t("send_to_kitchen") + " ✓");
+    sendAttemptRef.current = null;
+    setItems((current) => current.map((row) => ids.includes(row.id)
+      ? { ...row, status: "sent", round_number: Number(submitted[0].round_number), round_source: "pos" }
+      : row));
+    toast.success(t("send_to_kitchen") + " ✓");
+    } finally {
+      sendingRoundRef.current = false;
     }
   };
 
@@ -729,7 +727,7 @@ function OrderPage() {
       // this counter printer's firmware corrupts Thai text in that mode.
       restaurant: "LONMOH",
       guests: Number((tbl as { guests?: number } | null)?.guests ?? 0),
-    });
+    }, { jobKey: `table-qr-reprint:${orderId}:${crypto.randomUUID()}`, sourceType: "table_qr", sourceId: orderId });
     toast.success(`QR printed · ${t("table")} ${tableCode}`);
   };
 
@@ -959,7 +957,7 @@ function OrderPage() {
         department: "COUNTER REPRINT",
         station: "COUNTER REPRINT",
         footer: "counter",
-      } as CounterPrintPayload);
+      } as CounterPrintPayload, { jobKey: `round-reprint:${orderId}:${roundNumber}:${crypto.randomUUID()}`, sourceType: "round_reprint", sourceId: orderId });
       toast.success(lang === "th" ? `พิมพ์รอบ ${roundNumber} ที่เคาน์เตอร์แล้ว` : `Round ${roundNumber} reprinted at counter`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Reprint failed");
@@ -1028,7 +1026,7 @@ function OrderPage() {
       vatAmount: settingsVatEnabled && settingsVatMode === "exclusive" ? billVatAmount : 0,
       vatRate: settingsVatRate,
       vat_mode: settingsVatMode, payments: [], language: lang,
-    });
+    }, { sourceType: "bill_preview", sourceId: orderId });
     toast.success(t("ord_bill_sent"));
   };
 

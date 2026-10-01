@@ -1,2 +1,3 @@
 
 - Operational native prints go through the print_jobs outbox (`enqueue_print_job`, `open_shift_safely`, `close_shift_with_ticket`) and are delivered only by the leased worker in `src/lib/native-print-queue.ts` — so paper failures never lose tickets or roll back business commits.
+- Operational prints (rounds, receipts, voids, QR slips, X/Z/opening, reports) are recorded via enqueue_print_job / submit_pos_round_safely with deterministic job keys; printDirect is only for test prints and the cash drawer — so paper failures never lose tickets or duplicate them (checked by scripts/verify-no-direct-print.sh).
