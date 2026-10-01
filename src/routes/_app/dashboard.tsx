@@ -8,6 +8,7 @@ import { DashRangeBar } from "@/components/DashRangeBar";
 import { type DashRange, rangeBounds, shiftIdsFor } from "@/lib/dash-range";
 import { ArrowRight, Clock3 } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
+import { IntegrityStatus } from "@/components/IntegrityStatus";
 
 export const Route = createFileRoute("/_app/dashboard")({ component: Dashboard });
 
@@ -109,6 +110,7 @@ function Dashboard() {
 
   return (
     <div className="p-6 space-y-6">
+      <IntegrityStatus />
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold">{t("nav_dashboard")}</h1>
         <div className="flex items-center gap-2 flex-wrap justify-end">
