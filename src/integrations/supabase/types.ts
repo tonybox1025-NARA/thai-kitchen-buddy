@@ -460,6 +460,33 @@ export type Database = {
         }
         Relationships: []
       }
+      integrity_heal_audit: {
+        Row: {
+          after: Json | null
+          before: Json | null
+          entity_id: string | null
+          healed_at: string
+          id: string
+          kind: string
+        }
+        Insert: {
+          after?: Json | null
+          before?: Json | null
+          entity_id?: string | null
+          healed_at?: string
+          id?: string
+          kind: string
+        }
+        Update: {
+          after?: Json | null
+          before?: Json | null
+          entity_id?: string | null
+          healed_at?: string
+          id?: string
+          kind?: string
+        }
+        Relationships: []
+      }
       kitchen_zones: {
         Row: {
           active: boolean
@@ -1582,30 +1609,60 @@ export type Database = {
       }
       print_jobs: {
         Row: {
+          attempts: number
+          batch_id: string | null
+          claimed_at: string | null
+          claimed_by: string | null
           created_at: string
           error: string | null
           id: string
+          job_key: string | null
+          last_error: string | null
+          lease_until: string | null
+          next_attempt_at: string
           payload: Json
           printed_at: string | null
           printer: Database["public"]["Enums"]["printer_kind"]
+          source_id: string | null
+          source_type: string | null
           status: Database["public"]["Enums"]["print_status"]
         }
         Insert: {
+          attempts?: number
+          batch_id?: string | null
+          claimed_at?: string | null
+          claimed_by?: string | null
           created_at?: string
           error?: string | null
           id?: string
+          job_key?: string | null
+          last_error?: string | null
+          lease_until?: string | null
+          next_attempt_at?: string
           payload: Json
           printed_at?: string | null
           printer: Database["public"]["Enums"]["printer_kind"]
+          source_id?: string | null
+          source_type?: string | null
           status?: Database["public"]["Enums"]["print_status"]
         }
         Update: {
+          attempts?: number
+          batch_id?: string | null
+          claimed_at?: string | null
+          claimed_by?: string | null
           created_at?: string
           error?: string | null
           id?: string
+          job_key?: string | null
+          last_error?: string | null
+          lease_until?: string | null
+          next_attempt_at?: string
           payload?: Json
           printed_at?: string | null
           printer?: Database["public"]["Enums"]["printer_kind"]
+          source_id?: string | null
+          source_type?: string | null
           status?: Database["public"]["Enums"]["print_status"]
         }
         Relationships: []
@@ -2268,6 +2325,34 @@ export type Database = {
           voided_items: number
         }[]
       }
+      claim_print_jobs: {
+        Args: { p_device: string; p_lease_seconds?: number }
+        Returns: {
+          attempts: number
+          batch_id: string | null
+          claimed_at: string | null
+          claimed_by: string | null
+          created_at: string
+          error: string | null
+          id: string
+          job_key: string | null
+          last_error: string | null
+          lease_until: string | null
+          next_attempt_at: string
+          payload: Json
+          printed_at: string | null
+          printer: Database["public"]["Enums"]["printer_kind"]
+          source_id: string | null
+          source_type: string | null
+          status: Database["public"]["Enums"]["print_status"]
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "print_jobs"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       claim_receipt_loyalty_points: {
         Args: { p_claim_token: string; p_guest_token: string }
         Returns: {
@@ -2288,6 +2373,16 @@ export type Database = {
         }
         Returns: Json
       }
+      close_shift_with_ticket: {
+        Args: {
+          p_cash_count: Json
+          p_closed_by: string
+          p_print_payload?: Json
+          p_shift_id: string
+          p_totals: Json
+        }
+        Returns: Json
+      }
       combine_open_table_orders: {
         Args: {
           p_merged_by?: string
@@ -2299,6 +2394,10 @@ export type Database = {
           combined_subtotal: number
           source_table_code: string
         }[]
+      }
+      complete_print_job: {
+        Args: { p_device: string; p_id: string }
+        Returns: boolean
       }
       create_or_get_member: {
         Args: {
@@ -2333,12 +2432,27 @@ export type Database = {
         Args: { _admin_pin?: string; _id: string }
         Returns: undefined
       }
+      enqueue_print_job: {
+        Args: {
+          p_batch_id?: string
+          p_job_key: string
+          p_payload: Json
+          p_printer: Database["public"]["Enums"]["printer_kind"]
+          p_source_id?: string
+          p_source_type?: string
+        }
+        Returns: string
+      }
       expire_due_member_points: {
         Args: never
         Returns: {
           members_expired: number
           points_expired: number
         }[]
+      }
+      fail_print_job: {
+        Args: { p_device: string; p_error: string; p_id: string }
+        Returns: string
       }
       finalize_bill_payment: {
         Args: {
@@ -2361,6 +2475,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      get_integrity_status: { Args: never; Returns: Json }
       get_shift_close_blockers: { Args: { p_shift_id: string }; Returns: Json }
       has_role: {
         Args: {
@@ -2369,6 +2484,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      heal_table_projection: { Args: never; Returns: number }
       is_admin_pin: { Args: { _pin: string }; Returns: boolean }
       list_staff: {
         Args: never
@@ -2414,6 +2530,15 @@ export type Database = {
         }[]
       }
       normalize_member_phone: { Args: { p_phone: string }; Returns: string }
+      open_shift_safely: {
+        Args: {
+          p_business_day: string
+          p_opened_by: string
+          p_opening_float: number
+          p_print_jobs?: Json
+        }
+        Returns: Json
+      }
       open_table_order_safely: {
         Args: {
           p_guests: number
