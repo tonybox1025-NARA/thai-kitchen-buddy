@@ -507,12 +507,16 @@ function OrderPage() {
     if (isOffline()) { toast.error(t("err_offline")); return; }
     const orderType = items.some((i) => i.status === "sent") ? "added" : "new";
     const ids = pending.map((p) => p.id);
+    // One stable submission id per send action: a timeout/retry of the same
+    // unsent items reuses it, so the DB returns the original committed round.
+    const idsKey = [...ids].sort().join(",");
+    if (sendAttemptRef.current?.idsKey !== idsKey) sendAttemptRef.current = { idsKey, submissionId: crypto.randomUUID() };
+    const submissionId = sendAttemptRef.current.submissionId;
+    if (sendingRoundRef.current) return;
+    sendingRoundRef.current = true;
+    try {
     const sentAt = new Date().toISOString();
-    const { data: allocatedRound, error: roundError } = await (supabase as any).rpc("allocate_order_round", { p_order_id: orderId });
-    if (roundError || !allocatedRound) { toast.error(roundError?.message ?? "Round allocation failed"); return; }
-    const roundNumber = Number(allocatedRound);
-    const { error: sendError } = await (supabase as any).from("order_items").update({ status: "sent", sent_at: sentAt, round_number: roundNumber, round_source: "pos" }).in("id", ids);
-    if (sendError) { toast.error(sendError.message); return; }
+    const roundNumber = 0; // authoritative round is assigned by the database
     // Queue print jobs — kitchen (Burmese) + counter (order copy)
     type Zone = { id: string; name_th: string; name_en: string; sort: number; print_to_kitchen: boolean; counter_group: string };
     const zoneById = new Map<string, Zone>();
@@ -597,37 +601,29 @@ function OrderPage() {
       station: "COUNTER",
       footer: "counter",
     });
-    // Route through the active transport: direct raster print in the APK, or the
-    // print_jobs queue (picked up by the bridge) otherwise — same as before on web.
-    // The printers are independent. A kitchen connection failure must not prevent
-    // the counter copy (and vice versa), otherwise one offline device silently
-    // loses every ticket that follows it in the function.
-    // Native till: record every ticket durably under a deterministic round key
-    // first; the outbox worker delivers and retries. Counter tickets share one
-    // batch so they still go out in a single transport write.
-    if (canPrintDirect() && getPrintTransport() === "direct") {
-      const counterBatch = crypto.randomUUID();
-      const results = await Promise.allSettled([
-        ...kitchenJobs.map((job, i) => enqueueDurablePrint({ jobKey: `round:${orderId}:${roundNumber}:kitchen:${i + 1}`, printer: "kitchen", payload: job.payload, sourceType: "round", sourceId: orderId })),
-        ...counterTickets.map((payload, i) => enqueueDurablePrint({ jobKey: `round:${orderId}:${roundNumber}:counter:${i + 1}`, printer: "counter", payload, sourceType: "round", sourceId: orderId, batchId: counterBatch })),
-      ]);
-      const failed = results.find((r) => r.status === "rejected");
-      if (failed) toast.error(`Tickets not recorded: ${String((failed as PromiseRejectedResult).reason)}`, { duration: 12_000 });
-      else toast.success(t("send_to_kitchen") + " ✓");
+    // Items, round, submission receipt, and every ticket commit in one
+    // transaction. Printer state never affects whether the round is sent.
+    const printJobs = [
+      ...kitchenJobs.map((job) => ({ printer: "kitchen" as const, payload: preparePayloadForOutbox(job.payload as CounterPrintPayload), batch: false })),
+      ...counterTickets.map((payload) => ({ printer: "counter" as const, payload: preparePayloadForOutbox(payload), batch: true })),
+    ];
+    const { data: submitted, error: submitError } = await (supabase as any).rpc("submit_pos_round_safely", {
+      p_submission_id: submissionId,
+      p_order_id: orderId,
+      p_item_ids: ids,
+      p_print_jobs: printJobs,
+    });
+    if (submitError || !submitted?.[0]) {
+      toast.error(submitError?.message ?? "Send failed — tap again to retry");
       return;
     }
-    const [kitchenResult, counterResult] = await Promise.allSettled([
-      printKitchenJobs(kitchenJobs),
-      printCounterJobs(counterTickets),
-    ]);
-    const failures = [
-      kitchenResult.status === "rejected" ? `Kitchen: ${String(kitchenResult.reason)}` : null,
-      counterResult.status === "rejected" ? `Counter: ${String(counterResult.reason)}` : null,
-    ].filter(Boolean);
-    if (failures.length > 0) {
-      toast.error(`Print failed — ${failures.join(" · ")}`, { duration: 12_000 });
-    } else {
-      toast.success(t("send_to_kitchen") + " ✓");
+    sendAttemptRef.current = null;
+    setItems((current) => current.map((row) => ids.includes(row.id)
+      ? { ...row, status: "sent", round_number: Number(submitted[0].round_number), round_source: "pos" }
+      : row));
+    toast.success(t("send_to_kitchen") + " ✓");
+    } finally {
+      sendingRoundRef.current = false;
     }
   };
 

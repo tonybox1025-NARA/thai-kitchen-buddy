@@ -110,17 +110,6 @@ export function invalidatePrinterIps() {
 
 // ── Transports ────────────────────────────────────────────────────────────────
 
-/** Today's path: hand the job to print_jobs for the bridge to print. */
-export async function queuePrintJob(printer: PrinterName, payload: CounterPrintPayload) {
-  const prepared = preparePrintPayload(payload);
-  const { error } = await supabase.from("print_jobs").insert({
-    printer,
-    payload: prepared as Json,
-  });
-  if (error) throw error;
-  return { ok: true as const, via: "print_jobs" as const };
-}
-
 /** Compose ESC/POS in the app and write it to the printer over the native bridge. */
 export async function printDirect(printer: PrinterName, payload: CounterPrintPayload) {
   const prepared = preparePrintPayload(payload);
