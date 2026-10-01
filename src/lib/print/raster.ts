@@ -1,3 +1,4 @@
+import { bkkParts } from "@/lib/bkk-time";
 /**
  * Image-based ESC/POS composer — renders the whole receipt / kitchen ticket onto
  * an offscreen canvas, then thresholds it to 1-bit and emits it as an ESC/POS

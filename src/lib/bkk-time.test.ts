@@ -1,3 +1,4 @@
+// @ts-ignore bun:test types are provided by the Bun runtime
 import { describe, expect, test } from "bun:test";
 import {
   addDaysKey, bkkDateKey, bkkDateTime, bkkHour, bkkPresetBounds, bkkRangeBounds, bkkTime,
