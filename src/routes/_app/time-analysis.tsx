@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { bkkHour, weekdayOfKey } from "@/lib/bkk-time";
 import { pickerBounds } from "@/lib/bkk-time";
 import { useEffect, useMemo, useState } from "react";
 import type { DateRange } from "react-day-picker";
@@ -221,7 +222,7 @@ function TimeAnalysis() {
     const diningOrders = orders.filter(isDiningOrder);
     for (const order of diningOrders) {
       const at = new Date(order.opened_at);
-      const h = at.getHours();
+      const h = bkkHour(at);
       const guests = Math.max(
         0,
         (Number(order.guests) || 0) - (mergedGuestsByTarget.get(order.id) ?? 0),
@@ -230,7 +231,7 @@ function TimeAnalysis() {
       hourly[h].tables += 1;
       const day = order.shift_id ? shiftDay.get(order.shift_id) : undefined;
       if (!day) continue;
-      const weekday = new Date(`${day}T12:00:00`).getDay();
+      const weekday = weekdayOfKey(day);
       weekdays[weekday].guests += guests;
       weekdays[weekday].tables += 1;
       weekdays[weekday].days.add(day);
@@ -243,14 +244,14 @@ function TimeAnalysis() {
     for (const bill of bills) {
       if (!bill.paid_at) continue;
       const at = new Date(bill.paid_at);
-      const h = at.getHours();
+      const h = bkkHour(at);
       const total = Number(bill.total) || 0;
       hourly[h].sales += total;
       hourly[h].bills += 1;
       const sid = orderShift.get(bill.order_id);
       const day = sid ? shiftDay.get(sid) : undefined;
       if (!day) continue;
-      const weekday = new Date(`${day}T12:00:00`).getDay();
+      const weekday = weekdayOfKey(day);
       weekdays[weekday].sales += total;
       weekdays[weekday].bills += 1;
       weekdays[weekday].days.add(day);

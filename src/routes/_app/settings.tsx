@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { bkkToday } from "@/lib/bkk-time";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { escapeHtml } from "@/lib/escape-html";
@@ -3757,7 +3758,7 @@ function SyncTab() {
   const [result, setResult] = useState<Record<string, string>>({});
 
   const base = publicBaseUrl();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = bkkToday();
   const endpoints = [
     {
       key: "daily",

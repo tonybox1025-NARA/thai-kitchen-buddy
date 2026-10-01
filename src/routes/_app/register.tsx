@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { bkkPresetBounds } from "@/lib/bkk-time";
 import { pickerBounds } from "@/lib/bkk-time";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -817,13 +818,7 @@ function Register() {
 type HistRange = "today" | "yesterday" | "week" | "month" | "custom";
 
 function histBounds(r: Exclude<HistRange, "custom">): [Date, Date] {
-  const now = new Date();
-  const s = new Date(now); const e = new Date(now);
-  if (r === "today") { s.setHours(0,0,0,0); e.setHours(23,59,59,999); }
-  else if (r === "yesterday") { s.setDate(s.getDate()-1); s.setHours(0,0,0,0); e.setDate(e.getDate()-1); e.setHours(23,59,59,999); }
-  else if (r === "week") { const d = s.getDay()||7; s.setDate(s.getDate()-(d-1)); s.setHours(0,0,0,0); e.setHours(23,59,59,999); }
-  else { s.setDate(1); s.setHours(0,0,0,0); e.setHours(23,59,59,999); }
-  return [s, e];
+  return bkkPresetBounds(r); // Bangkok calendar bounds, device-timezone independent
 }
 
 function BillHistoryTab() {

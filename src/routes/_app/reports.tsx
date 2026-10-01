@@ -1,4 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { addDaysKey, bkkFileStamp, bkkToday, bangkokDayUtcBounds as bkkDayBounds } from "@/lib/bkk-time";
+import { bkkPresetBounds } from "@/lib/bkk-time";
 import { pickerBounds } from "@/lib/bkk-time";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -1095,8 +1097,8 @@ function PeriodSalesHistory({ mode, buildReport }: { mode: PeriodMode; buildRepo
     if (mode === "yearly") return th ? `ปี ${Number(k) + 543} (${k})` : k;
     if (mode === "weekly") return `${k} – ${weekEndKey(k)}`;
     const [y, m] = k.split("-").map(Number);
-    return new Intl.DateTimeFormat(th ? "th-TH" : "en-GB", { month: "long", year: "numeric" })
-      .format(new Date(y, m - 1, 15));
+    return new Intl.DateTimeFormat(th ? "th-TH" : "en-GB", { timeZone: "Asia/Bangkok", month: "long", year: "numeric" })
+      .format(new Date(Date.UTC(y, m - 1, 15, 5)));
   };
   const subLabel = (k: string) => (mode === "monthly" ? k : mode === "weekly" ? (th ? "จันทร์–อาทิตย์" : "Mon–Sun") : "");
   const title = { weekly: ["ยอดรายสัปดาห์", "Weekly totals"], monthly: ["ยอดรายเดือน", "Monthly totals"], yearly: ["ยอดรายปี", "Yearly totals"] }[mode];
@@ -1527,11 +1529,10 @@ const POINT_TYPES = [
 
 function loyaltyAuditStart(range: LoyaltyAuditRange) {
   if (range === "all") return null;
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  if (range === "week") start.setDate(start.getDate() - 6);
-  if (range === "month") start.setDate(start.getDate() - 29);
-  return start;
+  // Bangkok business-day start of today, minus 6 / 29 Bangkok days.
+  const today = bkkToday();
+  const key = range === "week" ? addDaysKey(today, -6) : range === "month" ? addDaysKey(today, -29) : today;
+  return new Date(bangkokDayUtcBounds(key)[0]);
 }
 
 function csvCell(value: unknown) {
@@ -1615,7 +1616,7 @@ function LoyaltyAuditTab() {
     const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `loyalty-audit-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.download = `loyalty-audit-${bkkFileStamp()}.csv`;
     anchor.click();
     URL.revokeObjectURL(url);
   };
@@ -1689,13 +1690,7 @@ function LoyaltyAuditTab() {
 type HistRange = "today" | "yesterday" | "week" | "month" | "custom";
 
 function histBounds(r: Exclude<HistRange, "custom">): [Date, Date] {
-  const now = new Date();
-  const s = new Date(now); const e = new Date(now);
-  if (r === "today") { s.setHours(0,0,0,0); e.setHours(23,59,59,999); }
-  else if (r === "yesterday") { s.setDate(s.getDate()-1); s.setHours(0,0,0,0); e.setDate(e.getDate()-1); e.setHours(23,59,59,999); }
-  else if (r === "week") { const d = s.getDay()||7; s.setDate(s.getDate()-(d-1)); s.setHours(0,0,0,0); e.setHours(23,59,59,999); }
-  else { s.setDate(1); s.setHours(0,0,0,0); e.setHours(23,59,59,999); }
-  return [s, e];
+  return bkkPresetBounds(r); // Bangkok calendar bounds, device-timezone independent
 }
 
 function BillHistoryTab() {

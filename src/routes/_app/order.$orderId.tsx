@@ -978,7 +978,7 @@ function OrderPage() {
           <div className="font-bold">{pending ? (lang === "th" ? `รอส่ง · รอบถัดไป ${roundNumber}` : `Pending · Next round ${roundNumber}`) : (lang === "th" ? `รอบ ${roundNumber}` : `Round ${roundNumber}`)}</div>
           {!pending && item.sent_at && (
             <div className="shrink-0 text-right font-semibold tabular-nums">
-              {new Date(item.sent_at).toLocaleTimeString(lang === "th" ? "th-TH" : "en-GB", { hour: "2-digit", minute: "2-digit" })}
+              {new Date(item.sent_at).toLocaleTimeString(lang === "th" ? "th-TH" : "en-GB", { timeZone: "Asia/Bangkok", hour: "2-digit", minute: "2-digit" })}
             </div>
           )}
         </div>

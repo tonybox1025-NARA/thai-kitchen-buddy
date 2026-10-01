@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { bkkHour } from "@/lib/bkk-time";
 import { pickerBounds } from "@/lib/bkk-time";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -98,7 +99,7 @@ function GrossSalesDetail() {
     const m = new Map<number, { count: number; total: number }>();
     for (const b of bills) {
       if (!b.paid_at) continue;
-      const h = new Date(b.paid_at).getHours();
+      const h = bkkHour(b.paid_at);
       const e = m.get(h) ?? { count: 0, total: 0 };
       e.count += 1; e.total += Number(b.total);
       m.set(h, e);

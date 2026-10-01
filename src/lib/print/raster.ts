@@ -146,10 +146,11 @@ function two(n: number): string {
   return String(n).padStart(2, "0");
 }
 function fmtDate(d: Date): string {
-  return `${two(d.getDate())}/${two(d.getMonth() + 1)}/${d.getFullYear()}`;
+  const p = bkkParts(d);
+  return `${p.d}/${p.m}/${p.y}`;
 }
 function fmtTime(d: Date): string {
-  return `${two(d.getHours())}:${two(d.getMinutes())}`;
+  return bkkParts(d).time;
 }
 
 // ── font readiness ────────────────────────────────────────────────────────────
