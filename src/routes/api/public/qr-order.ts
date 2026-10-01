@@ -284,7 +284,7 @@ export const Route = createFileRoute("/api/public/qr-order")({
         let orderType: "new" | "added" = "new";
         if (!order) {
           if (!shift?.id) return new Response("No open shift", { status: 409 });
-          const { data: opened, error: orderErr } = await supabase.rpc("open_table_order_safely", {
+          const { data: opened, error: orderErr } = await (supabase as any).rpc("open_table_order_safely", {
             p_table_id: table.id,
             p_shift_id: shift.id,
             p_guests: guests ?? Math.max(1, table.guests || 1),

@@ -788,7 +788,7 @@ function OrderPage() {
     if (unpaid.length > 0 && !closeReason.trim()) return;
 
     const reason = closeReason.trim() || (lang === "th" ? "ปิดโต๊ะ" : "Table closed");
-    const { error: cancelErr } = await supabase.rpc("cancel_table_order_safely", {
+    const { error: cancelErr } = await (supabase as any).rpc("cancel_table_order_safely", {
       p_order_id: orderId,
       p_reason: reason,
       p_closed_by: staff?.id ?? null,
@@ -808,7 +808,7 @@ function OrderPage() {
 
   const doMoveTable = async (targetId: string) => {
     if (!tableId) return;
-    const { data, error } = await supabase.rpc("move_table_order_safely", {
+    const { data, error } = await (supabase as any).rpc("move_table_order_safely", {
       p_order_id: orderId,
       p_target_table_id: targetId,
       p_moved_by: staff?.id ?? null,

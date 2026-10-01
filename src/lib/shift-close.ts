@@ -34,7 +34,7 @@ export async function closeShiftSafely(args: {
   cashCount: Record<number, number>;
   totals: Record<string, unknown>;
 }): Promise<SafeCloseResult> {
-  const { data, error } = await supabase.rpc("close_shift_safely", {
+  const { data, error } = await (supabase as any).rpc("close_shift_safely", {
     p_shift_id: args.shiftId,
     p_closed_by: args.closedBy ?? null,
     p_cash_count: args.cashCount,
