@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { pickerBounds } from "@/lib/bkk-time";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,8 +27,8 @@ function Dashboard() {
 
   const bounds = useMemo<[Date, Date]>(() => {
     if (range === "custom" && custom?.from) {
-      const from = new Date(custom.from); from.setHours(0,0,0,0);
-      const to   = new Date(custom.to ?? custom.from); to.setHours(23,59,59,999);
+      const from = pickerBounds(custom.from, custom.to)[0];
+      const to   = pickerBounds(custom.from, custom.to)[1];
       return [from, to];
     }
     return rangeBounds(range === "custom" ? "today" : range);

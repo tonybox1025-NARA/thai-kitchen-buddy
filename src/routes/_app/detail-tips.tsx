@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { pickerBounds } from "@/lib/bkk-time";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,8 +28,8 @@ function TipsDetail() {
 
   const bounds = useMemo<[Date, Date]>(() => {
     if (range === "custom" && custom?.from) {
-      const from = new Date(custom.from); from.setHours(0,0,0,0);
-      const to   = new Date(custom.to ?? custom.from); to.setHours(23,59,59,999);
+      const from = pickerBounds(custom.from, custom.to)[0];
+      const to   = pickerBounds(custom.from, custom.to)[1];
       return [from, to];
     }
     return rangeBounds(range === "custom" ? "today" : range);
@@ -127,7 +128,7 @@ function TipsDetail() {
                       <div className="grid grid-cols-[3rem_1fr_5rem_5rem] gap-2 items-center py-1 hover:bg-muted/40 rounded px-1 transition-colors">
                         <span className="font-bold">{r.tableCode}</span>
                         <span className="text-muted-foreground tabular-nums text-xs">
-                          {r.paidAt ? new Date(r.paidAt).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}) : "—"}
+                          {r.paidAt ? new Date(r.paidAt).toLocaleTimeString([], { timeZone: "Asia/Bangkok", hour:"2-digit",minute:"2-digit"}) : "—"}
                         </span>
                         <span className="text-right tabular-nums text-muted-foreground">{thb(r.qrAmount)}</span>
                         <span className="text-right font-bold tabular-nums text-amber-600 dark:text-amber-400">{thb(r.tipAmount)}</span>

@@ -1091,7 +1091,7 @@ function PrintersTab() {
                       <span>{job.status}</span>
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {new Date(job.created_at).toLocaleTimeString()} · {String(payload.table ?? "—")}
+                      {new Date(job.created_at).toLocaleTimeString(undefined, { timeZone: "Asia/Bangkok" })} · {String(payload.table ?? "—")}
                     </div>
                     {job.error && <div className="mt-1 text-xs text-destructive break-words">{job.error}</div>}
                   </div>
@@ -3856,7 +3856,7 @@ function SyncTab() {
           )}
           {counts?.last && (
             <p className="text-xs text-muted-foreground">
-              {t("sync_last_update")}: {new Date(counts.last).toLocaleString()}
+              {t("sync_last_update")}: {new Date(counts.last).toLocaleString(undefined, { timeZone: "Asia/Bangkok" })}
             </p>
           )}
         </CardContent>

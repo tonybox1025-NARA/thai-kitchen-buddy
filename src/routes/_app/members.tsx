@@ -699,7 +699,7 @@ function MembersPage() {
                     <TableBody>
                       {ledgerRows.map((row) => (
                         <TableRow key={row.id}>
-                          <TableCell>{new Date(row.created_at).toLocaleString()}</TableCell>
+                          <TableCell>{new Date(row.created_at).toLocaleString(undefined, { timeZone: "Asia/Bangkok" })}</TableCell>
                           <TableCell><Badge variant="outline">{row.type}</Badge></TableCell>
                           <TableCell>{row.description ?? row.bill_id ?? "-"}</TableCell>
                           <TableCell className={`text-right font-semibold ${row.points >= 0 ? "text-emerald-700" : "text-red-700"}`}>

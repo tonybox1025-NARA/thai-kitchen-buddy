@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { pickerBounds } from "@/lib/bkk-time";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -197,7 +198,7 @@ async function openPrintWindow(
 <style>body{font-family:ui-sans-serif,system-ui;padding:24px;max-width:480px;margin:auto}h1{font-size:20px;margin:0 0 4px;text-align:center}h2{font-size:14px;margin:16px 0 4px;border-bottom:1px solid #ccc;padding-bottom:2px}table{width:100%;border-collapse:collapse;font-size:13px}td{padding:2px 0}.meta{text-align:center;font-size:12px;color:#555;margin-bottom:8px}</style>
 </head><body>
 <h1>${escapeHtml(restaurantName) || "Restaurant"}</h1>
-<div class="meta">${kind} Report · Business day ${escapeHtml(shift.business_day)}<br/>Printed ${now.toLocaleString()}</div>
+<div class="meta">${kind} Report · Business day ${escapeHtml(shift.business_day)}<br/>Printed ${now.toLocaleString(undefined, { timeZone: "Asia/Bangkok" })}</div>
 <h2>Sales</h2><table>
 ${row("Gross sales", thb(r.gross))}
 ${row("Customer discount", `- ${thb(customerDiscount(r))}`)}
@@ -465,7 +466,7 @@ function Reports() {
     const denomRows = DENOMS.filter((d) => (counts[d] ?? 0) > 0)
       .map((d) => `<tr><td>${d}฿ × ${counts[d]}</td><td style="text-align:right">${thb(d * counts[d])}</td></tr>`)
       .join("") || `<tr><td colspan="2" style="color:#888">—</td></tr>`;
-    const when = new Date(s.opened_at ?? new Date().toISOString()).toLocaleString();
+    const when = new Date(s.opened_at ?? new Date().toISOString()).toLocaleString(undefined, { timeZone: "Asia/Bangkok" });
     if (canPrintDirect()) {
       const countRows = DENOMS.filter((d) => (counts[d] ?? 0) > 0)
         .map((d) => ({ label: `${d} THB x ${counts[d]}`, value: thb(d * counts[d]) }));
@@ -858,7 +859,7 @@ function Reports() {
                 <div key={p.payment_id}
                   className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-sm ${changed ? "border-amber-400 bg-amber-50 dark:bg-amber-950/30" : "bg-card"}`}>
                   <span className="w-10 shrink-0 text-muted-foreground text-xs">
-                    {new Date(p.paid_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    {new Date(p.paid_at).toLocaleTimeString([], { timeZone: "Asia/Bangkok",  hour: "2-digit", minute: "2-digit" })}
                   </span>
                   <span className="w-8 shrink-0 font-medium text-xs text-muted-foreground">{p.table_code}</span>
                   <span className="w-20 shrink-0 font-semibold tabular-nums">{thb(p.amount)}</span>
@@ -1479,7 +1480,7 @@ function ZReportHistoryTab({ restaurantName }: { restaurantName: string }) {
                   <div className="min-w-0">
                     <p className="font-semibold">Business day {shift.business_day}</p>
                     <p className="text-xs text-muted-foreground">
-                      Closed {shift.closed_at ? new Date(shift.closed_at).toLocaleString() : "—"}
+                      Closed {shift.closed_at ? new Date(shift.closed_at).toLocaleString(undefined, { timeZone: "Asia/Bangkok" }) : "—"}
                     </p>
                     <div className="mt-1 flex flex-wrap gap-x-4 text-sm tabular-nums">
                       <span>Net sales <b>{thb(totals?.net ?? 0)}</b></span>
@@ -1607,7 +1608,7 @@ function LoyaltyAuditTab() {
   const exportCsv = () => {
     const header = ["Date", "Member", "Phone", "Type", "Points", "Balance after", "Reason", "Approved by", "Bill ID", "Refund ID", "Expires"];
     const body = filtered.map((row) => [
-      new Date(row.created_at).toLocaleString(), row.member_name, row.member_phone, row.type,
+      new Date(row.created_at).toLocaleString(undefined, { timeZone: "Asia/Bangkok" }), row.member_name, row.member_phone, row.type,
       row.points, row.balance_after, row.description, row.approver_name, row.bill_id, row.refund_id, row.expires_at,
     ]);
     const csv = [header, ...body].map((line) => line.map(csvCell).join(",")).join("\n");
@@ -1665,7 +1666,7 @@ function LoyaltyAuditTab() {
             <tbody>
               {filtered.map((row) => (
                 <tr key={row.id} className="border-b last:border-0 align-top">
-                  <td className="whitespace-nowrap px-3 py-3 text-muted-foreground">{new Date(row.created_at).toLocaleString()}</td>
+                  <td className="whitespace-nowrap px-3 py-3 text-muted-foreground">{new Date(row.created_at).toLocaleString(undefined, { timeZone: "Asia/Bangkok" })}</td>
                   <td className="px-3 py-3"><p className="font-medium">{row.member_name}</p><p className="text-xs text-muted-foreground">{row.member_phone || "—"}</p></td>
                   <td className="px-3 py-3"><Badge variant="secondary">{row.type.replaceAll("_", " ")}</Badge></td>
                   <td className={`px-3 py-3 text-right font-bold tabular-nums ${row.points >= 0 ? "text-green-700" : "text-red-600"}`}>{row.points > 0 ? "+" : ""}{row.points.toLocaleString()}</td>
@@ -1708,8 +1709,8 @@ function BillHistoryTab() {
   const getBounds = (): [Date, Date] | null => {
     if (range === "custom") {
       if (!custom?.from) return null;
-      const s = new Date(custom.from); s.setHours(0,0,0,0);
-      const e = new Date(custom.to ?? custom.from); e.setHours(23,59,59,999);
+      const s = pickerBounds(custom.from, custom.to)[0];
+      const e = pickerBounds(custom.from, custom.to)[1];
       return [s, e];
     }
     return histBounds(range);
@@ -1833,8 +1834,8 @@ function BillHistoryTab() {
               <Card key={b.id} className="hover:bg-muted/30 transition-colors">
                 <CardContent className="py-3 flex items-center gap-3">
                   <div className="text-xs text-muted-foreground shrink-0 w-24 tabular-nums">
-                    <div>{new Date(b.paid_at).toLocaleDateString()}</div>
-                    <div>{new Date(b.paid_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
+                    <div>{new Date(b.paid_at).toLocaleDateString(undefined, { timeZone: "Asia/Bangkok" })}</div>
+                    <div>{new Date(b.paid_at).toLocaleTimeString([], { timeZone: "Asia/Bangkok",  hour: "2-digit", minute: "2-digit" })}</div>
                   </div>
                   <span className="font-semibold text-sm shrink-0 w-10">{b.table_code}</span>
                   <span className="font-bold tabular-nums shrink-0 w-24 text-right">{thb(b.total)}</span>
@@ -1887,8 +1888,8 @@ function ItemSalesTab() {
   const getBounds = (): [Date, Date] | null => {
     if (range === "custom") {
       if (!custom?.from) return null;
-      const s = new Date(custom.from); s.setHours(0, 0, 0, 0);
-      const e = new Date(custom.to ?? custom.from); e.setHours(23, 59, 59, 999);
+      const s = pickerBounds(custom.from, custom.to)[0];
+      const e = pickerBounds(custom.from, custom.to)[1];
       return [s, e];
     }
     return histBounds(range);
@@ -2025,7 +2026,7 @@ function ItemSalesTab() {
   tfoot td{font-weight:700;background:#f9f9f9}
 </style></head><body>
 <h1>${t("item_sales")}</h1>
-<div class="meta">${new Date().toLocaleString()}</div>
+<div class="meta">${new Date().toLocaleString(undefined, { timeZone: "Asia/Bangkok" })}</div>
 <div class="summary">
   <span>${t("total_items_sold")}: <b>${totalQty.toLocaleString()}</b></span>
   <span>${t("total_revenue")}: <b>${thb(totalRevenue)}</b></span>
@@ -2360,8 +2361,8 @@ function CancelledOrdersTab() {
   const getBounds = (): [Date, Date] | null => {
     if (range === "custom") {
       if (!custom?.from) return null;
-      const s = new Date(custom.from); s.setHours(0, 0, 0, 0);
-      const e = new Date(custom.to ?? custom.from); e.setHours(23, 59, 59, 999);
+      const s = pickerBounds(custom.from, custom.to)[0];
+      const e = pickerBounds(custom.from, custom.to)[1];
       return [s, e];
     }
     return histBounds(range);
@@ -2507,8 +2508,8 @@ function CancelledOrderCard({ order: o, expanded, onToggle, showDate }: {
           <div className="text-xs text-muted-foreground shrink-0 w-28 tabular-nums">
             {o.closed_at ? (
               <>
-                {showDate && <div>{new Date(o.closed_at).toLocaleDateString()}</div>}
-                <div>{new Date(o.closed_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
+                {showDate && <div>{new Date(o.closed_at).toLocaleDateString(undefined, { timeZone: "Asia/Bangkok" })}</div>}
+                <div>{new Date(o.closed_at).toLocaleTimeString([], { timeZone: "Asia/Bangkok",  hour: "2-digit", minute: "2-digit" })}</div>
               </>
             ) : "—"}
           </div>

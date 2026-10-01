@@ -21,7 +21,7 @@ export function KitchenTicketPreview72({ data }: { data: KitchenTicketData }) {
         <span>{data.orderNo}</span>
       </div>
       <div className="flex justify-between text-[11px]">
-        <span>{new Date(data.printedAt).toLocaleString()}</span>
+        <span>{new Date(data.printedAt).toLocaleString(undefined, { timeZone: "Asia/Bangkok" })}</span>
         {data.ticketIndex && data.ticketTotal && (
           <span className="font-bold">Ticket {data.ticketIndex}/{data.ticketTotal}</span>
         )}
@@ -88,7 +88,7 @@ export function kitchenToHtml(data: KitchenTicketData): string {
     ${data.station && data.station !== data.department ? `<div class="center station">${escapeHtml(data.station)}</div>` : ""}
     <div class="hr"></div>
     <div class="row"><span>Table: ${escapeHtml(data.table ?? "-")}</span><span>${escapeHtml(data.orderNo)}</span></div>
-    <div class="meta"><span>${escapeHtml(new Date(data.printedAt).toLocaleString())}</span>${ticketTag}</div>
+    <div class="meta"><span>${escapeHtml(new Date(data.printedAt).toLocaleString(undefined, { timeZone: "Asia/Bangkok" }))}</span>${ticketTag}</div>
     <div class="hr"></div>
     ${rows}
     <div class="hr"></div>

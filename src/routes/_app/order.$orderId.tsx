@@ -1605,7 +1605,7 @@ function OrderPage() {
           </DialogHeader>
           <p className="text-center text-sm text-muted-foreground -mt-2">
             {orderSource === "takeout" ? `${t("takeout")} · ${orderNumber ?? ""}` : orderSource === "staff_meal" ? `${t("staff_meal")} · ${orderNumber ?? ""}` : `${t("table")} ${tableCode}`}
-            {" · "}{new Date().toLocaleString(lang === "th" ? "th-TH" : "en-US")}
+            {" · "}{new Date().toLocaleString(lang === "th" ? "th-TH" : "en-US", { timeZone: "Asia/Bangkok" })}
           </p>
           <div className="space-y-1 max-h-56 overflow-y-auto text-sm border rounded-lg p-3 bg-muted/30">
             {liveItems.map((i) => (

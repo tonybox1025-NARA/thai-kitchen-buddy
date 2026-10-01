@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { pickerBounds } from "@/lib/bkk-time";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -54,8 +55,8 @@ function DiscountsDetail() {
 
   const bounds = useMemo<[Date, Date]>(() => {
     if (range === "custom" && custom?.from) {
-      const from = new Date(custom.from); from.setHours(0,0,0,0);
-      const to   = new Date(custom.to ?? custom.from); to.setHours(23,59,59,999);
+      const from = pickerBounds(custom.from, custom.to)[0];
+      const to   = pickerBounds(custom.from, custom.to)[1];
       return [from, to];
     }
     return rangeBounds(range === "custom" ? "today" : range);
@@ -266,8 +267,8 @@ function DiscountsDetail() {
                     const content = (
                       <div className="flex items-center gap-3 text-sm hover:bg-muted/40 rounded-lg px-2 py-2 transition-colors">
                         <div className="text-xs text-muted-foreground shrink-0 w-24 tabular-nums">
-                          <div>{r.appliedAt ? new Date(r.appliedAt).toLocaleDateString() : ""}</div>
-                          <div>{r.appliedAt ? new Date(r.appliedAt).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}) : ""}</div>
+                          <div>{r.appliedAt ? new Date(r.appliedAt).toLocaleDateString(undefined, { timeZone: "Asia/Bangkok" }) : ""}</div>
+                          <div>{r.appliedAt ? new Date(r.appliedAt).toLocaleTimeString([], { timeZone: "Asia/Bangkok", hour:"2-digit",minute:"2-digit"}) : ""}</div>
                         </div>
                         <span className="w-12 font-bold shrink-0">{r.tableCode}</span>
                         <div className="flex-1 flex items-center gap-2 min-w-0">

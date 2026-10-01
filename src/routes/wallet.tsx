@@ -279,7 +279,7 @@ function WalletPage() {
               <div className="min-w-0">
                 <div className="font-semibold truncate">{member && isNamed(member) ? member.full_name : s.member}</div>
                 {member?.created_at && (
-                  <div className="text-xs text-muted-foreground">{s.since} {new Date(member.created_at).toLocaleDateString(s.locale)}</div>
+                  <div className="text-xs text-muted-foreground">{s.since} {new Date(member.created_at).toLocaleDateString(s.locale, { timeZone: "Asia/Bangkok" })}</div>
                 )}
               </div>
               {member?.member_level && member.member_level !== "-" && <Badge>{member.member_level}</Badge>}
@@ -327,7 +327,7 @@ function WalletPage() {
               <div key={row.id} className="flex items-center justify-between gap-3 rounded-lg border p-3">
                 <div className="min-w-0">
                   <div className="text-sm truncate">{row.description ?? row.type}</div>
-                  <div className="text-xs text-muted-foreground">{new Date(row.created_at).toLocaleDateString(s.locale)}</div>
+                  <div className="text-xs text-muted-foreground">{new Date(row.created_at).toLocaleDateString(s.locale, { timeZone: "Asia/Bangkok" })}</div>
                 </div>
                 <div className={`font-bold tabular-nums ${row.points >= 0 ? "text-green-700" : "text-red-600"}`}>
                   {row.points >= 0 ? "+" : ""}{Number(row.points ?? 0).toLocaleString()}

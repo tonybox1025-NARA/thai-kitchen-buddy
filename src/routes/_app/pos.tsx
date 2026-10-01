@@ -645,7 +645,7 @@ function PosPage() {
                               <div className="min-w-0">
                                 <div className="font-medium">{charge.order_number ?? "Staff charge"} · ฿{charge.amount.toFixed(2)}</div>
                                 <div className="text-xs text-muted-foreground">
-                                  {new Date(charge.charged_at).toLocaleString(lang === "th" ? "th-TH" : "en-GB")}
+                                  {new Date(charge.charged_at).toLocaleString(lang === "th" ? "th-TH" : "en-GB", { timeZone: "Asia/Bangkok" })}
                                   {charge.discount_amount > 0 ? ` · ${lang === "th" ? "ส่วนลด" : "discount"} ฿${charge.discount_amount.toFixed(2)}` : ""}
                                 </div>
                               </div>
