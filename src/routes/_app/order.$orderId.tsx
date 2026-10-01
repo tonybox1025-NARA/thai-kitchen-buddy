@@ -602,6 +602,20 @@ function OrderPage() {
     // The printers are independent. A kitchen connection failure must not prevent
     // the counter copy (and vice versa), otherwise one offline device silently
     // loses every ticket that follows it in the function.
+    // Native till: record every ticket durably under a deterministic round key
+    // first; the outbox worker delivers and retries. Counter tickets share one
+    // batch so they still go out in a single transport write.
+    if (canPrintDirect() && getPrintTransport() === "direct") {
+      const counterBatch = crypto.randomUUID();
+      const results = await Promise.allSettled([
+        ...kitchenJobs.map((job, i) => enqueueDurablePrint({ jobKey: `round:${orderId}:${roundNumber}:kitchen:${i + 1}`, printer: "kitchen", payload: job.payload, sourceType: "round", sourceId: orderId })),
+        ...counterTickets.map((payload, i) => enqueueDurablePrint({ jobKey: `round:${orderId}:${roundNumber}:counter:${i + 1}`, printer: "counter", payload, sourceType: "round", sourceId: orderId, batchId: counterBatch })),
+      ]);
+      const failed = results.find((r) => r.status === "rejected");
+      if (failed) toast.error(`Tickets not recorded: ${String((failed as PromiseRejectedResult).reason)}`, { duration: 12_000 });
+      else toast.success(t("send_to_kitchen") + " ✓");
+      return;
+    }
     const [kitchenResult, counterResult] = await Promise.allSettled([
       printKitchenJobs(kitchenJobs),
       printCounterJobs(counterTickets),
