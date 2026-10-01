@@ -931,7 +931,213 @@ function formatBangkokDateTime(iso: string | null) {
   }).format(new Date(iso));
 }
 
+/**
+ * Sums per-shift ReportData produced by the same buildReport used by the daily
+ * view. Only raw components are summed; derived values (payment total, total
+ * discounts, customer discount) are recomputed by ReportCard from the sums, so
+ * nothing is averaged or double-counted.
+ */
+function mergeReports(reports: ReportData[]): ReportData {
+  const add = (a: number, b: number) => Math.round((a + b) * 100) / 100;
+  const out = historicalReport({});
+  const staffTabs = new Map<string, StaffTabCollection>();
+  const byStaff = new Map<string, { staffName: string; amount: number; count: number }>();
+  const buckets = new Map<string, QrBucketTotal>();
+  const numericKeys = [
+    "gross", "net", "discount", "member", "coupon", "vatIncluded", "vatAdded", "voids", "refunds",
+    "openingFloat", "bills", "tipTotal", "cardTipTotal", "cancelledCount", "takeoutTotal",
+    "staffMealTotal", "staffTabCharged", "staffTabDiscount", "staffTabCashCollected", "staffTabQrCollected",
+  ] as const;
+  for (const r of reports) {
+    for (const k of numericKeys) out[k] = add(out[k], Number(r[k] ?? 0));
+    for (const [m, v] of Object.entries(r.byMethod)) out.byMethod[m] = add(out.byMethod[m] ?? 0, Number(v ?? 0));
+    for (const k of ["percent", "fixed", "free_item", "item"] as const) {
+      out.discountByType[k] = add(out.discountByType[k], Number(r.discountByType[k] ?? 0));
+    }
+    for (const c of r.staffTabCollections) {
+      const key = `${c.staffName}|${c.method}`;
+      const prev = staffTabs.get(key);
+      staffTabs.set(key, { ...c, amount: add(prev?.amount ?? 0, c.amount) });
+    }
+    for (const s of r.discountByStaff) {
+      const prev = byStaff.get(s.staffName);
+      byStaff.set(s.staffName, { staffName: s.staffName, amount: add(prev?.amount ?? 0, s.amount), count: (prev?.count ?? 0) + s.count });
+    }
+    for (const b of r.qrByBucket) {
+      const prev = buckets.get(b.label);
+      buckets.set(b.label, prev
+        ? { ...prev, net: add(prev.net, b.net), tips: add(prev.tips, b.tips), gross: add(prev.gross, b.gross), count: prev.count + b.count }
+        : { ...b });
+    }
+    out.paymentIssues.push(...r.paymentIssues);
+  }
+  out.staffTabCollections = [...staffTabs.values()];
+  out.discountByStaff = [...byStaff.values()];
+  out.qrByBucket = [...buckets.values()];
+  return out;
+}
+
+const monthKeyOf = (shift: Shift) => shift.business_day.slice(0, 7);
+
 function SalesHistoryTab({
+  buildReport,
+  restaurantName,
+}: {
+  buildReport: (shift: Shift) => Promise<ReportData>;
+  restaurantName: string;
+}) {
+  const { lang } = useI18n();
+  const [mode, setMode] = useState<"daily" | "monthly">("daily");
+  return (
+    <div className="space-y-3">
+      <div className="inline-flex rounded-lg border p-1">
+        {(["daily", "monthly"] as const).map((m) => (
+          <Button key={m} size="sm" variant={mode === m ? "default" : "ghost"} onClick={() => setMode(m)}>
+            {m === "daily" ? (lang === "th" ? "รายวัน" : "Daily") : (lang === "th" ? "รายเดือน" : "Monthly")}
+          </Button>
+        ))}
+      </div>
+      <div className={mode === "daily" ? "" : "hidden"}>
+        <DailySalesHistory buildReport={buildReport} restaurantName={restaurantName} />
+      </div>
+      {mode === "monthly" && <MonthlySalesHistory buildReport={buildReport} />}
+    </div>
+  );
+}
+
+function MonthlySalesHistory({ buildReport }: { buildReport: (shift: Shift) => Promise<ReportData> }) {
+  const { lang } = useI18n();
+  const [shifts, setShifts] = useState<Shift[]>([]);
+  const [listLoading, setListLoading] = useState(true);
+  const [month, setMonth] = useState<string | null>(null);
+  const [report, setReport] = useState<ReportData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const reqRef = useRef(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const all: Shift[] = [];
+      for (let from = 0; ; from += 1000) {
+        const { data, error } = await supabase.from("shifts").select("*")
+          .order("opened_at", { ascending: false }).range(from, from + 999);
+        if (error) { toast.error(error.message); break; }
+        all.push(...((data ?? []) as Shift[]));
+        if (!data || data.length < 1000) break;
+      }
+      if (cancelled) return;
+      setShifts(all);
+      setListLoading(false);
+      const months = [...new Set(all.map(monthKeyOf))].sort().reverse();
+      setMonth(months[0] ?? bangkokDateKey().slice(0, 7));
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const months = useMemo(() => {
+    const map = new Map<string, Shift[]>();
+    for (const s of shifts) {
+      const k = monthKeyOf(s);
+      map.set(k, [...(map.get(k) ?? []), s]);
+    }
+    return [...map.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+  }, [shifts]);
+
+  const monthShifts = useMemo(() => months.find(([k]) => k === month)?.[1] ?? [], [months, month]);
+  const dayCount = useMemo(() => new Set(monthShifts.map((s) => s.business_day)).size, [monthShifts]);
+
+  useEffect(() => {
+    if (!month) return;
+    const req = ++reqRef.current;
+    if (monthShifts.length === 0) { setReport(null); return; }
+    setLoading(true);
+    void (async () => {
+      try {
+        const reports = await Promise.all(monthShifts.map((s) => buildReport(s)));
+        if (req === reqRef.current) setReport(mergeReports(reports));
+      } catch (error) {
+        if (req === reqRef.current) { toast.error(error instanceof Error ? error.message : "Could not load monthly totals"); setReport(null); }
+      } finally {
+        if (req === reqRef.current) setLoading(false);
+      }
+    })();
+    // buildReport identity changes each render of the parent; keyed on month/shifts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [month, monthShifts]);
+
+  const monthLabel = (k: string) => {
+    const [y, m] = k.split("-").map(Number);
+    return new Intl.DateTimeFormat(lang === "th" ? "th-TH" : "en-GB", { month: "long", year: "numeric" })
+      .format(new Date(y, m - 1, 15));
+  };
+  const openCount = monthShifts.filter((s) => s.status === "open").length;
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-[22rem_minmax(0,1fr)]">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{lang === "th" ? "ยอดรายเดือน" : "Monthly totals"}</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            {lang === "th" ? "จัดกลุ่มตามวันทำการของกะ" : "Grouped by shift business day."}
+          </p>
+        </CardHeader>
+        <CardContent className="flex gap-2 overflow-x-auto lg:block lg:max-h-[68vh] lg:space-y-2 lg:overflow-y-auto">
+          {listLoading && <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>}
+          {!listLoading && months.length === 0 && (
+            <p className="py-8 text-center text-sm text-muted-foreground">{lang === "th" ? "ไม่พบกะ" : "No register shifts found."}</p>
+          )}
+          {months.map(([k, rows]) => (
+            <button key={k} type="button" onClick={() => setMonth(k)}
+              className={`shrink-0 rounded-lg border p-3 text-left transition-colors lg:w-full ${month === k ? "border-primary bg-primary/5" : "hover:bg-muted/50"}`}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold">{monthLabel(k)}</span>
+                {rows.some((s) => s.status === "open") && <Badge>OPEN</Badge>}
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">{k} · {rows.length} {lang === "th" ? "กะ" : rows.length === 1 ? "shift" : "shifts"}</p>
+            </button>
+          ))}
+        </CardContent>
+      </Card>
+
+      <div className="space-y-4">
+        {month && (
+          <Card>
+            <CardContent className="py-4">
+              <p className="font-bold">{monthLabel(month)} ({month})</p>
+              <p className="text-xs text-muted-foreground">
+                {lang === "th"
+                  ? `${dayCount} วันทำการ · ${monthShifts.length} กะ${openCount ? " · รวมกะที่เปิดอยู่ (ยอดถึงปัจจุบัน)" : ""}`
+                  : `${dayCount} business day${dayCount === 1 ? "" : "s"} · ${monthShifts.length} shift${monthShifts.length === 1 ? "" : "s"}${openCount ? " · includes open shift (month to date)" : ""}`}
+              </p>
+            </CardContent>
+          </Card>
+        )}
+        {loading && <Card><CardContent className="py-16 text-center text-sm text-muted-foreground">Loading…</CardContent></Card>}
+        {!loading && month && monthShifts.length === 0 && !listLoading && (
+          <Card><CardContent className="py-16 text-center text-sm text-muted-foreground">
+            {lang === "th" ? "ไม่มีกะในเดือนนี้" : "No shifts in this month."}
+          </CardContent></Card>
+        )}
+        {!loading && report && monthShifts.length > 0 && (
+          <>
+            <ReportCard r={report} />
+            {report.qrByBucket.length > 0 && (
+              <Card>
+                <CardHeader><CardTitle className="text-base">KBank QR cutoff</CardTitle></CardHeader>
+                <CardContent className="space-y-1 text-sm">
+                  {report.qrByBucket.map((bucket) => <Row key={bucket.label} label={bucket.label} value={thb(bucket.net)} />)}
+                  <div className="border-t pt-2"><Row label="QR total" value={thb(report.byMethod.qr)} bold /></div>
+                </CardContent>
+              </Card>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DailySalesHistory({
   buildReport,
   restaurantName,
 }: {
