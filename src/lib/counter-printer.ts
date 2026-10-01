@@ -359,3 +359,60 @@ function base64UrlEncode(value: string) {
   });
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
+
+// ── Durable outbox ────────────────────────────────────────────────────────────
+
+/**
+ * Record a print job durably under a deterministic key. Repeating the same key
+ * never creates a second ticket; the native worker delivers it with retries.
+ */
+export async function enqueueDurablePrint(args: {
+  jobKey: string;
+  printer: PrinterName;
+  payload: CounterPrintPayload;
+  sourceType?: string;
+  sourceId?: string | null;
+  batchId?: string | null;
+}) {
+  const { data, error } = await (supabase as any).rpc("enqueue_print_job", {
+    p_job_key: args.jobKey,
+    p_printer: args.printer,
+    p_payload: preparePrintPayload(args.payload) as Json,
+    p_source_type: args.sourceType ?? null,
+    p_source_id: args.sourceId ?? null,
+    p_batch_id: args.batchId ?? null,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+/** Prepare a payload for storing in an outbox RPC argument. */
+export function preparePayloadForOutbox(payload: CounterPrintPayload) {
+  return preparePrintPayload(payload) as Json;
+}
+
+/**
+ * Deliver several already-recorded documents to one printer in a single
+ * transport write (each document carries its own cut), used by the worker.
+ */
+export async function printDirectBatch(printer: PrinterName, payloads: CounterPrintPayload[]) {
+  if (payloads.length === 0) return;
+  if (payloads.length === 1) {
+    await printDirect(printer, payloads[0]);
+    return;
+  }
+  const documents = await Promise.all(
+    payloads.map((p) => buildEscPos(preparePrintPayload(p) as unknown as PrintPayload, printer)),
+  );
+  const batch = new Uint8Array(documents.reduce((n, d) => n + d.length, 0));
+  let offset = 0;
+  for (const d of documents) { batch.set(d, offset); offset += d.length; }
+  const data = toBase64(batch);
+  if (printer === "counter" && getCounterLink() === "usb") { await PosPrinter.printUsb({ data }); return; }
+  const ips = await loadPrinterIps(true);
+  const host = printer === "kitchen" ? ips.kitchen : ips.counter;
+  if (host) { await PosPrinter.printTcp({ host, data }); return; }
+  const { available } = await PosPrinter.sunmiStatus().catch(() => ({ available: false }));
+  if (available) { await PosPrinter.printSunmi({ data }); return; }
+  throw new Error(`No ${printer} printer configured`);
+}

@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Plus, Minus, Trash2, ChefHat, Receipt, ArrowLeft, AlertTriangle, ArrowLeftRight, X, Printer, Eye, Layers, Bell, QrCode, Check, ShoppingBag, Tag, Users } from "lucide-react";
 import { SetMenuDialog } from "@/components/SetMenuDialog";
 import { SETS, buildSetDef, formatSetKitchenNotes, setConfigCost, type SetConfig, type SetDef, type SetItemRow } from "@/lib/set-menu";
-import { printCounter, printCounterJobs, printKitchenJobs, type CounterPrintPayload } from "@/lib/counter-printer";
+import { canPrintDirect, enqueueDurablePrint, getPrintTransport, printCounter, printCounterJobs, printKitchenJobs, type CounterPrintPayload } from "@/lib/counter-printer";
 import { isFrontCounterCategory } from "@/lib/print/routing";
 import { isOffline } from "@/lib/online-status";
 import { tableLabel } from "@/lib/table";
@@ -602,6 +602,20 @@ function OrderPage() {
     // The printers are independent. A kitchen connection failure must not prevent
     // the counter copy (and vice versa), otherwise one offline device silently
     // loses every ticket that follows it in the function.
+    // Native till: record every ticket durably under a deterministic round key
+    // first; the outbox worker delivers and retries. Counter tickets share one
+    // batch so they still go out in a single transport write.
+    if (canPrintDirect() && getPrintTransport() === "direct") {
+      const counterBatch = crypto.randomUUID();
+      const results = await Promise.allSettled([
+        ...kitchenJobs.map((job, i) => enqueueDurablePrint({ jobKey: `round:${orderId}:${roundNumber}:kitchen:${i + 1}`, printer: "kitchen", payload: job.payload, sourceType: "round", sourceId: orderId })),
+        ...counterTickets.map((payload, i) => enqueueDurablePrint({ jobKey: `round:${orderId}:${roundNumber}:counter:${i + 1}`, printer: "counter", payload, sourceType: "round", sourceId: orderId, batchId: counterBatch })),
+      ]);
+      const failed = results.find((r) => r.status === "rejected");
+      if (failed) toast.error(`Tickets not recorded: ${String((failed as PromiseRejectedResult).reason)}`, { duration: 12_000 });
+      else toast.success(t("send_to_kitchen") + " ✓");
+      return;
+    }
     const [kitchenResult, counterResult] = await Promise.allSettled([
       printKitchenJobs(kitchenJobs),
       printCounterJobs(counterTickets),
@@ -788,7 +802,7 @@ function OrderPage() {
     if (unpaid.length > 0 && !closeReason.trim()) return;
 
     const reason = closeReason.trim() || (lang === "th" ? "ปิดโต๊ะ" : "Table closed");
-    const { error: cancelErr } = await supabase.rpc("cancel_table_order_safely", {
+    const { error: cancelErr } = await (supabase as any).rpc("cancel_table_order_safely", {
       p_order_id: orderId,
       p_reason: reason,
       p_closed_by: staff?.id ?? null,
@@ -808,7 +822,7 @@ function OrderPage() {
 
   const doMoveTable = async (targetId: string) => {
     if (!tableId) return;
-    const { data, error } = await supabase.rpc("move_table_order_safely", {
+    const { data, error } = await (supabase as any).rpc("move_table_order_safely", {
       p_order_id: orderId,
       p_target_table_id: targetId,
       p_moved_by: staff?.id ?? null,

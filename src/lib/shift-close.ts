@@ -34,7 +34,7 @@ export async function closeShiftSafely(args: {
   cashCount: Record<number, number>;
   totals: Record<string, unknown>;
 }): Promise<SafeCloseResult> {
-  const { data, error } = await supabase.rpc("close_shift_safely", {
+  const { data, error } = await (supabase as any).rpc("close_shift_safely", {
     p_shift_id: args.shiftId,
     p_closed_by: args.closedBy ?? null,
     p_cash_count: args.cashCount,
@@ -65,4 +65,56 @@ export function shiftCloseBlockedMessage(blockers: ShiftCloseBlockers): string {
   if (blockers.open_bills.length) details.push(`Unpaid bills: ${blockers.open_bills.length}`);
   if (blockers.loyalty_issues?.length) details.push(`Member discount errors: ${blockers.loyalty_issues.length}`);
   return `Z report blocked. Settle or close everything first. ${details.join(" · ")}`;
+}
+
+export type OpenShiftResult<S> = { created: boolean; shift: S };
+
+/** Atomic, idempotent open. Repeated taps/timeouts return the committed shift. */
+export async function openShiftSafely<S>(args: {
+  openedBy: string | null | undefined;
+  openingFloat: number;
+  businessDay: string;
+  printJobs: Array<{ printer: "counter" | "kitchen"; payload: unknown }>;
+}): Promise<OpenShiftResult<S>> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const { data, error } = await (supabase as any).rpc("open_shift_safely", {
+      p_opened_by: args.openedBy ?? null,
+      p_opening_float: args.openingFloat,
+      p_business_day: args.businessDay,
+      p_print_jobs: args.printJobs,
+    });
+    if (!error && data) return data as OpenShiftResult<S>;
+    lastError = error;
+    if (!/fetch|network|timeout|abort/i.test(String(error?.message ?? ""))) break;
+    await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+  }
+  throw lastError instanceof Error ? lastError : new Error(String((lastError as any)?.message ?? lastError));
+}
+
+export type CloseWithTicketResult = SafeCloseResult & { adopted?: boolean };
+
+/** Z close + Z ticket in one transaction. A repeat call adopts the committed close. */
+export async function closeShiftWithTicket(args: {
+  shiftId: string;
+  closedBy: string | null | undefined;
+  cashCount: Record<number, number>;
+  totals: Record<string, unknown>;
+  printPayload: unknown | null;
+}): Promise<CloseWithTicketResult> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const { data, error } = await (supabase as any).rpc("close_shift_with_ticket", {
+      p_shift_id: args.shiftId,
+      p_closed_by: args.closedBy ?? null,
+      p_cash_count: args.cashCount,
+      p_totals: args.totals,
+      p_print_payload: args.printPayload,
+    });
+    if (!error && data) return data as CloseWithTicketResult;
+    lastError = error;
+    if (!/fetch|network|timeout|abort/i.test(String(error?.message ?? ""))) break;
+    await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+  }
+  throw lastError instanceof Error ? lastError : new Error(String((lastError as any)?.message ?? lastError));
 }

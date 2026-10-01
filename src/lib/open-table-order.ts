@@ -30,7 +30,7 @@ export async function openTableOrder(input: OpenTableOrderInput): Promise<OpenTa
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 6_000);
     try {
-      const { data, error } = await supabase.rpc("open_table_order_safely", {
+      const { data, error } = await (supabase as any).rpc("open_table_order_safely", {
         p_table_id: input.tableId,
         p_shift_id: input.shiftId ?? null,
         p_guests: Math.max(1, input.guests),
