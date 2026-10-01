@@ -977,7 +977,25 @@ function mergeReports(reports: ReportData[]): ReportData {
   return out;
 }
 
-const monthKeyOf = (shift: Shift) => shift.business_day.slice(0, 7);
+type PeriodMode = "weekly" | "monthly" | "yearly";
+
+// business_day is a plain YYYY-MM-DD Bangkok business date; compute in UTC to
+// avoid any device-timezone shift.
+function periodKeyOf(shift: Shift, mode: PeriodMode): string {
+  const day = shift.business_day;
+  if (mode === "monthly") return day.slice(0, 7);
+  if (mode === "yearly") return day.slice(0, 4);
+  const [y, m, d] = day.split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  const weekday = date.getUTCDay() || 7; // Monday = 1 ... Sunday = 7
+  date.setUTCDate(date.getUTCDate() - (weekday - 1));
+  return date.toISOString().slice(0, 10); // Monday business date
+}
+
+function weekEndKey(mondayKey: string) {
+  const [y, m, d] = mondayKey.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + 6)).toISOString().slice(0, 10);
+}
 
 function SalesHistoryTab({
   buildReport,
@@ -987,29 +1005,36 @@ function SalesHistoryTab({
   restaurantName: string;
 }) {
   const { lang } = useI18n();
-  const [mode, setMode] = useState<"daily" | "monthly">("daily");
+  const [mode, setMode] = useState<"daily" | PeriodMode>("daily");
+  const labels: Record<"daily" | PeriodMode, [string, string]> = {
+    daily: ["รายวัน", "Daily"],
+    weekly: ["รายสัปดาห์", "Weekly"],
+    monthly: ["รายเดือน", "Monthly"],
+    yearly: ["รายปี", "Yearly"],
+  };
   return (
     <div className="space-y-3">
-      <div className="inline-flex rounded-lg border p-1">
-        {(["daily", "monthly"] as const).map((m) => (
+      <div className="flex max-w-full gap-1 overflow-x-auto rounded-lg border p-1 sm:inline-flex">
+        {(["daily", "weekly", "monthly", "yearly"] as const).map((m) => (
           <Button key={m} size="sm" variant={mode === m ? "default" : "ghost"} onClick={() => setMode(m)}>
-            {m === "daily" ? (lang === "th" ? "รายวัน" : "Daily") : (lang === "th" ? "รายเดือน" : "Monthly")}
+            {lang === "th" ? labels[m][0] : labels[m][1]}
           </Button>
         ))}
       </div>
       <div className={mode === "daily" ? "" : "hidden"}>
         <DailySalesHistory buildReport={buildReport} restaurantName={restaurantName} />
       </div>
-      {mode === "monthly" && <MonthlySalesHistory buildReport={buildReport} />}
+      {mode !== "daily" && <PeriodSalesHistory key={mode} mode={mode} buildReport={buildReport} />}
     </div>
   );
 }
 
-function MonthlySalesHistory({ buildReport }: { buildReport: (shift: Shift) => Promise<ReportData> }) {
+function PeriodSalesHistory({ mode, buildReport }: { mode: PeriodMode; buildReport: (shift: Shift) => Promise<ReportData> }) {
   const { lang } = useI18n();
+  const th = lang === "th";
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [listLoading, setListLoading] = useState(true);
-  const [month, setMonth] = useState<string | null>(null);
+  const [period, setPeriod] = useState<string | null>(null);
   const [report, setReport] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(false);
   const reqRef = useRef(0);
@@ -1028,97 +1053,101 @@ function MonthlySalesHistory({ buildReport }: { buildReport: (shift: Shift) => P
       if (cancelled) return;
       setShifts(all);
       setListLoading(false);
-      const months = [...new Set(all.map(monthKeyOf))].sort().reverse();
-      setMonth(months[0] ?? bangkokDateKey().slice(0, 7));
+      const keys = [...new Set(all.map((s) => periodKeyOf(s, mode)))].sort().reverse();
+      setPeriod(keys[0] ?? null);
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [mode]);
 
-  const months = useMemo(() => {
+  const periods = useMemo(() => {
     const map = new Map<string, Shift[]>();
     for (const s of shifts) {
-      const k = monthKeyOf(s);
+      const k = periodKeyOf(s, mode);
       map.set(k, [...(map.get(k) ?? []), s]);
     }
     return [...map.entries()].sort((a, b) => b[0].localeCompare(a[0]));
-  }, [shifts]);
+  }, [shifts, mode]);
 
-  const monthShifts = useMemo(() => months.find(([k]) => k === month)?.[1] ?? [], [months, month]);
-  const dayCount = useMemo(() => new Set(monthShifts.map((s) => s.business_day)).size, [monthShifts]);
+  const periodShifts = useMemo(() => periods.find(([k]) => k === period)?.[1] ?? [], [periods, period]);
+  const dayCount = useMemo(() => new Set(periodShifts.map((s) => s.business_day)).size, [periodShifts]);
 
   useEffect(() => {
-    if (!month) return;
+    if (!period) return;
     const req = ++reqRef.current;
-    if (monthShifts.length === 0) { setReport(null); return; }
+    if (periodShifts.length === 0) { setReport(null); return; }
     setLoading(true);
     void (async () => {
       try {
-        const reports = await Promise.all(monthShifts.map((s) => buildReport(s)));
+        const reports = await Promise.all(periodShifts.map((s) => buildReport(s)));
         if (req === reqRef.current) setReport(mergeReports(reports));
       } catch (error) {
-        if (req === reqRef.current) { toast.error(error instanceof Error ? error.message : "Could not load monthly totals"); setReport(null); }
+        if (req === reqRef.current) { toast.error(error instanceof Error ? error.message : "Could not load period totals"); setReport(null); }
       } finally {
         if (req === reqRef.current) setLoading(false);
       }
     })();
-    // buildReport identity changes each render of the parent; keyed on month/shifts.
+    // buildReport identity changes each parent render; keyed on period/shifts.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [month, monthShifts]);
+  }, [period, periodShifts]);
 
-  const monthLabel = (k: string) => {
+  const periodLabel = (k: string) => {
+    if (mode === "yearly") return th ? `ปี ${Number(k) + 543} (${k})` : k;
+    if (mode === "weekly") return `${k} – ${weekEndKey(k)}`;
     const [y, m] = k.split("-").map(Number);
-    return new Intl.DateTimeFormat(lang === "th" ? "th-TH" : "en-GB", { month: "long", year: "numeric" })
+    return new Intl.DateTimeFormat(th ? "th-TH" : "en-GB", { month: "long", year: "numeric" })
       .format(new Date(y, m - 1, 15));
   };
-  const openCount = monthShifts.filter((s) => s.status === "open").length;
+  const subLabel = (k: string) => (mode === "monthly" ? k : mode === "weekly" ? (th ? "จันทร์–อาทิตย์" : "Mon–Sun") : "");
+  const title = { weekly: ["ยอดรายสัปดาห์", "Weekly totals"], monthly: ["ยอดรายเดือน", "Monthly totals"], yearly: ["ยอดรายปี", "Yearly totals"] }[mode];
+  const openCount = periodShifts.filter((s) => s.status === "open").length;
 
   return (
     <div className="grid gap-4 lg:grid-cols-[22rem_minmax(0,1fr)]">
-      <Card>
+      <Card className="min-w-0">
         <CardHeader>
-          <CardTitle className="text-base">{lang === "th" ? "ยอดรายเดือน" : "Monthly totals"}</CardTitle>
-          <p className="text-xs text-muted-foreground">
-            {lang === "th" ? "จัดกลุ่มตามวันทำการของกะ" : "Grouped by shift business day."}
-          </p>
+          <CardTitle className="text-base">{th ? title[0] : title[1]}</CardTitle>
+          <p className="text-xs text-muted-foreground">{th ? "จัดกลุ่มตามวันทำการของกะ" : "Grouped by shift business day."}</p>
         </CardHeader>
         <CardContent className="flex gap-2 overflow-x-auto lg:block lg:max-h-[68vh] lg:space-y-2 lg:overflow-y-auto">
-          {listLoading && <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>}
-          {!listLoading && months.length === 0 && (
-            <p className="py-8 text-center text-sm text-muted-foreground">{lang === "th" ? "ไม่พบกะ" : "No register shifts found."}</p>
+          {listLoading && <p className="py-8 text-center text-sm text-muted-foreground">{th ? "กำลังโหลด…" : "Loading…"}</p>}
+          {!listLoading && periods.length === 0 && (
+            <p className="py-8 text-center text-sm text-muted-foreground">{th ? "ไม่พบกะ" : "No register shifts found."}</p>
           )}
-          {months.map(([k, rows]) => (
-            <button key={k} type="button" onClick={() => setMonth(k)}
-              className={`shrink-0 rounded-lg border p-3 text-left transition-colors lg:w-full ${month === k ? "border-primary bg-primary/5" : "hover:bg-muted/50"}`}>
+          {periods.map(([k, rows]) => (
+            <button key={k} type="button" onClick={() => setPeriod(k)}
+              className={`shrink-0 rounded-lg border p-3 text-left transition-colors lg:w-full ${period === k ? "border-primary bg-primary/5" : "hover:bg-muted/50"}`}>
               <div className="flex items-center justify-between gap-2">
-                <span className="font-semibold">{monthLabel(k)}</span>
+                <span className="font-semibold whitespace-nowrap">{periodLabel(k)}</span>
                 {rows.some((s) => s.status === "open") && <Badge>OPEN</Badge>}
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">{k} · {rows.length} {lang === "th" ? "กะ" : rows.length === 1 ? "shift" : "shifts"}</p>
+              <p className="mt-1 text-xs text-muted-foreground whitespace-nowrap">
+                {subLabel(k) ? `${subLabel(k)} · ` : ""}{rows.length} {th ? "กะ" : rows.length === 1 ? "shift" : "shifts"}
+              </p>
             </button>
           ))}
         </CardContent>
       </Card>
 
       <div className="space-y-4">
-        {month && (
+        {period && (
           <Card>
             <CardContent className="py-4">
-              <p className="font-bold">{monthLabel(month)} ({month})</p>
+              <p className="font-bold">{periodLabel(period)}</p>
               <p className="text-xs text-muted-foreground">
-                {lang === "th"
-                  ? `${dayCount} วันทำการ · ${monthShifts.length} กะ${openCount ? " · รวมกะที่เปิดอยู่ (ยอดถึงปัจจุบัน)" : ""}`
-                  : `${dayCount} business day${dayCount === 1 ? "" : "s"} · ${monthShifts.length} shift${monthShifts.length === 1 ? "" : "s"}${openCount ? " · includes open shift (month to date)" : ""}`}
+                {th
+                  ? `${dayCount} วันทำการ · ${periodShifts.length} กะ · ${openCount ? "รวมกะที่เปิดอยู่ (ยอดถึงปัจจุบัน)" : "ไม่มีกะที่เปิดอยู่"}`
+                  : `${dayCount} business day${dayCount === 1 ? "" : "s"} · ${periodShifts.length} shift${periodShifts.length === 1 ? "" : "s"} · ${openCount ? "includes open shift (to date)" : "no open shift"}`}
               </p>
             </CardContent>
           </Card>
         )}
-        {loading && <Card><CardContent className="py-16 text-center text-sm text-muted-foreground">Loading…</CardContent></Card>}
-        {!loading && month && monthShifts.length === 0 && !listLoading && (
+        {loading && <Card><CardContent className="py-16 text-center text-sm text-muted-foreground">{th ? "กำลังโหลด…" : "Loading…"}</CardContent></Card>}
+        {!loading && !listLoading && periodShifts.length === 0 && (
           <Card><CardContent className="py-16 text-center text-sm text-muted-foreground">
-            {lang === "th" ? "ไม่มีกะในเดือนนี้" : "No shifts in this month."}
+            {th ? "ไม่มีกะในช่วงนี้" : "No shifts in this period."}
           </CardContent></Card>
         )}
-        {!loading && report && monthShifts.length > 0 && (
+        {!loading && report && periodShifts.length > 0 && (
           <>
             <ReportCard r={report} />
             {report.qrByBucket.length > 0 && (
@@ -1130,10 +1159,79 @@ function MonthlySalesHistory({ buildReport }: { buildReport: (shift: Shift) => P
                 </CardContent>
               </Card>
             )}
+            <StaffCreditCard r={report} />
           </>
         )}
       </div>
     </div>
+  );
+}
+
+type StaffOutstanding = { staff_id: string; staff_name: string; outstanding: number; unpaid_count: number; oldest_charge: string | null };
+
+/**
+ * Period activity comes straight from ReportData (same per-shift builder as
+ * Daily). Outstanding is the existing staff_tab_summary RPC used by POS — a
+ * current snapshot, independent of the selected period.
+ */
+function StaffCreditCard({ r }: { r: ReportData }) {
+  const { lang } = useI18n();
+  const th = lang === "th";
+  const [rows, setRows] = useState<StaffOutstanding[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const { data, error } = await supabase.rpc("staff_tab_summary");
+      if (cancelled) return;
+      if (error) { setError(error.message); setRows([]); return; }
+      setRows(((data ?? []) as StaffOutstanding[]).filter((row) => Number(row.outstanding) > 0)
+        .sort((a, b) => Number(b.outstanding) - Number(a.outstanding)));
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const collected = r.staffTabCashCollected + r.staffTabQrCollected;
+  const totalOutstanding = (rows ?? []).reduce((s, row) => s + Number(row.outstanding || 0), 0);
+
+  return (
+    <Card>
+      <CardHeader><CardTitle className="text-base">{th ? "เครดิตพนักงาน / ลูกหนี้พนักงาน" : "Staff credit / employee receivables"}</CardTitle></CardHeader>
+      <CardContent className="space-y-3 text-sm">
+        <div className="space-y-1">
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{th ? "รายการในช่วงที่เลือก" : "Selected-period activity"}</div>
+          <Row label={th ? "ยอดขายเครดิตพนักงาน" : "Staff credit sales"} value={thb(r.staffTabCharged)} />
+          <Row label={th ? "รับชำระเงินสด" : "Collected — cash"} value={thb(r.staffTabCashCollected)} />
+          <Row label={th ? "รับชำระ QR" : "Collected — QR"} value={thb(r.staffTabQrCollected)} />
+          <Row label={th ? "รับชำระรวม" : "Total collected"} value={thb(collected)} bold />
+          <Row label={th ? "ลูกหนี้เปลี่ยนแปลงสุทธิ" : "Net receivable change"} value={thb(r.staffTabCharged - collected)} bold />
+        </div>
+        <div className="space-y-1 border-t pt-3">
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{th ? "ยอดค้างชำระปัจจุบัน (ณ ตอนนี้)" : "Current outstanding (snapshot now)"}</div>
+          <p className="text-xs text-muted-foreground">{th ? "ยอดปัจจุบัน ไม่ใช่ยอดของช่วงที่เลือก" : "Live balance as of now — not a total for the selected period."}</p>
+          {rows === null && <p className="text-muted-foreground">{th ? "กำลังโหลด…" : "Loading…"}</p>}
+          {error && <p className="text-destructive text-xs">{error}</p>}
+          {rows && !error && rows.length === 0 && <p className="text-muted-foreground">{th ? "ไม่มียอดค้างชำระของพนักงาน" : "No outstanding staff credit"}</p>}
+          {rows && rows.length > 0 && (
+            <>
+              {rows.map((row) => (
+                <div key={row.staff_id} className="flex justify-between gap-3">
+                  <span>
+                    {row.staff_name}
+                    <span className="ml-1 text-xs text-muted-foreground">
+                      ({row.unpaid_count} {th ? "รายการ" : "unpaid"}{row.oldest_charge ? ` · ${th ? "เก่าสุด" : "oldest"} ${bangkokDateKey(new Date(row.oldest_charge))}` : ""})
+                    </span>
+                  </span>
+                  <span>{thb(Number(row.outstanding))}</span>
+                </div>
+              ))}
+              <div className="border-t pt-2"><Row label={th ? "ยอดค้างชำระรวม" : "Total outstanding"} value={thb(totalOutstanding)} bold /></div>
+            </>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
