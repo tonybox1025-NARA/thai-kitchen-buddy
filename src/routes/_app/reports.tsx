@@ -139,6 +139,9 @@ async function openPrintWindow(
   shift: Shift,
   counts: Record<number, number>,
   restaurantName: string,
+  // When given, the native ticket payload is handed here (to be recorded in the
+  // durable outbox) instead of being written straight to the printer.
+  sink?: (payload: CounterPrintPayload) => Promise<void>,
 ) {
   const { cashTotal, expected, overShort } = calcCashSummary(counts, r);
   const row = (l: string, v: string, b = false) =>
@@ -185,7 +188,9 @@ async function openPrintWindow(
         ["Counted", thb(cashTotal)], ["Over / Short", thb(overShort), true],
       ]) },
     ];
-    await printDirect("counter", { kind: "report", restaurant: restaurantName || "Restaurant", report_type: kind, business_day: shift.business_day, printed_at: now.toISOString(), sections });
+    const reportPayload = { kind: "report", restaurant: restaurantName || "Restaurant", report_type: kind, business_day: shift.business_day, printed_at: now.toISOString(), sections } as CounterPrintPayload;
+    if (sink) await sink(reportPayload);
+    else await printDirect("counter", reportPayload);
     return;
   }
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>${kind} Report</title>
