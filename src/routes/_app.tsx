@@ -14,6 +14,7 @@ import { LayoutGrid, BarChart3, FileText, Settings, LogOut, UserCircle2, Heart, 
 import { installAudioUnlockListeners, unlockAudio } from "@/lib/audio-alert";
 import { useQrAlertCount } from "@/lib/qr-alert-count";
 import { OfflineBanner } from "@/components/OfflineBanner";
+import { PrintQueueStatus } from "@/components/PrintQueueStatus";
 import { useNativePrintQueue } from "@/lib/native-print-queue";
 import { syncPosAssets, type AssetProgress } from "@/lib/pos-assets";
 import { Capacitor } from "@capacitor/core";
@@ -237,6 +238,7 @@ function AppLayout() {
         </div>
       </header>
       <OfflineBanner />
+      <PrintQueueStatus />
       <main className="flex-1">
         <Outlet />
       </main>

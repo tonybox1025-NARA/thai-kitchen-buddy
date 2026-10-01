@@ -495,24 +495,6 @@ function Reports() {
     if (w) { w.document.write(html); w.document.close(); }
   };
 
-  const printOpeningKitchenCheck = async (s: Shift) => {
-    if (!canPrintDirect()) return;
-    await printDirect("kitchen", {
-      kind: "report",
-      restaurant: restaurantName || "Restaurant",
-      report_type: "OPEN",
-      business_day: s.business_day,
-      printed_at: s.opened_at ?? new Date().toISOString(),
-      sections: [{
-        title: "OPENING PRINTER CHECK",
-        rows: [
-          { label: "Kitchen printer", value: "READY", bold: true },
-          { label: "เครื่องพิมพ์ครัว", value: "พร้อม", bold: true },
-        ],
-      }],
-    });
-  };
-
   // Native OPENING tickets are built up-front and committed in the same
   // transaction as the shift, so a printer outage can never lose them.
   const buildOpeningJobs = (counts: Record<number, number>, businessDay: string) => {

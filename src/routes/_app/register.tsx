@@ -225,7 +225,6 @@ function Register() {
   const [openDlg, setOpenDlg] = useState(false);
   const [openCashCount, setOpenCashCount] = useState<Record<number, number>>({});
   const [openingShift, setOpeningShift] = useState(false);
-  const [openingPrintRetry, setOpeningPrintRetry] = useState(false);
   const openingShiftRef = useRef(false);
   const [closeDlg, setCloseDlg] = useState(false);
 
@@ -397,44 +396,6 @@ function Register() {
 </body></html>`;
     const w = window.open("", "_blank");
     if (w) { w.document.write(html); w.document.close(); }
-  };
-
-  const printOpeningKitchenCheck = async (s: Shift) => {
-    if (!canPrintDirect()) return;
-    await printDirect("kitchen", {
-      kind: "report",
-      restaurant: restaurantName || "Restaurant",
-      report_type: "OPEN",
-      business_day: s.business_day,
-      printed_at: s.opened_at ?? new Date().toISOString(),
-      sections: [{
-        title: "OPENING PRINTER CHECK",
-        rows: [
-          { label: "Kitchen printer", value: "READY", bold: true },
-          { label: "เครื่องพิมพ์ครัว", value: "พร้อม", bold: true },
-        ],
-      }],
-    });
-  };
-
-  const runOpeningPrintChecks = async (s: Shift) => {
-    const [counterResult, kitchenResult] = await Promise.allSettled([
-      printOpenSlip(s, openCashCount),
-      printOpeningKitchenCheck(s),
-    ]);
-    const failed = [
-      counterResult.status === "rejected" ? "counter" : null,
-      kitchenResult.status === "rejected" ? "kitchen" : null,
-    ].filter(Boolean);
-    if (failed.length > 0) {
-      setOpeningPrintRetry(true);
-      setOpenDlg(true);
-      toast.error(`Register is open, but ${failed.join(" and ")} printer check failed. Check paper/power, then tap Retry print.`, { duration: 15_000 });
-      return false;
-    }
-    setOpeningPrintRetry(false);
-    toast.success("Shift opened · counter and kitchen printers ready");
-    return true;
   };
 
   // Native OPENING tickets are built up-front and committed in the same
@@ -680,7 +641,7 @@ function Register() {
           <DialogFooter className="pt-2">
             <Button variant="outline" onClick={() => setOpenDlg(false)}>{t("cancel")}</Button>
             <Button onClick={openShift} disabled={openingShift}>
-              {openingShift ? "Opening…" : openingPrintRetry ? "Retry print" : t("rep_open_and_print")}
+              {openingShift ? "Opening…" : t("rep_open_and_print")}
             </Button>
           </DialogFooter>
         </DialogContent>
