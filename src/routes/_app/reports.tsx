@@ -1532,7 +1532,7 @@ function loyaltyAuditStart(range: LoyaltyAuditRange) {
   // Bangkok business-day start of today, minus 6 / 29 Bangkok days.
   const today = bkkToday();
   const key = range === "week" ? addDaysKey(today, -6) : range === "month" ? addDaysKey(today, -29) : today;
-  return new Date(bangkokDayUtcBounds(key)[0]);
+  return new Date(bkkDayBounds(key)[0]);
 }
 
 function csvCell(value: unknown) {
