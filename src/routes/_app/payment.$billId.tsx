@@ -1004,6 +1004,18 @@ function PaymentPage() {
     }, { jobKey, sourceType: jobKey.startsWith("receipt:") ? "receipt" : "receipt_reprint", sourceId: bill.id });
   };
 
+  // Self-heal: if the app stopped between payment commit and recording the
+  // receipt, record it now under the same bill-derived key (no-op otherwise).
+  const receiptRecoveryRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!bill || bill.status !== "paid" || !bill.paid_at || items.length === 0) return;
+    if (receiptRecoveryRef.current === bill.id) return;
+    if (Date.now() - new Date(bill.paid_at).getTime() > 15 * 60_000) return;
+    receiptRecoveryRef.current = bill.id;
+    void enqueuePaidReceipt(`receipt:${bill.id}`).catch(() => { receiptRecoveryRef.current = null; });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bill?.id, bill?.status, bill?.paid_at, items.length]);
+
   const reprintPaidReceipt = async () => {
     if (!bill || reprintingReceipt) return;
     if (isOffline()) { toast.error(t("err_offline")); return; }
