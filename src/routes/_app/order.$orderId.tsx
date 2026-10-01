@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n, pickName } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth";
@@ -727,7 +727,7 @@ function OrderPage() {
       // this counter printer's firmware corrupts Thai text in that mode.
       restaurant: "LONMOH",
       guests: Number((tbl as { guests?: number } | null)?.guests ?? 0),
-    });
+    }, { jobKey: `table-qr-reprint:${orderId}:${crypto.randomUUID()}`, sourceType: "table_qr", sourceId: orderId });
     toast.success(`QR printed · ${t("table")} ${tableCode}`);
   };
 
@@ -957,7 +957,7 @@ function OrderPage() {
         department: "COUNTER REPRINT",
         station: "COUNTER REPRINT",
         footer: "counter",
-      } as CounterPrintPayload);
+      } as CounterPrintPayload, { jobKey: `round-reprint:${orderId}:${roundNumber}:${crypto.randomUUID()}`, sourceType: "round_reprint", sourceId: orderId });
       toast.success(lang === "th" ? `พิมพ์รอบ ${roundNumber} ที่เคาน์เตอร์แล้ว` : `Round ${roundNumber} reprinted at counter`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Reprint failed");
