@@ -2476,6 +2476,7 @@ export type Database = {
         Returns: undefined
       }
       get_integrity_status: { Args: never; Returns: Json }
+      get_or_create_bill: { Args: { p_order_id: string }; Returns: string }
       get_shift_close_blockers: { Args: { p_shift_id: string }; Returns: Json }
       has_role: {
         Args: {
