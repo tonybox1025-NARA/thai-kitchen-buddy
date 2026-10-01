@@ -137,6 +137,33 @@ export type Database = {
           },
         ]
       }
+      bill_duplicate_cleanup_audit: {
+        Row: {
+          archived_at: string
+          bill_snapshot: Json
+          duplicate_bill_id: string
+          id: string
+          order_id: string
+          reason: string
+        }
+        Insert: {
+          archived_at?: string
+          bill_snapshot: Json
+          duplicate_bill_id: string
+          id?: string
+          order_id: string
+          reason: string
+        }
+        Update: {
+          archived_at?: string
+          bill_snapshot?: Json
+          duplicate_bill_id?: string
+          id?: string
+          order_id?: string
+          reason?: string
+        }
+        Relationships: []
+      }
       bills: {
         Row: {
           cashier_id: string | null
@@ -1215,6 +1242,38 @@ export type Database = {
           },
         ]
       }
+      order_submissions: {
+        Row: {
+          created_at: string
+          id: string
+          item_count: number
+          order_id: string
+          round_number: number | null
+        }
+        Insert: {
+          created_at?: string
+          id: string
+          item_count?: number
+          order_id: string
+          round_number?: number | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          item_count?: number
+          order_id?: string
+          round_number?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_submissions_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_table_merges: {
         Row: {
           id: string
@@ -1287,6 +1346,69 @@ export type Database = {
           },
           {
             foreignKeyName: "order_table_merges_target_table_id_fkey"
+            columns: ["target_table_id"]
+            isOneToOne: false
+            referencedRelation: "restaurant_tables"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      order_table_moves: {
+        Row: {
+          id: string
+          moved_at: string
+          moved_by: string | null
+          order_id: string
+          source_table_id: string
+          target_table_id: string
+        }
+        Insert: {
+          id?: string
+          moved_at?: string
+          moved_by?: string | null
+          order_id: string
+          source_table_id: string
+          target_table_id: string
+        }
+        Update: {
+          id?: string
+          moved_at?: string
+          moved_by?: string | null
+          order_id?: string
+          source_table_id?: string
+          target_table_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_table_moves_moved_by_fkey"
+            columns: ["moved_by"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_table_moves_moved_by_fkey"
+            columns: ["moved_by"]
+            isOneToOne: false
+            referencedRelation: "staff_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_table_moves_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_table_moves_source_table_id_fkey"
+            columns: ["source_table_id"]
+            isOneToOne: false
+            referencedRelation: "restaurant_tables"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_table_moves_target_table_id_fkey"
             columns: ["target_table_id"]
             isOneToOne: false
             referencedRelation: "restaurant_tables"
@@ -2125,27 +2247,6 @@ export type Database = {
       }
     }
     Functions: {
-      close_shift_safely: {
-        Args: {
-          p_cash_count: Json
-          p_closed_by: string | null
-          p_shift_id: string | null
-          p_totals: Json
-        }
-        Returns: Json
-      }
-      cancel_table_order_safely: {
-        Args: {
-          p_closed_by?: string | null
-          p_order_id: string
-          p_reason: string
-        }
-        Returns: {
-          order_id: string
-          table_code: string
-          voided_items: number
-        }[]
-      }
       adjust_member_points: {
         Args: {
           p_delta: number
@@ -2159,34 +2260,12 @@ export type Database = {
         }[]
       }
       allocate_order_round: { Args: { p_order_id: string }; Returns: number }
-      get_shift_close_blockers: {
-        Args: { p_shift_id: string }
-        Returns: Json
-      }
-      open_table_order_safely: {
-        Args: {
-          p_guests: number
-          p_is_test?: boolean
-          p_opened_by?: string | null
-          p_shift_id: string | null
-          p_source?: Database["public"]["Enums"]["order_source"]
-          p_table_id: string
-        }
-        Returns: {
-          created: boolean
-          order_id: string
-        }[]
-      }
-      move_table_order_safely: {
-        Args: {
-          p_moved_by?: string | null
-          p_order_id: string
-          p_target_table_id: string
-        }
+      cancel_table_order_safely: {
+        Args: { p_closed_by?: string; p_order_id: string; p_reason: string }
         Returns: {
           order_id: string
-          source_table_code: string
-          target_table_code: string
+          table_code: string
+          voided_items: number
         }[]
       }
       claim_receipt_loyalty_points: {
@@ -2199,6 +2278,15 @@ export type Database = {
           member_name: string
           points_awarded: number
         }[]
+      }
+      close_shift_safely: {
+        Args: {
+          p_cash_count: Json
+          p_closed_by: string
+          p_shift_id: string
+          p_totals: Json
+        }
+        Returns: Json
       }
       combine_open_table_orders: {
         Args: {
@@ -2273,6 +2361,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      get_shift_close_blockers: { Args: { p_shift_id: string }; Returns: Json }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -2300,6 +2389,10 @@ export type Database = {
           role: Database["public"]["Enums"]["app_role"]
         }[]
       }
+      loyalty_discount_for_points: {
+        Args: { p_points: number }
+        Returns: number
+      }
       merge_duplicate_members: {
         Args: {
           p_manager_pin: string
@@ -2308,7 +2401,33 @@ export type Database = {
         }
         Returns: Json
       }
+      move_table_order_safely: {
+        Args: {
+          p_moved_by?: string
+          p_order_id: string
+          p_target_table_id: string
+        }
+        Returns: {
+          order_id: string
+          source_table_code: string
+          target_table_code: string
+        }[]
+      }
       normalize_member_phone: { Args: { p_phone: string }; Returns: string }
+      open_table_order_safely: {
+        Args: {
+          p_guests: number
+          p_is_test?: boolean
+          p_opened_by?: string
+          p_shift_id: string
+          p_source?: Database["public"]["Enums"]["order_source"]
+          p_table_id: string
+        }
+        Returns: {
+          created: boolean
+          order_id: string
+        }[]
+      }
       prepare_emergency_menu_price_change: {
         Args: {
           p_manager_pin: string
@@ -2548,6 +2667,19 @@ export type Database = {
               staff_name: string
             }[]
           }
+      submit_order_round_safely: {
+        Args: {
+          p_items: Json
+          p_order_id: string
+          p_print_jobs: Json
+          p_submission_id: string
+        }
+        Returns: {
+          created: boolean
+          item_count: number
+          round_number: number
+        }[]
+      }
       verify_staff_pin: {
         Args: { _pin: string }
         Returns: {
