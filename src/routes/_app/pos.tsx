@@ -218,6 +218,8 @@ function PosPage() {
     setOpenTableBusy("qr");
     const code = openTable?.code;
     const seats = guests;
+    const pressId = crypto.randomUUID();
+    const qrJobKey = (orderId: string) => `table-qr:${orderId}:${pressId}`;
     try {
       const id = await openTableOrder();
       if (!id || !code) return;
@@ -227,7 +229,7 @@ function PosPage() {
         url: `${publicBaseUrl()}/menu/${encodeURIComponent(code)}?order_id=${encodeURIComponent(id)}`,
         restaurant: "LONMOH",
         guests: seats,
-      });
+      }, { jobKey: qrJobKey(id), sourceType: "table_qr", sourceId: id });
       toast.success(`QR printed · ${t("table")} ${tableLabel(code)}`);
       setOpenTable(null);
     } finally {

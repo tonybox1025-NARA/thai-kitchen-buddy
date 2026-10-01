@@ -1026,7 +1026,7 @@ function OrderPage() {
       vatAmount: settingsVatEnabled && settingsVatMode === "exclusive" ? billVatAmount : 0,
       vatRate: settingsVatRate,
       vat_mode: settingsVatMode, payments: [], language: lang,
-    });
+    }, { sourceType: "bill_preview", sourceId: orderId });
     toast.success(t("ord_bill_sent"));
   };
 

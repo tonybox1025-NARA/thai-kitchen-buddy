@@ -393,9 +393,9 @@ function CrewPage() {
       };
       try {
         if (routeToKitchen) {
-          await printKitchenJobs([{ printer: "kitchen", payload }]);
+          await printKitchenJobs([{ printer: "kitchen", payload }], { jobKey: `void:${voidItem.id}`, sourceType: "void", sourceId: voidItem.id });
         }
-        await printCounterJobs([{ ...payload, department: "VOID / CANCEL", station: "VOID / CANCEL", footer: "counter" }]);
+        await printCounterJobs([{ ...payload, department: "VOID / CANCEL", station: "VOID / CANCEL", footer: "counter" }], { jobKey: `void:${voidItem.id}`, sourceType: "void", sourceId: voidItem.id });
       } catch (error) {
         toast.error(
           `${c.printFailed}: ${error instanceof Error ? error.message : "unknown error"}`,
