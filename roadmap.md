@@ -8,3 +8,4 @@
 - [x] get_integrity_status RPC (read-only) + safe projection heal
 - [x] Small non-blocking print-pending indicator
 - [x] Verification SQL script
+- [x] Pin all operational dates/hours/ranges/displays to Asia/Bangkok (bkk-time.ts + verify script + TZ tests)
