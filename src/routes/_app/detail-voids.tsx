@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { pickerBounds } from "@/lib/bkk-time";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,8 +39,8 @@ function VoidsDetail() {
 
   const bounds = useMemo<[Date, Date]>(() => {
     if (range === "custom" && custom?.from) {
-      const from = new Date(custom.from); from.setHours(0,0,0,0);
-      const to   = new Date(custom.to ?? custom.from); to.setHours(23,59,59,999);
+      const from = pickerBounds(custom.from, custom.to)[0];
+      const to   = pickerBounds(custom.from, custom.to)[1];
       return [from, to];
     }
     return rangeBounds(range === "custom" ? "today" : range);
@@ -196,8 +197,8 @@ function VoidsDetail() {
                       <div className="flex items-center gap-3 px-3 py-2.5 text-sm">
                         <div className="text-xs text-muted-foreground shrink-0 w-24 tabular-nums">
                           {o.closedAt ? (
-                            <><div>{new Date(o.closedAt).toLocaleDateString()}</div>
-                            <div>{new Date(o.closedAt).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</div></>
+                            <><div>{new Date(o.closedAt).toLocaleDateString(undefined, { timeZone: "Asia/Bangkok" })}</div>
+                            <div>{new Date(o.closedAt).toLocaleTimeString([], { timeZone: "Asia/Bangkok", hour:"2-digit",minute:"2-digit"})}</div></>
                           ) : "—"}
                         </div>
                         <span className="font-bold w-10 shrink-0">{o.tableCode}</span>
@@ -248,7 +249,7 @@ function VoidsDetail() {
                       <div>
                         <div className="font-medium">{v.itemName}</div>
                         <div className="text-xs text-muted-foreground tabular-nums">
-                          {v.voidedAt ? new Date(v.voidedAt).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}) : ""}
+                          {v.voidedAt ? new Date(v.voidedAt).toLocaleTimeString([], { timeZone: "Asia/Bangkok", hour:"2-digit",minute:"2-digit"}) : ""}
                         </div>
                       </div>
                       <div>

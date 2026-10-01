@@ -322,7 +322,7 @@ function LivePage() {
         <div>
           <h1 className="text-2xl font-bold">{t("live_title")}</h1>
           <p className="text-xs text-muted-foreground">
-            {t("live_updated")} {updatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+            {t("live_updated")} {updatedAt.toLocaleTimeString([], { timeZone: "Asia/Bangkok",  hour: "2-digit", minute: "2-digit", second: "2-digit" })}
           </p>
         </div>
         <button onClick={() => void load()} className="rounded-full border p-2 active:scale-95 transition-transform" aria-label={t("live_refresh")}>

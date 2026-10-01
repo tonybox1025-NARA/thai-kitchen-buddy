@@ -52,7 +52,7 @@ type PendingPointAction = {
 };
 
 const cleanPhone = (value: string) => value.replace(/[^\d+]/g, "");
-const formatDate = (value: string) => new Date(value).toLocaleString();
+const formatDate = (value: string) => new Date(value).toLocaleString(undefined, { timeZone: "Asia/Bangkok" });
 
 function LoyaltyPage() {
   const { t } = useI18n();

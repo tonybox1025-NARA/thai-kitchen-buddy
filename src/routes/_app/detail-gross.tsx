@@ -1,4 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { bkkHour } from "@/lib/bkk-time";
+import { pickerBounds } from "@/lib/bkk-time";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,8 +35,8 @@ function GrossSalesDetail() {
 
   const bounds = useMemo<[Date, Date]>(() => {
     if (range === "custom" && custom?.from) {
-      const from = new Date(custom.from); from.setHours(0,0,0,0);
-      const to   = new Date(custom.to ?? custom.from); to.setHours(23,59,59,999);
+      const from = pickerBounds(custom.from, custom.to)[0];
+      const to   = pickerBounds(custom.from, custom.to)[1];
       return [from, to];
     }
     return rangeBounds(range === "custom" ? "today" : range);
@@ -97,7 +99,7 @@ function GrossSalesDetail() {
     const m = new Map<number, { count: number; total: number }>();
     for (const b of bills) {
       if (!b.paid_at) continue;
-      const h = new Date(b.paid_at).getHours();
+      const h = bkkHour(b.paid_at);
       const e = m.get(h) ?? { count: 0, total: 0 };
       e.count += 1; e.total += Number(b.total);
       m.set(h, e);
@@ -206,7 +208,7 @@ function GrossSalesDetail() {
                       <div className="grid grid-cols-[3rem_1fr_1fr_5rem] gap-2 items-center py-1 hover:bg-muted/40 rounded px-1 transition-colors">
                         <span className="font-bold">{tableMap.get(b.id) ?? "—"}</span>
                         <span className="text-muted-foreground tabular-nums text-xs">
-                          {b.paid_at ? new Date(b.paid_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}) : "—"}
+                          {b.paid_at ? new Date(b.paid_at).toLocaleTimeString([], { timeZone: "Asia/Bangkok", hour:"2-digit",minute:"2-digit"}) : "—"}
                         </span>
                         <span className="text-muted-foreground">
                           {Number(b.discount_amount) > 0 ? `- ${thb(Number(b.discount_amount))}` : "—"}

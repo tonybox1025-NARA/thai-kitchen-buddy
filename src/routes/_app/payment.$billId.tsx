@@ -1127,7 +1127,7 @@ function PaymentPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-center">{restName || "Restaurant"}</CardTitle>
-            <p className="text-center text-xs text-muted-foreground">{t("table")} {tableCode} · {new Date().toLocaleString(lang === "th" ? "th-TH" : "en-US")}</p>
+            <p className="text-center text-xs text-muted-foreground">{t("table")} {tableCode} · {new Date().toLocaleString(lang === "th" ? "th-TH" : "en-US", { timeZone: "Asia/Bangkok" })}</p>
           </CardHeader>
           <CardContent>
             <table className="w-full text-sm">

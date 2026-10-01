@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { bangkokDateKey, bangkokDayUtcBounds } from "@/lib/business-day";
+import { bkkDateKey, bkkPresetBounds, mondayOfKey, monthStartKey, yearStartKey } from "@/lib/bkk-time";
 
 export type DashRange = "today" | "yesterday" | "week" | "month" | "ytd" | "custom";
 
@@ -10,22 +11,6 @@ type ShiftRef = {
   closed_at: string | null;
   status: "open" | "closed";
 };
-
-function localDateKey(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function dateFromKey(key: string): Date {
-  const [year, month, day] = key.split("-").map(Number);
-  return new Date(year, month - 1, day, 12, 0, 0, 0);
-}
-
-function keyFromDate(date: Date): string {
-  return localDateKey(date);
-}
 
 async function currentBusinessShift(): Promise<ShiftRef | null> {
   const select = "id,business_day,opened_at,closed_at,status";
@@ -38,16 +23,9 @@ async function currentBusinessShift(): Promise<ShiftRef | null> {
   return (latestRows?.[0] as ShiftRef | undefined) ?? null;
 }
 
+/** Bangkok calendar bounds for a preset (UTC instants); independent of device timezone. */
 export function rangeBounds(r: Exclude<DashRange, "custom">): [Date, Date] {
-  const now = new Date();
-  const s = new Date(now), e = new Date(now);
-  e.setHours(23,59,59,999);
-  if (r === "today")     { s.setHours(0,0,0,0); }
-  else if (r === "yesterday") { s.setDate(s.getDate()-1); s.setHours(0,0,0,0); e.setDate(e.getDate()-1); e.setHours(23,59,59,999); }
-  else if (r === "week") { const d=s.getDay()||7; s.setDate(s.getDate()-(d-1)); s.setHours(0,0,0,0); }
-  else if (r === "month") { s.setDate(1); s.setHours(0,0,0,0); }
-  else                   { s.setMonth(0,1); s.setHours(0,0,0,0); } // ytd: Jan 1 of this year
-  return [s, e];
+  return bkkPresetBounds(r);
 }
 
 /**
@@ -77,21 +55,12 @@ export async function shiftIdsFor(r: DashRange, bounds: [Date, Date]): Promise<s
   let fromKey: string;
   let toKey: string;
   if (r === "custom") {
-    fromKey = localDateKey(bounds[0]);
-    toKey = localDateKey(bounds[1]);
+    // Custom bounds are Bangkok-day instants (see pickerBounds), so read them back in Bangkok.
+    fromKey = bkkDateKey(bounds[0]);
+    toKey = bkkDateKey(bounds[1]);
   } else {
     const anchorKey = bangkokDateKey(new Date(anchor.opened_at));
-    const anchorDate = dateFromKey(anchorKey);
-    const start = new Date(anchorDate);
-    if (r === "week") {
-      const weekday = start.getDay() || 7;
-      start.setDate(start.getDate() - (weekday - 1));
-    } else if (r === "month") {
-      start.setDate(1);
-    } else {
-      start.setMonth(0, 1);
-    }
-    fromKey = keyFromDate(start);
+    fromKey = r === "week" ? mondayOfKey(anchorKey) : r === "month" ? monthStartKey(anchorKey) : yearStartKey(anchorKey);
     toKey = anchorKey;
   }
 

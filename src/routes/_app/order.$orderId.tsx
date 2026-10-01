@@ -978,7 +978,7 @@ function OrderPage() {
           <div className="font-bold">{pending ? (lang === "th" ? `รอส่ง · รอบถัดไป ${roundNumber}` : `Pending · Next round ${roundNumber}`) : (lang === "th" ? `รอบ ${roundNumber}` : `Round ${roundNumber}`)}</div>
           {!pending && item.sent_at && (
             <div className="shrink-0 text-right font-semibold tabular-nums">
-              {new Date(item.sent_at).toLocaleTimeString(lang === "th" ? "th-TH" : "en-GB", { hour: "2-digit", minute: "2-digit" })}
+              {new Date(item.sent_at).toLocaleTimeString(lang === "th" ? "th-TH" : "en-GB", { timeZone: "Asia/Bangkok", hour: "2-digit", minute: "2-digit" })}
             </div>
           )}
         </div>
@@ -1605,7 +1605,7 @@ function OrderPage() {
           </DialogHeader>
           <p className="text-center text-sm text-muted-foreground -mt-2">
             {orderSource === "takeout" ? `${t("takeout")} · ${orderNumber ?? ""}` : orderSource === "staff_meal" ? `${t("staff_meal")} · ${orderNumber ?? ""}` : `${t("table")} ${tableCode}`}
-            {" · "}{new Date().toLocaleString(lang === "th" ? "th-TH" : "en-US")}
+            {" · "}{new Date().toLocaleString(lang === "th" ? "th-TH" : "en-US", { timeZone: "Asia/Bangkok" })}
           </p>
           <div className="space-y-1 max-h-56 overflow-y-auto text-sm border rounded-lg p-3 bg-muted/30">
             {liveItems.map((i) => (

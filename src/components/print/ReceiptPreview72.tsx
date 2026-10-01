@@ -23,7 +23,7 @@ export function ReceiptPreview72({ data }: { data: ReceiptData }) {
       <div className="flex justify-between"><span>Bill:</span><span>{data.billNo}</span></div>
       {data.table && <div className="flex justify-between"><span>Table:</span><span>{data.table}</span></div>}
       {data.cashier && <div className="flex justify-between"><span>Cashier:</span><span>{data.cashier}</span></div>}
-      <div className="flex justify-between"><span>Date:</span><span>{new Date(data.printedAt).toLocaleString()}</span></div>
+      <div className="flex justify-between"><span>Date:</span><span>{new Date(data.printedAt).toLocaleString(undefined, { timeZone: "Asia/Bangkok" })}</span></div>
       <div className="border-t border-dashed border-black my-1" />
       {data.items.map((it, i) => (
         <div key={i} className="mb-0.5">
@@ -99,7 +99,7 @@ export function receiptToHtml(data: ReceiptData): string {
     <div class="row"><span>Bill:</span><span>${escapeHtml(data.billNo)}</span></div>
     ${data.table ? `<div class="row"><span>Table:</span><span>${escapeHtml(data.table)}</span></div>` : ""}
     ${data.cashier ? `<div class="row"><span>Cashier:</span><span>${escapeHtml(data.cashier)}</span></div>` : ""}
-    <div class="row"><span>Date:</span><span>${escapeHtml(new Date(data.printedAt).toLocaleString())}</span></div>
+    <div class="row"><span>Date:</span><span>${escapeHtml(new Date(data.printedAt).toLocaleString(undefined, { timeZone: "Asia/Bangkok" }))}</span></div>
     <div class="hr"></div>
     ${rows}
     <div class="hr"></div>

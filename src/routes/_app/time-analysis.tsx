@@ -1,4 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { bkkHour, weekdayOfKey } from "@/lib/bkk-time";
+import { pickerBounds } from "@/lib/bkk-time";
 import { useEffect, useMemo, useState } from "react";
 import type { DateRange } from "react-day-picker";
 import { ArrowLeft, Clock3, ReceiptText, Table2, Users } from "lucide-react";
@@ -85,7 +87,7 @@ type TableStat = {
 const emptyHour = (): HourStat => ({ guests: 0, tables: 0, sales: 0, bills: 0 });
 const hourLabel = (hour: number) => `${String(hour).padStart(2, "0")}:00`;
 const timeLabel = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—";
+  iso ? new Date(iso).toLocaleTimeString([], { timeZone: "Asia/Bangkok",  hour: "2-digit", minute: "2-digit" }) : "—";
 
 function TimeAnalysis() {
   const { lang } = useI18n();
@@ -102,10 +104,8 @@ function TimeAnalysis() {
 
   const bounds = useMemo<[Date, Date]>(() => {
     if (range === "custom" && custom?.from) {
-      const from = new Date(custom.from);
-      from.setHours(0, 0, 0, 0);
-      const to = new Date(custom.to ?? custom.from);
-      to.setHours(23, 59, 59, 999);
+      const from = pickerBounds(custom.from, custom.to)[0];
+      const to = pickerBounds(custom.from, custom.to)[1];
       return [from, to];
     }
     return rangeBounds(range === "custom" ? "today" : range);
@@ -222,7 +222,7 @@ function TimeAnalysis() {
     const diningOrders = orders.filter(isDiningOrder);
     for (const order of diningOrders) {
       const at = new Date(order.opened_at);
-      const h = at.getHours();
+      const h = bkkHour(at);
       const guests = Math.max(
         0,
         (Number(order.guests) || 0) - (mergedGuestsByTarget.get(order.id) ?? 0),
@@ -231,7 +231,7 @@ function TimeAnalysis() {
       hourly[h].tables += 1;
       const day = order.shift_id ? shiftDay.get(order.shift_id) : undefined;
       if (!day) continue;
-      const weekday = new Date(`${day}T12:00:00`).getDay();
+      const weekday = weekdayOfKey(day);
       weekdays[weekday].guests += guests;
       weekdays[weekday].tables += 1;
       weekdays[weekday].days.add(day);
@@ -244,14 +244,14 @@ function TimeAnalysis() {
     for (const bill of bills) {
       if (!bill.paid_at) continue;
       const at = new Date(bill.paid_at);
-      const h = at.getHours();
+      const h = bkkHour(at);
       const total = Number(bill.total) || 0;
       hourly[h].sales += total;
       hourly[h].bills += 1;
       const sid = orderShift.get(bill.order_id);
       const day = sid ? shiftDay.get(sid) : undefined;
       if (!day) continue;
-      const weekday = new Date(`${day}T12:00:00`).getDay();
+      const weekday = weekdayOfKey(day);
       weekdays[weekday].sales += total;
       weekdays[weekday].bills += 1;
       weekdays[weekday].days.add(day);
