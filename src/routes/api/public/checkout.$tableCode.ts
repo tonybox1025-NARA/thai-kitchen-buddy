@@ -109,31 +109,11 @@ async function ensureBill(
     0,
   );
   if (!bill) {
-    const { data: settings } = await sb
-      .from("settings")
-      .select("vat_mode,vat_rate")
-      .eq("id", 1)
-      .maybeSingle();
-    const created = await sb
-      .from("bills")
-      .insert({
-        order_id: order.id,
-        shift_id: order.shift_id,
-        subtotal,
-        total: subtotal,
-        vat_mode: settings?.vat_mode ?? "inclusive",
-        vat_rate: settings?.vat_rate ?? 7,
-      })
-      .select("*")
-      .single();
-    if (created.error?.code === "23505") {
-      const existing = await sb.from("bills").select("*").eq("order_id", order.id).single();
-      if (existing.error) throw existing.error;
-      bill = existing.data;
-    } else {
-      if (created.error) throw created.error;
-      bill = created.data;
-    }
+    const { data: billId, error: billError } = await (sb as any).rpc("get_or_create_bill", { p_order_id: order.id });
+    if (billError) throw billError;
+    const existing = await sb.from("bills").select("*").eq("id", billId).single();
+    if (existing.error) throw existing.error;
+    bill = existing.data;
   } else if (Number(bill.subtotal) !== subtotal) {
     const discount = Number((bill as any).loyalty_discount_amount ?? 0);
     const updated = await sb

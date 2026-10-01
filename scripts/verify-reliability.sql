@@ -23,3 +23,9 @@ SELECT count(*) = 1 AS one_z_job FROM print_jobs WHERE job_key LIKE 'z:%' AND cr
 -- 7. Integrity status is readable.
 SELECT public.get_integrity_status();
 ROLLBACK;
+
+-- 8. Bill get-or-create is idempotent (pick any open order; rollback).
+BEGIN;
+SELECT public.get_or_create_bill(id) = public.get_or_create_bill(id) AS same_bill
+FROM orders WHERE status = 'open' LIMIT 1;
+ROLLBACK;
