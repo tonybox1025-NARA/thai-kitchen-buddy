@@ -64,6 +64,13 @@
       "when": 1790816623227,
       "tag": "0008_atomic_pos_round_and_bill_quarantine",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790816666964,
+      "tag": "0009_fix_pos_round_item_lock",
+      "breakpoints": true
     }
   ]
 }
