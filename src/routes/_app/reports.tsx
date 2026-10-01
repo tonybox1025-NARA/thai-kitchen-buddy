@@ -1253,6 +1253,7 @@ function DailySalesHistory({
                 </CardContent>
               </Card>
             )}
+            <StaffCreditCard r={report} />
           </>
         )}
       </div>
