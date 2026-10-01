@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Plus, Minus, Trash2, ChefHat, Receipt, ArrowLeft, AlertTriangle, ArrowLeftRight, X, Printer, Eye, Layers, Bell, QrCode, Check, ShoppingBag, Tag, Users } from "lucide-react";
 import { SetMenuDialog } from "@/components/SetMenuDialog";
 import { SETS, buildSetDef, formatSetKitchenNotes, setConfigCost, type SetConfig, type SetDef, type SetItemRow } from "@/lib/set-menu";
-import { canPrintDirect, enqueueDurablePrint, getPrintTransport, printCounter, printCounterJobs, printKitchenJobs, type CounterPrintPayload } from "@/lib/counter-printer";
+import { preparePayloadForOutbox, printCounter, type CounterPrintPayload } from "@/lib/counter-printer";
 import { isFrontCounterCategory } from "@/lib/print/routing";
 import { isOffline } from "@/lib/online-status";
 import { tableLabel } from "@/lib/table";
@@ -166,6 +166,8 @@ function OrderPage() {
   const [activeCat, setActiveCat] = useState<string | "all">(() => cachedCatalog?.categories[0]?.id ?? "all");
   const [categoryPage, setCategoryPage] = useState(0);
   const [items, setItems] = useState<Item[]>([]);
+  const sendAttemptRef = useRef<{ idsKey: string; submissionId: string } | null>(null);
+  const sendingRoundRef = useRef(false);
   const [selected, setSelected] = useState<Menu | null>(null);
   const [qty, setQty] = useState(1);
   const [notes, setNotes] = useState("");
