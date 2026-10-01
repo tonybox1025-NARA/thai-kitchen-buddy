@@ -20,10 +20,38 @@ type OrderRow = {
   shift_id: string | null;
   table_id: string | null;
   source: string;
+  status: string | null;
   guests: number;
   opened_at: string;
   closed_at: string | null;
 };
+
+/** Dining sessions only: table orders that were not cancelled (cleanup artifacts excluded). */
+function isDiningOrder(o: OrderRow): boolean {
+  return (
+    !!o.table_id && o.source !== "takeout" && o.source !== "staff_meal" && o.status !== "cancelled"
+  );
+}
+
+/**
+ * Rotate active hour buckets into restaurant operating sequence: start right after
+ * the largest inactive circular gap so rows run opening -> midnight -> closing.
+ */
+function businessHourOrder<T extends { hour: number }>(rows: T[]): T[] {
+  if (rows.length < 2) return rows;
+  const sorted = [...rows].sort((a, b) => a.hour - b.hour);
+  let bestStart = 0;
+  let bestGap = -1;
+  for (let i = 0; i < sorted.length; i++) {
+    const prev = sorted[(i - 1 + sorted.length) % sorted.length].hour;
+    const gap = (sorted[i].hour - prev + 24) % 24 || 24;
+    if (gap > bestGap) {
+      bestGap = gap;
+      bestStart = i;
+    }
+  }
+  return [...sorted.slice(bestStart), ...sorted.slice(0, bestStart)];
+}
 type BillRow = {
   id: string;
   order_id: string;
@@ -104,7 +132,7 @@ function TimeAnalysis() {
             supabase.from("shifts").select("id,business_day").in("id", shiftIds),
             supabase
               .from("orders")
-              .select("id,shift_id,table_id,source,guests,opened_at,closed_at")
+              .select("id,shift_id,table_id,source,status,guests,opened_at,closed_at")
               .in("shift_id", shiftIds)
               .not("is_test", "is", true),
             supabase
@@ -191,9 +219,7 @@ function TimeAnalysis() {
           Math.max(0, Number(merge.source_guests) || 0),
       );
     }
-    const diningOrders = orders.filter(
-      (o) => o.table_id && o.source !== "takeout" && o.source !== "staff_meal",
-    );
+    const diningOrders = orders.filter(isDiningOrder);
     for (const order of diningOrders) {
       const at = new Date(order.opened_at);
       const h = at.getHours();
@@ -286,9 +312,7 @@ function TimeAnalysis() {
       return fallback;
     };
 
-    const diningOrders = orders.filter(
-      (order) => order.table_id && order.source !== "takeout" && order.source !== "staff_meal",
-    );
+    const diningOrders = orders.filter(isDiningOrder);
     const orderById = new Map(diningOrders.map((order) => [order.id, order]));
     const mergesByTarget = new Map<string, TableMergeRow[]>();
     for (const merge of tableMerges) {
@@ -371,9 +395,11 @@ function TimeAnalysis() {
     };
   }, [tables, orders, bills, tableMerges, tableSort]);
 
-  const activeHours = analysis.hourly
-    .map((v, hour) => ({ hour, ...v }))
-    .filter((v) => v.guests || v.sales || v.tables || v.bills);
+  const activeHours = businessHourOrder(
+    analysis.hourly
+      .map((v, hour) => ({ hour, ...v }))
+      .filter((v) => v.guests || v.sales || v.tables || v.bills),
+  );
   const maxGuests = Math.max(1, ...activeHours.map((h) => h.guests));
   const maxSales = Math.max(1, ...activeHours.map((h) => h.sales));
   const weekdayNames = th
@@ -455,6 +481,19 @@ function TimeAnalysis() {
                     <Empty th={th} />
                   ) : (
                     <div className="overflow-x-auto">
+                      <div
+                        className="mb-2 flex justify-end gap-4 text-xs text-muted-foreground"
+                        aria-label={th ? "คำอธิบายสี" : "Traffic legend"}
+                      >
+                        <span>
+                          <i className="mr-1 inline-block h-2 w-4 rounded bg-primary" />
+                          {th ? "ลูกค้า" : "Guests"}
+                        </span>
+                        <span>
+                          <i className="mr-1 inline-block h-2 w-4 rounded bg-amber-500" />
+                          {th ? "ยอดขาย" : "Sales"}
+                        </span>
+                      </div>
                       <table className="w-full min-w-[720px] text-sm">
                         <thead>
                           <tr className="border-b text-left text-xs uppercase text-muted-foreground">
@@ -486,16 +525,6 @@ function TimeAnalysis() {
                       </table>
                     </div>
                   )}
-                  <div className="mt-3 flex gap-4 text-xs text-muted-foreground">
-                    <span>
-                      <i className="mr-1 inline-block h-2 w-4 rounded bg-primary" />
-                      {th ? "ลูกค้า" : "Guests"}
-                    </span>
-                    <span>
-                      <i className="mr-1 inline-block h-2 w-4 rounded bg-amber-500" />
-                      {th ? "ยอดขาย" : "Sales"}
-                    </span>
-                  </div>
                 </CardContent>
               </Card>
 
