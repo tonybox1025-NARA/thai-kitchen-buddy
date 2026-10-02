@@ -430,16 +430,16 @@ function PosPage() {
 
   const takeoutOrders = specialOrders.filter((o) => o.source === "takeout");
   const staffOrders = specialOrders.filter((o) => o.source === "staff_meal");
-  const availCount = tables.filter((x) => x.status === "available").length;
-  const busyCount = tables.length - availCount;
-  const visibleTables = tables.filter((x) =>
-    tableFilter === "available" ? x.status === "available"
-    : tableFilter === "occupied" ? x.status !== "available"
-    : true,
-  );
   // Real tables render on the floor map; only TEST drops to the "Other" row
   // (alongside the takeout / staff-meal tiles).
   const isExtraTable = (tbl: RTable) => tbl.is_test ?? tbl.code === "TEST";
+  const canUseTestTable = staff?.role === "manager" || staff?.role === "admin";
+  const visibleTables = tables.filter((x) => {
+    if (isExtraTable(x) && !canUseTestTable) return false;
+    return tableFilter === "available" ? x.status === "available"
+      : tableFilter === "occupied" ? x.status !== "available"
+      : true;
+  });
   const floorTables = visibleTables.filter((x) => !isExtraTable(x));
   const extraTables = visibleTables.filter(isExtraTable);
 
@@ -514,6 +514,48 @@ function PosPage() {
           <Merge className="h-4 w-4 mr-1" />{lang === "th" ? "รวมโต๊ะ" : "Combine tables"}
         </Button>
       </div>
+
+      <div className="sticky top-16 z-10 -mx-2 mb-5 rounded-2xl border bg-background/95 p-2 shadow-sm backdrop-blur">
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => setTakeoutOpen(true)}
+            className="relative flex min-h-20 items-center gap-3 rounded-xl border-2 border-blue-300 bg-blue-50 px-4 py-3 text-left shadow-sm transition-colors hover:bg-blue-100"
+          >
+            {takeoutOrders.length > 0 && (
+              <span className="absolute right-2 top-2 inline-flex min-w-6 items-center justify-center rounded-full bg-blue-600 px-1.5 py-0.5 text-[11px] font-bold text-white">{takeoutOrders.length}</span>
+            )}
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-blue-600 text-white"><ShoppingBag className="h-6 w-6" /></span>
+            <span>
+              <span className="block text-base font-extrabold text-blue-950">{t("takeout")}</span>
+              <span className="block text-xs font-medium text-blue-800">{lang === "th" ? "ออเดอร์กลับบ้าน" : "Takeaway order"}</span>
+            </span>
+          </button>
+          <button
+            onClick={() => void openStaffTabs()}
+            className="relative flex min-h-20 items-center gap-3 rounded-xl border-2 border-purple-300 bg-purple-50 px-4 py-3 text-left shadow-sm transition-colors hover:bg-purple-100"
+          >
+            {staffOrders.length > 0 && (
+              <span className="absolute right-2 top-2 inline-flex min-w-6 items-center justify-center rounded-full bg-purple-600 px-1.5 py-0.5 text-[11px] font-bold text-white">{staffOrders.length}</span>
+            )}
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-purple-600 text-white"><UtensilsCrossed className="h-6 w-6" /></span>
+            <span>
+              <span className="block text-base font-extrabold text-purple-950">{lang === "th" ? "บัญชีพนักงาน" : "Staff tab"}</span>
+              <span className="block text-xs font-medium text-purple-800">{lang === "th" ? "อาหารและเครื่องดื่มพนักงาน" : "Staff food & drinks"}</span>
+            </span>
+          </button>
+        </div>
+        {(takeoutOrders.length > 0 || staffOrders.length > 0) && (
+          <div className="mt-2 flex flex-wrap gap-1.5 px-1">
+            {takeoutOrders.map((o) => (
+              <button key={o.id} onClick={() => nav({ to: "/order/$orderId", params: { orderId: o.id } })} className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-bold text-white shadow-sm hover:bg-blue-700">{o.order_number ?? "TO-?"}</button>
+            ))}
+            {staffOrders.map((o) => (
+              <button key={o.id} onClick={() => nav({ to: "/order/$orderId", params: { orderId: o.id } })} className="rounded-lg bg-purple-600 px-3 py-1.5 text-sm font-bold text-white shadow-sm hover:bg-purple-700">{o.order_number ?? "ST-?"}</button>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="tbl-floor-wrap">
         <div className="tbl-floor">
           <div className="floor-note floor-note-lg" style={{ gridColumn: "1 / 3", gridRow: 1 }}>{t("floor_entrance")}</div>
@@ -527,45 +569,11 @@ function PosPage() {
           </p>
         )}
         <div className="mt-6 mx-auto max-w-[760px]">
-          <div className="text-xs font-medium text-muted-foreground mb-2">{t("floor_other")}</div>
-          <div className="flex flex-wrap gap-3">
-            {extraTables.map((tbl) => renderTable(tbl, false))}
-            <button
-              onClick={() => setTakeoutOpen(true)}
-              className="tbl-card relative aspect-square rounded-2xl p-3 shadow-sm hover:shadow-md transition-all flex flex-col w-32 shrink-0"
-            >
-              {takeoutOrders.length > 0 && (
-                <span className="absolute -top-1.5 -left-1.5 inline-flex items-center justify-center min-w-6 h-6 px-1.5 rounded-full bg-blue-600 text-white text-[11px] font-bold shadow">{takeoutOrders.length}</span>
-              )}
-              <div className="flex items-start"><ShoppingBag className="h-5 w-5 text-blue-600" /></div>
-              <div className="flex-1 grid place-items-center">
-                <span className="grid place-items-center h-12 w-12 rounded-full bg-primary/15 text-primary"><Plus className="h-7 w-7" /></span>
-              </div>
-              <div className="text-xs font-semibold text-muted-foreground">{t("takeout")}</div>
-            </button>
-            <button
-              onClick={() => void openStaffTabs()}
-              className="tbl-card relative aspect-square rounded-2xl p-3 shadow-sm hover:shadow-md transition-all flex flex-col w-32 shrink-0"
-            >
-              {staffOrders.length > 0 && (
-                <span className="absolute -top-1.5 -left-1.5 inline-flex items-center justify-center min-w-6 h-6 px-1.5 rounded-full bg-purple-600 text-white text-[11px] font-bold shadow">{staffOrders.length}</span>
-              )}
-              <div className="flex items-start"><UtensilsCrossed className="h-5 w-5 text-purple-600" /></div>
-              <div className="flex-1 grid place-items-center">
-                <span className="grid place-items-center h-12 w-12 rounded-full bg-primary/15 text-primary"><Plus className="h-7 w-7" /></span>
-              </div>
-              <div className="text-xs font-semibold text-muted-foreground">{lang === "th" ? "บัญชีพนักงาน" : "Staff tab"}</div>
-            </button>
-          </div>
-          {(takeoutOrders.length > 0 || staffOrders.length > 0) && (
-            <div className="flex flex-wrap gap-1.5 mt-3">
-              {takeoutOrders.map((o) => (
-                <button key={o.id} onClick={() => nav({ to: "/order/$orderId", params: { orderId: o.id } })} className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow-sm">{o.order_number ?? "TO-?"}</button>
-              ))}
-              {staffOrders.map((o) => (
-                <button key={o.id} onClick={() => nav({ to: "/order/$orderId", params: { orderId: o.id } })} className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold shadow-sm">{o.order_number ?? "ST-?"}</button>
-              ))}
-            </div>
+          {extraTables.length > 0 && (
+            <>
+              <div className="mb-2 text-xs font-medium text-muted-foreground">{t("floor_other")}</div>
+              <div className="flex flex-wrap gap-3">{extraTables.map((tbl) => renderTable(tbl, false))}</div>
+            </>
           )}
         </div>
       </div>
