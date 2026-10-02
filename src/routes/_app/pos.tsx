@@ -430,18 +430,12 @@ function PosPage() {
 
   const takeoutOrders = specialOrders.filter((o) => o.source === "takeout");
   const staffOrders = specialOrders.filter((o) => o.source === "staff_meal");
-  // Real tables render on the floor map; only TEST drops to the "Other" row
-  // (alongside the takeout / staff-meal tiles).
-  const isExtraTable = (tbl: RTable) => tbl.is_test ?? tbl.code === "TEST";
-  const canUseTestTable = staff?.role === "manager" || staff?.role === "admin";
   const visibleTables = tables.filter((x) => {
-    if (isExtraTable(x) && !canUseTestTable) return false;
     return tableFilter === "available" ? x.status === "available"
       : tableFilter === "occupied" ? x.status !== "available"
       : true;
   });
-  const floorTables = visibleTables.filter((x) => !isExtraTable(x));
-  const extraTables = visibleTables.filter(isExtraTable);
+  const floorTables = visibleTables;
 
   const renderTable = (tbl: RTable, placed: boolean) => {
     const isTest = tbl.is_test ?? tbl.code === "TEST";
@@ -515,50 +509,32 @@ function PosPage() {
         </Button>
       </div>
 
-      <div className="sticky top-16 z-10 -mx-2 mb-5 rounded-2xl border bg-background/95 p-2 shadow-sm backdrop-blur">
-        <div className="grid grid-cols-2 gap-2">
+      <div className="tbl-floor-wrap">
+        <div className="tbl-floor">
           <button
             onClick={() => setTakeoutOpen(true)}
-            className="relative flex min-h-20 items-center gap-3 rounded-xl border-2 border-blue-300 bg-blue-50 px-4 py-3 text-left shadow-sm transition-colors hover:bg-blue-100"
+            style={{ gridColumnStart: 1, gridRowStart: 1 }}
+            className="tbl-card relative aspect-square rounded-2xl border-2 border-blue-300 bg-blue-50 p-3 shadow-sm transition-all hover:bg-blue-100 hover:shadow-md flex flex-col"
           >
             {takeoutOrders.length > 0 && (
-              <span className="absolute right-2 top-2 inline-flex min-w-6 items-center justify-center rounded-full bg-blue-600 px-1.5 py-0.5 text-[11px] font-bold text-white">{takeoutOrders.length}</span>
+              <span className="absolute -left-1.5 -top-1.5 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-blue-600 px-1.5 text-[11px] font-bold text-white shadow">{takeoutOrders.length}</span>
             )}
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-blue-600 text-white"><ShoppingBag className="h-6 w-6" /></span>
-            <span>
-              <span className="block text-base font-extrabold text-blue-950">{t("takeout")}</span>
-              <span className="block text-xs font-medium text-blue-800">{lang === "th" ? "ออเดอร์กลับบ้าน" : "Takeaway order"}</span>
-            </span>
+            <div className="flex items-start"><ShoppingBag className="h-5 w-5 text-blue-600" /></div>
+            <div className="flex-1 grid place-items-center"><span className="grid h-12 w-12 place-items-center rounded-full bg-blue-600 text-white"><Plus className="h-7 w-7" /></span></div>
+            <div className="text-xs font-bold text-blue-900">{t("takeout")}</div>
           </button>
           <button
             onClick={() => void openStaffTabs()}
-            className="relative flex min-h-20 items-center gap-3 rounded-xl border-2 border-purple-300 bg-purple-50 px-4 py-3 text-left shadow-sm transition-colors hover:bg-purple-100"
+            style={{ gridColumnStart: 2, gridRowStart: 1 }}
+            className="tbl-card relative aspect-square rounded-2xl border-2 border-purple-300 bg-purple-50 p-3 shadow-sm transition-all hover:bg-purple-100 hover:shadow-md flex flex-col"
           >
             {staffOrders.length > 0 && (
-              <span className="absolute right-2 top-2 inline-flex min-w-6 items-center justify-center rounded-full bg-purple-600 px-1.5 py-0.5 text-[11px] font-bold text-white">{staffOrders.length}</span>
+              <span className="absolute -left-1.5 -top-1.5 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-purple-600 px-1.5 text-[11px] font-bold text-white shadow">{staffOrders.length}</span>
             )}
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-purple-600 text-white"><UtensilsCrossed className="h-6 w-6" /></span>
-            <span>
-              <span className="block text-base font-extrabold text-purple-950">{lang === "th" ? "บัญชีพนักงาน" : "Staff tab"}</span>
-              <span className="block text-xs font-medium text-purple-800">{lang === "th" ? "อาหารและเครื่องดื่มพนักงาน" : "Staff food & drinks"}</span>
-            </span>
+            <div className="flex items-start"><UtensilsCrossed className="h-5 w-5 text-purple-600" /></div>
+            <div className="flex-1 grid place-items-center"><span className="grid h-12 w-12 place-items-center rounded-full bg-purple-600 text-white"><Plus className="h-7 w-7" /></span></div>
+            <div className="text-xs font-bold text-purple-900">{lang === "th" ? "บัญชีพนักงาน" : "Staff tab"}</div>
           </button>
-        </div>
-        {(takeoutOrders.length > 0 || staffOrders.length > 0) && (
-          <div className="mt-2 flex flex-wrap gap-1.5 px-1">
-            {takeoutOrders.map((o) => (
-              <button key={o.id} onClick={() => nav({ to: "/order/$orderId", params: { orderId: o.id } })} className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-bold text-white shadow-sm hover:bg-blue-700">{o.order_number ?? "TO-?"}</button>
-            ))}
-            {staffOrders.map((o) => (
-              <button key={o.id} onClick={() => nav({ to: "/order/$orderId", params: { orderId: o.id } })} className="rounded-lg bg-purple-600 px-3 py-1.5 text-sm font-bold text-white shadow-sm hover:bg-purple-700">{o.order_number ?? "ST-?"}</button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="tbl-floor-wrap">
-        <div className="tbl-floor">
-          <div className="floor-note floor-note-lg" style={{ gridColumn: "1 / 3", gridRow: 1 }}>{t("floor_entrance")}</div>
           {floorTables.map((tbl) => renderTable(tbl, true))}
           <div className="floor-note floor-note-lg" style={{ gridColumn: "1 / 3", gridRow: 6 }}>{t("floor_cashier")}</div>
           <div className="floor-note floor-note-lg" style={{ gridColumn: "4 / 6", gridRow: 6 }}>{t("floor_fridge")}</div>
@@ -568,14 +544,6 @@ function PosPage() {
             {tableFilter === "occupied" ? t("no_occupied_tables") : t("no_available_tables")}
           </p>
         )}
-        <div className="mt-6 mx-auto max-w-[760px]">
-          {extraTables.length > 0 && (
-            <>
-              <div className="mb-2 text-xs font-medium text-muted-foreground">{t("floor_other")}</div>
-              <div className="flex flex-wrap gap-3">{extraTables.map((tbl) => renderTable(tbl, false))}</div>
-            </>
-          )}
-        </div>
       </div>
 
       <Dialog open={!!openTable} onOpenChange={(o) => !o && setOpenTable(null)}>
@@ -635,6 +603,26 @@ function PosPage() {
             <DialogTitle>{lang === "th" ? "บัญชีค้างจ่ายพนักงาน" : "Staff tab"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-5">
+              {staffOrders.length > 0 && (
+                <section>
+                  <h3 className="font-semibold mb-2">{lang === "th" ? "ออเดอร์พนักงานที่เปิดอยู่" : "Open staff orders"}</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {staffOrders.map((order) => (
+                      <Button
+                        key={order.id}
+                        variant="outline"
+                        className="border-purple-300"
+                        onClick={() => {
+                          setStaffTabOpen(false);
+                          nav({ to: "/order/$orderId", params: { orderId: order.id } });
+                        }}
+                      >
+                        <UtensilsCrossed className="mr-2 h-4 w-4 text-purple-600" />{order.order_number ?? "ST-?"}
+                      </Button>
+                    ))}
+                  </div>
+                </section>
+              )}
               <section>
                 <h3 className="font-semibold mb-2">{lang === "th" ? "ยอดค้างชำระ" : "Outstanding"}</h3>
                 {staffTabRows.length === 0 ? (
