@@ -462,16 +462,16 @@ function Register() {
     if (!shift) return;
     try {
       const blockers = await getShiftCloseBlockers(shift.id);
-      if (blockers.has_blockers) {
-        toast.error(shiftCloseBlockedMessage(blockers), { duration: 12_000 });
-        return;
-      }
       const r = await buildReport(shift);
       setReport(r);
       setCashCount({});
       setZDlg(true);
+      const reviewCount = Number(blockers.manager_review_count ?? 0);
+      if (reviewCount > 0) {
+        toast.info(`Manager review saved: ${reviewCount}. Staff action is not required.`, { duration: 8_000 });
+      }
     } catch (error) {
-      toast.error(`Could not verify whether the shift can close: ${error instanceof Error ? error.message : String(error)}`);
+      toast.error(`Could not prepare the Z report: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
@@ -483,6 +483,7 @@ function Register() {
   const doZ = async () => {
     if (!shift || !report) return false;
     const { cashTotal, expected, overShort } = calcCashSummary(cashCount, report);
+    let closeResult: Awaited<ReturnType<typeof closeShiftWithTicket>> | null = null;
     try {
       let printPayload: unknown = null;
       if (canPrintDirect()) {
@@ -501,12 +502,16 @@ function Register() {
         }
         return false;
       }
+      closeResult = result;
     } catch (error) {
       toast.error(`Z report was not saved: ${error instanceof Error ? error.message : String(error)}`);
       return false;
     }
     setZDlg(false); setShift(null); setReport(null);
-    toast.success(t("rep_z_saved"));
+    const reviewCount = Number(closeResult?.manager_review_count ?? 0);
+    toast.success(reviewCount > 0
+      ? `Shift closed. Manager review saved: ${reviewCount}. Staff action is not required.`
+      : t("rep_z_saved"));
     return true;
   };
 

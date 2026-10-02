@@ -6,12 +6,16 @@ export type ShiftCloseBlockers = {
   open_bills: Array<{ id: string; order_id: string; total: number }>;
   active_tables: Array<{ id: string; code: string; status: string }>;
   loyalty_issues: Array<{ id: string; points_redeemed: number; loyalty_discount_amount: number; expected_discount: number | null }>;
+  manager_review_count?: number;
+  auto_resolved_count?: number;
 };
 
 export type SafeCloseResult = {
   closed: boolean;
   reason?: "blocked" | "already_closed";
   blockers?: ShiftCloseBlockers;
+  manager_review_count?: number;
+  auto_resolved_count?: number;
 };
 
 const emptyBlockers = (): ShiftCloseBlockers => ({
@@ -62,9 +66,9 @@ export function shiftCloseBlockedMessage(blockers: ShiftCloseBlockers): string {
     });
     details.push(`Open orders: ${orders.join(", ")}`);
   }
-  if (blockers.open_bills.length) details.push(`Unpaid bills: ${blockers.open_bills.length}`);
+  if (blockers.open_bills.length) details.push(`Bill records to review: ${blockers.open_bills.length}`);
   if (blockers.loyalty_issues?.length) details.push(`Member discount errors: ${blockers.loyalty_issues.length}`);
-  return `Z report blocked. Settle or close everything first. ${details.join(" · ")}`;
+  return `Closing records need manager review. ${details.join(" · ")}`;
 }
 
 export type OpenShiftResult<S> = { created: boolean; shift: S };
