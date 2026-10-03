@@ -11,6 +11,7 @@ import type { DateRange } from "react-day-picker";
 import { DashRangeBar } from "@/components/DashRangeBar";
 import { type DashRange, rangeBounds, shiftIdsFor } from "@/lib/dash-range";
 import { useI18n } from "@/lib/i18n";
+import { orderBusinessHours } from "@/lib/business-hour-order";
 
 export const Route = createFileRoute("/_app/detail-gross")({
   component: GrossSalesDetail,
@@ -104,7 +105,9 @@ function GrossSalesDetail() {
       e.count += 1; e.total += Number(b.total);
       m.set(h, e);
     }
-    return [...m.entries()].sort((a, b) => a[0] - b[0]);
+    return orderBusinessHours(
+      [...m.entries()].map(([hour, data]) => ({ hour, data })),
+    ).map(({ hour, data }) => [hour, data] as const);
   }, [bills]);
 
   // By table

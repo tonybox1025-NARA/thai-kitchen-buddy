@@ -5,6 +5,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { thb } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
+import { bkkHour } from "@/lib/bkk-time";
+import { orderBusinessHours } from "@/lib/business-hour-order";
 import { ChevronDown, Clock3, RefreshCw, Users, Utensils, Receipt } from "lucide-react";
 
 export const Route = createFileRoute("/_app/live")({ component: LivePage });
@@ -51,15 +53,6 @@ function fmtOrderTime(iso: string | null, lang: "th" | "en"): string {
     minute: "2-digit",
     timeZone: "Asia/Bangkok",
   });
-}
-
-function bangkokHour(iso: string): number {
-  const hour = new Intl.DateTimeFormat("en-GB", {
-    hour: "2-digit",
-    hourCycle: "h23",
-    timeZone: "Asia/Bangkok",
-  }).format(new Date(iso));
-  return Number(hour);
 }
 
 function itemRoundKey(item: TableItemLine): string {
@@ -231,15 +224,16 @@ function LivePage() {
       const hMap = new Map<number, { count: number; total: number }>();
       for (const b of (bills ?? []) as { total: number; paid_at: string | null }[]) {
         if (!b.paid_at) continue;
-        const h = bangkokHour(b.paid_at);
+        const h = bkkHour(b.paid_at);
         const cur = hMap.get(h) ?? { count: 0, total: 0 };
         cur.count += 1; cur.total += Number(b.total);
         hMap.set(h, cur);
       }
-      const shiftOpenHour = bangkokHour(currentShift.opened_at);
-      setHourly([...hMap.entries()]
-        .map(([hour, v]) => ({ hour, ...v }))
-        .sort((a, b) => ((a.hour - shiftOpenHour + 24) % 24) - ((b.hour - shiftOpenHour + 24) % 24)));
+      const shiftOpenHour = bkkHour(currentShift.opened_at);
+      setHourly(orderBusinessHours(
+        [...hMap.entries()].map(([hour, v]) => ({ hour, ...v })),
+        shiftOpenHour,
+      ));
 
       const [{ data: pays }, { data: shiftOrders }] = await Promise.all([
         ids.length

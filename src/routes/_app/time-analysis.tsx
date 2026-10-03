@@ -13,6 +13,7 @@ import { type DashRange, rangeBounds, shiftIdsFor } from "@/lib/dash-range";
 import { thb } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { tableLabel } from "@/lib/table";
+import { orderBusinessHours } from "@/lib/business-hour-order";
 
 export const Route = createFileRoute("/_app/time-analysis")({ component: TimeAnalysis });
 
@@ -35,25 +36,6 @@ function isDiningOrder(o: OrderRow): boolean {
   );
 }
 
-/**
- * Rotate active hour buckets into restaurant operating sequence: start right after
- * the largest inactive circular gap so rows run opening -> midnight -> closing.
- */
-function businessHourOrder<T extends { hour: number }>(rows: T[]): T[] {
-  if (rows.length < 2) return rows;
-  const sorted = [...rows].sort((a, b) => a.hour - b.hour);
-  let bestStart = 0;
-  let bestGap = -1;
-  for (let i = 0; i < sorted.length; i++) {
-    const prev = sorted[(i - 1 + sorted.length) % sorted.length].hour;
-    const gap = (sorted[i].hour - prev + 24) % 24 || 24;
-    if (gap > bestGap) {
-      bestGap = gap;
-      bestStart = i;
-    }
-  }
-  return [...sorted.slice(bestStart), ...sorted.slice(0, bestStart)];
-}
 type BillRow = {
   id: string;
   order_id: string;
@@ -395,7 +377,7 @@ function TimeAnalysis() {
     };
   }, [tables, orders, bills, tableMerges, tableSort]);
 
-  const activeHours = businessHourOrder(
+  const activeHours = orderBusinessHours(
     analysis.hourly
       .map((v, hour) => ({ hour, ...v }))
       .filter((v) => v.guests || v.sales || v.tables || v.bills),

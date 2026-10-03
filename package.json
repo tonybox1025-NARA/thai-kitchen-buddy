@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build",
-    "build:dev": "vite build --mode development",
-    "build:android": "BUILD_TARGET=android vite build && node scripts/prepare-android-www.js && cap sync android",
+    "verify:business-hours": "node scripts/verify-business-hour-order.mjs",
+    "build": "npm run verify:business-hours && vite build",
+    "build:dev": "npm run verify:business-hours && vite build --mode development",
+    "build:android": "npm run verify:business-hours && BUILD_TARGET=android vite build && node scripts/prepare-android-www.js && cap sync android",
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
