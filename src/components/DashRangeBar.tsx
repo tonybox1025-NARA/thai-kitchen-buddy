@@ -20,7 +20,7 @@ type Props = {
 export function DashRangeBar({ range, onRange, custom, onCustom }: Props) {
   const { t } = useI18n();
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [pickerMode, setPickerMode] = useState<"single" | "range">("single");
+  const [pickerMode, setPickerMode] = useState<"single" | "range">("range");
   const [rangeStart, setRangeStart] = useState<Date>();
   const [draftRange, setDraftRange] = useState<DateRange>();
 
@@ -32,6 +32,7 @@ export function DashRangeBar({ range, onRange, custom, onCustom }: Props) {
 
   const changePickerOpen = (open: boolean) => {
     setPickerOpen(open);
+    if (open) setPickerMode("range");
     if (!open) {
       setRangeStart(undefined);
       setDraftRange(undefined);
@@ -92,7 +93,7 @@ export function DashRangeBar({ range, onRange, custom, onCustom }: Props) {
             />
           ) : (
             <Calendar mode="range" selected={draftRange ?? custom}
-              onSelect={(_selected, clicked) => {
+              onDayClick={(clicked) => {
                 const step = advanceDateRange(rangeStart, clicked);
                 setDraftRange(step.range);
                 if (!step.complete) {

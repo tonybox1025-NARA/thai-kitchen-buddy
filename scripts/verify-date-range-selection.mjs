@@ -27,5 +27,15 @@ const pickerSource = await readFile(
 );
 assert.match(pickerSource, /advanceDateRange\(rangeStart, clicked\)/);
 assert.match(pickerSource, /if \(!step\.complete\)/);
+assert.match(
+  pickerSource,
+  /useState<"single" \| "range">\("range"\)/,
+  "the custom picker must open in date-range mode by default",
+);
+assert.match(
+  pickerSource,
+  /onDayClick=\{\(clicked\) =>/,
+  "range selection must be driven by deliberate day clicks",
+);
 
 console.log("OK: date ranges wait for a deliberate second date click");
