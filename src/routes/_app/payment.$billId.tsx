@@ -899,6 +899,22 @@ function PaymentPage() {
     return { token, url: `${publicBaseUrl()}/loyalty/claim/${token}`, points };
   };
 
+  // React state can still contain the pre-payment array for one render after
+  // the payment RPC commits. Receipts must use the authoritative database rows
+  // so the payment method never disappears from the customer's paper.
+  const loadReceiptPayments = async (latestPayment?: Payment): Promise<Payment[]> => {
+    if (!bill) return latestPayment ? [latestPayment] : payments;
+    const { data, error } = await supabase
+      .from("payments")
+      .select("id,method,amount,cash_received,change_due,tip_amount,reference")
+      .eq("bill_id", bill.id)
+      .order("created_at", { ascending: true });
+    if (!error && data) return data as Payment[];
+    return latestPayment && !payments.some((payment) => payment.id === latestPayment.id)
+      ? [...payments, latestPayment]
+      : payments;
+  };
+
   const finalize = async (latestPayment?: Payment) => {
     if (!bill) return false;
     if (isOffline()) { toast.error(t("err_offline")); return false; }
@@ -920,9 +936,7 @@ function PaymentPage() {
     }
     // Test tables must not touch real member points or issue loyalty claims.
     const loyaltyClaim = isTestBill ? null : await ensureLoyaltyClaim();
-    const receiptPayments = latestPayment && !payments.some((payment) => payment.id === latestPayment.id)
-      ? [...payments, latestPayment]
-      : payments;
+    const receiptPayments = await loadReceiptPayments(latestPayment);
     // Payment is already committed. The receipt is recorded under a key derived
     // from the bill, so retries/recovery never produce a second receipt.
     try {
@@ -965,6 +979,7 @@ function PaymentPage() {
   // Records the paid receipt from committed bill state under the given key.
   const enqueuePaidReceipt = async (jobKey: string) => {
     if (!bill) return;
+    const receiptPayments = await loadReceiptPayments();
     const { data: loyaltyClaim } = await supabase
       .from("loyalty_claim_tokens")
       .select("token,claim_points")
@@ -989,7 +1004,7 @@ function PaymentPage() {
       total: Number(bill.total),
       vatAmount: bill.vat_mode === "exclusive" ? Number(bill.vat_amount ?? 0) : 0,
       vatRate: Number(bill.vat_rate) || 7,
-      vat_mode: bill.vat_mode, payments, language: lang,
+      vat_mode: bill.vat_mode, payments: receiptPayments, language: lang,
       discountAmount: Number(bill.discount_amount ?? 0),
       memberDiscountAmount: Number(bill.member_discount_amount ?? 0),
       pointsDiscountAmount: Number(bill.loyalty_discount_amount ?? 0),
