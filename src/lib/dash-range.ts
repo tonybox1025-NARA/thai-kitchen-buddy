@@ -73,6 +73,13 @@ export async function shiftIdsFor(r: DashRange, bounds: [Date, Date]): Promise<s
   return (data ?? []).map((shift) => shift.id);
 }
 
+/** Canonical shift id -> business-day key mapping for multi-day detail lists. */
+export async function businessDaysForShifts(shiftIds: string[]): Promise<Map<string, string>> {
+  if (!shiftIds.length) return new Map();
+  const { data } = await supabase.from("shifts").select("id,business_day").in("id", shiftIds);
+  return new Map((data ?? []).map((shift) => [shift.id, shift.business_day]));
+}
+
 export function rangeLabel(r: DashRange): string {
   return r === "today" ? "Today" : r === "yesterday" ? "Yesterday" : r === "week" ? "Weekly" : r === "month" ? "Monthly" : r === "ytd" ? "YTD" : "Custom range";
 }

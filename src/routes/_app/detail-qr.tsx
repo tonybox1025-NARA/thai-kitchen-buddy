@@ -8,16 +8,17 @@ import { thb } from "@/lib/format";
 import { ArrowLeft, QrCode } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { DashRangeBar } from "@/components/DashRangeBar";
-import { type DashRange, rangeBounds, shiftIdsFor } from "@/lib/dash-range";
+import { businessDaysForShifts, type DashRange, rangeBounds, shiftIdsFor } from "@/lib/dash-range";
 import { useI18n } from "@/lib/i18n";
 import { bucketizeQr, parseBuckets, type QrTimeBucket } from "@/lib/qr-buckets";
+import { groupBusinessEvents } from "@/lib/business-hour-order";
 
 export const Route = createFileRoute("/_app/detail-qr")({
   component: QrSalesDetail,
   validateSearch: (s: Record<string, unknown>) => ({ range: (s.range as DashRange | undefined) ?? "today" }),
 });
 
-type QrRow = { paymentId: string; billId: string; amount: number; tipAmount: number; tableCode: string; paidAt: string };
+type QrRow = { paymentId: string; billId: string; amount: number; tipAmount: number; tableCode: string; paidAt: string; businessDay: string };
 
 function QrSalesDetail() {
   const { t } = useI18n();
@@ -50,8 +51,10 @@ function QrSalesDetail() {
         const shiftIds = await shiftIdsFor(range, bounds);
         if (!shiftIds.length) { setRows([]); return; }
 
-        const { data: bills } = await supabase.from("bills")
-          .select("id,order_id,paid_at").eq("status","paid").in("shift_id", shiftIds);
+        const [{ data: bills }, shiftDays] = await Promise.all([
+          supabase.from("bills").select("id,order_id,paid_at,shift_id").eq("status","paid").in("shift_id", shiftIds),
+          businessDaysForShifts(shiftIds),
+        ]);
         if (!bills?.length) { setRows([]); return; }
 
         const billIds  = bills.map(b => b.id);
@@ -86,6 +89,7 @@ function QrSalesDetail() {
           amount: Number(p.amount), tipAmount: Number(p.tip_amount ?? 0),
           tableCode: getTableCode(p.bill_id),
           paidAt: p.created_at ?? "",
+          businessDay: shiftDays.get(billMap.get(p.bill_id)?.shift_id ?? "") ?? "unknown",
         })));
       } finally { setLoading(false); }
     })();
@@ -98,6 +102,10 @@ function QrSalesDetail() {
   const byBucket = useMemo(
     () => bucketizeQr(rows.map(r => ({ amount: r.amount, tip: r.tipAmount, at: r.paidAt })), buckets),
     [rows, buckets],
+  );
+  const dayGroups = useMemo(
+    () => groupBusinessEvents(rows, (row) => row.businessDay, (row) => row.paidAt),
+    [rows],
   );
 
   return (
@@ -154,19 +162,26 @@ function QrSalesDetail() {
                   <div className="grid grid-cols-[3rem_1fr_5rem_5rem] gap-2 text-xs uppercase tracking-wide text-muted-foreground pb-1 border-b">
                     <span>{t("table")}</span><span>{t("time")}</span><span className="text-right">{t("net")}</span><span className="text-right">+{t("tips")}</span>
                   </div>
-                  {rows.map(r => (
-                    <Link key={r.paymentId} to="/payment/$billId" params={{ billId: r.billId }}>
-                      <div className="grid grid-cols-[3rem_1fr_5rem_5rem] gap-2 items-center py-1 hover:bg-muted/40 rounded px-1 transition-colors">
-                        <span className="font-bold">{r.tableCode}</span>
-                        <span className="text-muted-foreground tabular-nums text-xs">
-                          {r.paidAt ? new Date(r.paidAt).toLocaleTimeString([], { timeZone: "Asia/Bangkok", hour:"2-digit",minute:"2-digit"}) : "—"}
-                        </span>
-                        <span className="text-right font-semibold tabular-nums">{thb(r.amount)}</span>
-                        <span className="text-right text-muted-foreground tabular-nums">
-                          {r.tipAmount > 0 ? `+${thb(r.tipAmount)}` : "—"}
-                        </span>
+                  {dayGroups.map((group) => (
+                    <div key={group.businessDay} className="pt-2 first:pt-0">
+                      <div className="mb-1 rounded bg-muted px-2 py-1 text-xs font-semibold text-foreground">
+                        {t("business_day")} {group.businessDay} · {group.rows.length}
                       </div>
-                    </Link>
+                      {group.rows.map(r => (
+                        <Link key={r.paymentId} to="/payment/$billId" params={{ billId: r.billId }}>
+                          <div className="grid grid-cols-[3rem_1fr_5rem_5rem] gap-2 items-center py-1 hover:bg-muted/40 rounded px-1 transition-colors">
+                            <span className="font-bold">{r.tableCode}</span>
+                            <span className="text-muted-foreground tabular-nums text-xs">
+                              {r.paidAt ? new Date(r.paidAt).toLocaleTimeString([], { timeZone: "Asia/Bangkok", hour:"2-digit",minute:"2-digit"}) : "—"}
+                            </span>
+                            <span className="text-right font-semibold tabular-nums">{thb(r.amount)}</span>
+                            <span className="text-right text-muted-foreground tabular-nums">
+                              {r.tipAmount > 0 ? `+${thb(r.tipAmount)}` : "—"}
+                            </span>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
                   ))}
                 </div>
               )}

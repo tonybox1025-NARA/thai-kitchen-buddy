@@ -8,15 +8,16 @@ import { thb } from "@/lib/format";
 import { ArrowLeft } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { DashRangeBar } from "@/components/DashRangeBar";
-import { type DashRange, rangeBounds, shiftIdsFor } from "@/lib/dash-range";
+import { businessDaysForShifts, type DashRange, rangeBounds, shiftIdsFor } from "@/lib/dash-range";
 import { useI18n } from "@/lib/i18n";
+import { groupBusinessEvents } from "@/lib/business-hour-order";
 
 export const Route = createFileRoute("/_app/detail-tips")({
   component: TipsDetail,
   validateSearch: (s: Record<string, unknown>) => ({ range: (s.range as DashRange | undefined) ?? "today" }),
 });
 
-type TipRow = { paymentId: string; billId: string; tipAmount: number; qrAmount: number; tableCode: string; paidAt: string };
+type TipRow = { paymentId: string; billId: string; tipAmount: number; qrAmount: number; tableCode: string; paidAt: string; businessDay: string };
 
 function TipsDetail() {
   const { t } = useI18n();
@@ -43,8 +44,10 @@ function TipsDetail() {
         const shiftIds = await shiftIdsFor(range, bounds);
         if (!shiftIds.length) { setRows([]); return; }
 
-        const { data: bills } = await supabase.from("bills")
-          .select("id,order_id,paid_at").eq("status","paid").in("shift_id", shiftIds);
+        const [{ data: bills }, shiftDays] = await Promise.all([
+          supabase.from("bills").select("id,order_id,paid_at,shift_id").eq("status","paid").in("shift_id", shiftIds),
+          businessDaysForShifts(shiftIds),
+        ]);
         if (!bills?.length) { setRows([]); return; }
 
         const billIds  = bills.map(b => b.id);
@@ -81,12 +84,17 @@ function TipsDetail() {
           qrAmount:  Number(p.amount),
           tableCode: getTableCode(p.bill_id),
           paidAt: p.created_at ?? "",
+          businessDay: shiftDays.get(billMap.get(p.bill_id)?.shift_id ?? "") ?? "unknown",
         })));
       } finally { setLoading(false); }
     })();
   }, [bounds, range, custom]);
 
   const totalTips = rows.reduce((s, r) => s + r.tipAmount, 0);
+  const dayGroups = useMemo(
+    () => groupBusinessEvents(rows, (row) => row.businessDay, (row) => row.paidAt),
+    [rows],
+  );
 
   return (
     <div className="p-6 space-y-5 max-w-3xl mx-auto">
@@ -123,7 +131,11 @@ function TipsDetail() {
                   <div className="grid grid-cols-[3rem_1fr_5rem_5rem] gap-2 text-xs uppercase tracking-wide text-muted-foreground pb-1 border-b">
                     <span>{t("table")}</span><span>{t("time")}</span><span className="text-right">{t("qr_net")}</span><span className="text-right">{t("tips")}</span>
                   </div>
-                  {rows.map(r => (
+                  {dayGroups.map((group) => <div key={group.businessDay} className="pt-2 first:pt-0">
+                    <div className="mb-1 rounded bg-muted px-2 py-1 text-xs font-semibold text-foreground">
+                      {t("business_day")} {group.businessDay} · {group.rows.length}
+                    </div>
+                  {group.rows.map(r => (
                     <Link key={r.paymentId} to="/payment/$billId" params={{ billId: r.billId }}>
                       <div className="grid grid-cols-[3rem_1fr_5rem_5rem] gap-2 items-center py-1 hover:bg-muted/40 rounded px-1 transition-colors">
                         <span className="font-bold">{r.tableCode}</span>
@@ -135,6 +147,7 @@ function TipsDetail() {
                       </div>
                     </Link>
                   ))}
+                  </div>)}
                   <div className="border-t pt-2 flex justify-between font-bold text-sm mt-1">
                     <span>{t("total_tips")}</span>
                     <span className="tabular-nums text-amber-600 dark:text-amber-400">{thb(totalTips)}</span>

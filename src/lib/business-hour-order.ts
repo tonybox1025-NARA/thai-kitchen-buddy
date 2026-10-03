@@ -33,3 +33,45 @@ export function orderBusinessHours<T extends { hour: number }>(
 
   return [...sorted.slice(bestStart), ...sorted.slice(0, bestStart)];
 }
+
+/** Sort business-flow records from opening toward close, including after midnight. */
+export function orderBusinessEvents<T>(
+  rows: T[],
+  timestampOf: (row: T) => string | null | undefined,
+): T[] {
+  const timestamp = (row: T) => {
+    const value = timestampOf(row);
+    if (!value) return Number.POSITIVE_INFINITY;
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY;
+  };
+
+  return [...rows].sort((a, b) => timestamp(a) - timestamp(b));
+}
+
+export type BusinessDayGroup<T> = { businessDay: string; rows: T[] };
+
+/**
+ * Keep multi-day operational lists readable: business days run oldest to newest,
+ * while records inside each shift run from opening toward close.
+ */
+export function groupBusinessEvents<T>(
+  rows: T[],
+  businessDayOf: (row: T) => string | null | undefined,
+  timestampOf: (row: T) => string | null | undefined,
+): BusinessDayGroup<T>[] {
+  const byDay = new Map<string, T[]>();
+  for (const row of rows) {
+    const day = businessDayOf(row) || "unknown";
+    const group = byDay.get(day) ?? [];
+    group.push(row);
+    byDay.set(day, group);
+  }
+
+  return [...byDay.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([businessDay, dayRows]) => ({
+      businessDay,
+      rows: orderBusinessEvents(dayRows, timestampOf),
+    }));
+}

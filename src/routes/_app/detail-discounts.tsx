@@ -8,8 +8,9 @@ import { thb } from "@/lib/format";
 import { ArrowLeft, Tag } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { DashRangeBar } from "@/components/DashRangeBar";
-import { type DashRange, rangeBounds, shiftIdsFor } from "@/lib/dash-range";
+import { businessDaysForShifts, type DashRange, rangeBounds, shiftIdsFor } from "@/lib/dash-range";
 import { useI18n } from "@/lib/i18n";
+import { groupBusinessEvents } from "@/lib/business-hour-order";
 
 export const Route = createFileRoute("/_app/detail-discounts")({
   component: DiscountsDetail,
@@ -25,6 +26,7 @@ type DiscRow = {
   billId?: string;
   orderId?: string;
   appliedAt: string;
+  businessDay: string;
 };
 
 const TYPE_CLS: Record<string, string> = {
@@ -70,15 +72,16 @@ function DiscountsDetail() {
       try {
         const shiftIds = await shiftIdsFor(range, bounds);
         if (!shiftIds.length) { setRows([]); return; }
+        const shiftDays = await businessDaysForShifts(shiftIds);
 
         const [{ data: bills }, { data: staffCharges }] = await Promise.all([
           supabase.from("bills")
-            .select("id,order_id,discount_amount,member_discount_amount,paid_at")
+            .select("id,order_id,discount_amount,member_discount_amount,paid_at,shift_id")
             .in("status", ["paid", "partial_refund", "refunded"])
             .in("shift_id", shiftIds)
             .not("is_test", "is", true),
           (supabase as any).from("staff_tab_charges")
-            .select("order_id,staff_id,charged_by,charged_at,discount_amount,discount_type,discount_value")
+            .select("order_id,staff_id,charged_by,charged_at,discount_amount,discount_type,discount_value,shift_id")
             .in("shift_id", shiftIds)
             .neq("status", "voided"),
         ]);
@@ -137,6 +140,7 @@ function DiscountsDetail() {
             tableCode: getTableCode(d.bill_id),
             billId: d.bill_id,
             appliedAt: d.applied_at ?? "",
+            businessDay: shiftDays.get(billMap.get(d.bill_id)?.shift_id ?? "") ?? "unknown",
           });
         }
 
@@ -154,6 +158,7 @@ function DiscountsDetail() {
             tableCode: getTableCode(d.bill_id),
             billId: d.bill_id,
             appliedAt: d.created_at ?? "",
+            businessDay: shiftDays.get(billMap.get(d.bill_id)?.shift_id ?? "") ?? "unknown",
           });
         }
 
@@ -165,6 +170,7 @@ function DiscountsDetail() {
               tableCode: getTableCode(b.id),
               billId: b.id,
               appliedAt: b.paid_at ?? "",
+              businessDay: shiftDays.get(b.shift_id) ?? "unknown",
             });
           }
 
@@ -179,6 +185,7 @@ function DiscountsDetail() {
               tableCode: getTableCode(b.id),
               billId: b.id,
               appliedAt: b.paid_at ?? "",
+              businessDay: shiftDays.get(b.shift_id) ?? "unknown",
             });
           }
         }
@@ -199,10 +206,10 @@ function DiscountsDetail() {
             tableCode: ord?.order_number ?? "ST",
             orderId: charge.order_id,
             appliedAt: charge.charged_at ?? "",
+            businessDay: shiftDays.get(charge.shift_id) ?? "unknown",
           });
         }
 
-        result.sort((a, b) => new Date(b.appliedAt).getTime() - new Date(a.appliedAt).getTime());
         setRows(result);
       } catch (error) {
         console.error("Could not load discount details", error);
@@ -217,6 +224,10 @@ function DiscountsDetail() {
     rows.forEach(r => { tot[r.type] += r.amount; tot.grand += r.amount; });
     return tot;
   }, [rows]);
+  const dayGroups = useMemo(
+    () => groupBusinessEvents(rows, (row) => row.businessDay, (row) => row.appliedAt),
+    [rows],
+  );
 
   return (
     <div className="p-6 space-y-5 max-w-4xl mx-auto">
@@ -263,7 +274,11 @@ function DiscountsDetail() {
                 <p className="text-center text-muted-foreground py-6 text-sm">{t("no_discounts_period")}</p>
               ) : (
                 <div className="space-y-1.5">
-                  {rows.map((r, i) => {
+                  {dayGroups.map((group) => <div key={group.businessDay} className="pt-2 first:pt-0">
+                    <div className="mb-1 rounded bg-muted px-2 py-1 text-xs font-semibold text-foreground">
+                      {t("business_day")} {group.businessDay} · {group.rows.length}
+                    </div>
+                  {group.rows.map((r, i) => {
                     const content = (
                       <div className="flex items-center gap-3 text-sm hover:bg-muted/40 rounded-lg px-2 py-2 transition-colors">
                         <div className="text-xs text-muted-foreground shrink-0 w-24 tabular-nums">
@@ -284,6 +299,7 @@ function DiscountsDetail() {
                     if (r.orderId) return <Link key={i} to="/order/$orderId" params={{ orderId: r.orderId }}>{content}</Link>;
                     return <div key={i}>{content}</div>;
                   })}
+                  </div>)}
                 </div>
               )}
             </CardContent>

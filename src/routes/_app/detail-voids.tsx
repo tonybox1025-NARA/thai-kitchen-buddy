@@ -8,8 +8,9 @@ import { thb } from "@/lib/format";
 import { ArrowLeft, XCircle, ChevronDown, ChevronRight } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { DashRangeBar } from "@/components/DashRangeBar";
-import { type DashRange, rangeBounds, shiftIdsFor } from "@/lib/dash-range";
+import { businessDaysForShifts, type DashRange, rangeBounds, shiftIdsFor } from "@/lib/dash-range";
 import { useI18n } from "@/lib/i18n";
+import { groupBusinessEvents } from "@/lib/business-hour-order";
 
 export const Route = createFileRoute("/_app/detail-voids")({
   component: VoidsDetail,
@@ -19,12 +20,14 @@ export const Route = createFileRoute("/_app/detail-voids")({
 type CancelledOrder = {
   id: string; tableCode: string; cancelReason: string | null;
   closedAt: string | null; closedByName: string; total: number;
+  businessDay: string;
   items: { name: string; qty: number; unit_price: number }[];
 };
 
 type VoidItem = {
   id: string; tableCode: string; itemName: string; reason: string | null;
   amount: number; voidedAt: string | null; voidedByName: string;
+  businessDay: string;
 };
 
 function VoidsDetail() {
@@ -53,6 +56,7 @@ function VoidsDetail() {
       try {
         const shiftIds = await shiftIdsFor(range, bounds);
         if (!shiftIds.length) { setCancelled([]); setVoidItems([]); return; }
+        const shiftDays = await businessDaysForShifts(shiftIds);
 
         // ── Cancelled orders ─────────────────────────────────────────────────
         const { data: cancelledOrds } = await supabase.from("orders")
@@ -89,12 +93,13 @@ function VoidsDetail() {
             closedByName: (o as any).closed_by ? (staffMap.get((o as any).closed_by) ?? "—") : "—",
             total: totMap.get(o.id) ?? 0,
             items: itemsMap.get(o.id) ?? [],
+            businessDay: shiftDays.get(o.shift_id) ?? "unknown",
           })));
         } else { setCancelled([]); }
 
         // ── Individual void items ─────────────────────────────────────────────
         const { data: voids } = await supabase.from("voids")
-          .select("id,order_item_id,reason,amount,voided_by,created_at")
+          .select("id,order_item_id,reason,amount,voided_by,created_at,shift_id")
           .in("shift_id", shiftIds).order("created_at",{ascending:false});
 
         if (voids?.length) {
@@ -141,6 +146,7 @@ function VoidsDetail() {
               amount: Number(v.amount),
               voidedAt: v.created_at ?? null,
               voidedByName: v.voided_by ? (staffMap.get(v.voided_by) ?? "—") : "—",
+              businessDay: shiftDays.get(v.shift_id) ?? "unknown",
             };
           }));
         } else { setVoidItems([]); }
@@ -151,6 +157,14 @@ function VoidsDetail() {
 
   const voidTotal   = voidItems.reduce((s, v) => s + v.amount, 0);
   const cancelTotal = cancelled.reduce((s, o) => s + o.total, 0);
+  const cancelledGroups = useMemo(
+    () => groupBusinessEvents(cancelled, (row) => row.businessDay, (row) => row.closedAt),
+    [cancelled],
+  );
+  const voidGroups = useMemo(
+    () => groupBusinessEvents(voidItems, (row) => row.businessDay, (row) => row.voidedAt),
+    [voidItems],
+  );
 
   return (
     <div className="p-6 space-y-5 max-w-4xl mx-auto">
@@ -191,7 +205,11 @@ function VoidsDetail() {
                 <p className="text-center text-muted-foreground py-4 text-sm">{t("no_cancelled")}</p>
               ) : (
                 <div className="space-y-1.5">
-                  {cancelled.map(o => (
+                  {cancelledGroups.map((group) => <div key={group.businessDay} className="space-y-1.5 pt-2 first:pt-0">
+                    <div className="rounded bg-muted px-2 py-1 text-xs font-semibold text-foreground">
+                      {t("business_day")} {group.businessDay} · {group.rows.length}
+                    </div>
+                  {group.rows.map(o => (
                     <div key={o.id} className="rounded-lg border hover:bg-muted/20 transition-colors cursor-pointer"
                       onClick={() => setExpanded(expanded === o.id ? null : o.id)}>
                       <div className="flex items-center gap-3 px-3 py-2.5 text-sm">
@@ -225,6 +243,7 @@ function VoidsDetail() {
                       )}
                     </div>
                   ))}
+                  </div>)}
                 </div>
               )}
             </CardContent>
@@ -243,7 +262,11 @@ function VoidsDetail() {
                   <div className="grid grid-cols-[3rem_1fr_1fr_5rem] gap-2 text-xs uppercase tracking-wide text-muted-foreground pb-1 border-b">
                     <span>{t("table")}</span><span>{t("item_col")}</span><span>{t("reason_staff")}</span><span className="text-right">{t("amount")}</span>
                   </div>
-                  {voidItems.map(v => (
+                  {voidGroups.map((group) => <div key={group.businessDay} className="pt-2 first:pt-0">
+                    <div className="mb-1 rounded bg-muted px-2 py-1 text-xs font-semibold text-foreground">
+                      {t("business_day")} {group.businessDay} · {group.rows.length}
+                    </div>
+                  {group.rows.map(v => (
                     <div key={v.id} className="grid grid-cols-[3rem_1fr_1fr_5rem] gap-2 items-start py-1 border-b last:border-0">
                       <span className="font-bold">{v.tableCode}</span>
                       <div>
@@ -259,6 +282,7 @@ function VoidsDetail() {
                       <span className="text-right font-semibold tabular-nums text-destructive">- {thb(v.amount)}</span>
                     </div>
                   ))}
+                  </div>)}
                 </div>
               )}
             </CardContent>

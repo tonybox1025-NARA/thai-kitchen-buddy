@@ -9,9 +9,9 @@ import { thb } from "@/lib/format";
 import { ArrowLeft } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { DashRangeBar } from "@/components/DashRangeBar";
-import { type DashRange, rangeBounds, shiftIdsFor } from "@/lib/dash-range";
+import { businessDaysForShifts, type DashRange, rangeBounds, shiftIdsFor } from "@/lib/dash-range";
 import { useI18n } from "@/lib/i18n";
-import { orderBusinessHours } from "@/lib/business-hour-order";
+import { groupBusinessEvents, orderBusinessHours } from "@/lib/business-hour-order";
 
 export const Route = createFileRoute("/_app/detail-gross")({
   component: GrossSalesDetail,
@@ -21,6 +21,7 @@ export const Route = createFileRoute("/_app/detail-gross")({
 type BillRow = {
   id: string; order_id: string; total: number; subtotal: number;
   discount_amount: number; member_discount_amount: number; paid_at: string | null;
+  shift_id: string; businessDay: string;
 };
 
 function GrossSalesDetail() {
@@ -51,13 +52,14 @@ function GrossSalesDetail() {
         const shiftIds = await shiftIdsFor(range, bounds);
         if (!shiftIds.length) { setBills([]); setTableMap(new Map()); return; }
 
-        const [{ data: b }, { data: staffRows }, { data: refundRows }] = await Promise.all([
+        const [{ data: b }, { data: staffRows }, { data: refundRows }, shiftDays] = await Promise.all([
           supabase.from("bills")
-          .select("id,order_id,total,subtotal,discount_amount,member_discount_amount,paid_at")
+          .select("id,order_id,total,subtotal,discount_amount,member_discount_amount,paid_at,shift_id")
           .in("status", ["paid", "partial_refund", "refunded"]).in("shift_id", shiftIds)
           .order("paid_at", { ascending: false }).limit(500),
           (supabase as any).from("staff_tab_charges").select("subtotal,discount_amount,amount").in("shift_id", shiftIds).neq("status", "voided"),
           supabase.from("refunds").select("amount").in("shift_id", shiftIds),
+          businessDaysForShifts(shiftIds),
         ]);
         setStaffSales({
           gross: (staffRows ?? []).reduce((sum: number, row: any) => sum + Number(row.subtotal ?? row.amount ?? 0), 0),
@@ -67,7 +69,10 @@ function GrossSalesDetail() {
         setRefunds((refundRows ?? []).reduce((sum, row) => sum + Number(row.amount ?? 0), 0));
         if (!b?.length) { setBills([]); setTableMap(new Map()); return; }
 
-        setBills(b as BillRow[]);
+        setBills(b.map((bill) => ({
+          ...bill,
+          businessDay: shiftDays.get(bill.shift_id) ?? "unknown",
+        })) as BillRow[]);
 
         const orderIds = [...new Set(b.map(x => x.order_id).filter(Boolean))] as string[];
         const { data: orders } = await supabase.from("orders").select("id,table_id,source,order_number").in("id", orderIds);
@@ -121,6 +126,10 @@ function GrossSalesDetail() {
     }
     return [...m.entries()].sort((a, b) => b[1].total - a[1].total);
   }, [bills, tableMap]);
+  const dayGroups = useMemo(
+    () => groupBusinessEvents(bills, (bill) => bill.businessDay, (bill) => bill.paid_at),
+    [bills],
+  );
 
   return (
     <div className="p-6 space-y-5 max-w-5xl mx-auto">
@@ -206,7 +215,11 @@ function GrossSalesDetail() {
                   <div className="grid grid-cols-[3rem_1fr_1fr_5rem] gap-2 text-xs uppercase tracking-wide text-muted-foreground pb-1 border-b">
                     <span>{t("table")}</span><span>{t("time")}</span><span>{t("discount")}</span><span className="text-right">{t("total")}</span>
                   </div>
-                  {bills.map(b => (
+                  {dayGroups.map((group) => <div key={group.businessDay} className="pt-2 first:pt-0">
+                    <div className="mb-1 rounded bg-muted px-2 py-1 text-xs font-semibold text-foreground">
+                      {t("business_day")} {group.businessDay} · {group.rows.length}
+                    </div>
+                  {group.rows.map(b => (
                     <Link key={b.id} to="/payment/$billId" params={{ billId: b.id }}>
                       <div className="grid grid-cols-[3rem_1fr_1fr_5rem] gap-2 items-center py-1 hover:bg-muted/40 rounded px-1 transition-colors">
                         <span className="font-bold">{tableMap.get(b.id) ?? "—"}</span>
@@ -220,6 +233,7 @@ function GrossSalesDetail() {
                       </div>
                     </Link>
                   ))}
+                  </div>)}
                 </div>
               )}
             </CardContent>
