@@ -28,6 +28,7 @@ import { CashDenominationGrid as DenomGrid } from "@/components/CashDenomination
 import { closeShiftWithTicket, getShiftCloseBlockers, openShiftSafely, shiftCloseBlockedMessage } from "@/lib/shift-close";
 import { localizeError } from "@/lib/localized-error";
 import { HistoryRangeBar, type HistoryRange } from "@/components/HistoryRangeBar";
+import { ShiftCloseReview } from "@/components/ShiftCloseReview";
 
 export const Route = createFileRoute("/_app/reports")({ component: Reports });
 
@@ -1481,6 +1482,7 @@ function ZReportHistoryTab({ restaurantName }: { restaurantName: string }) {
 
   return (
     <div className="space-y-4">
+      <ShiftCloseReview />
       <HistoryRangeBar range={range} onRange={setRange} custom={custom} onCustom={setCustom} />
     <Card>
       <CardHeader className="flex-row items-center justify-between gap-3">
