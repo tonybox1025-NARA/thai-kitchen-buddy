@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { addDaysKey, bkkFileStamp, bkkToday, bangkokDayUtcBounds as bkkDayBounds } from "@/lib/bkk-time";
+import { bkkFileStamp } from "@/lib/bkk-time";
 import { bkkPresetBounds } from "@/lib/bkk-time";
 import { pickerBounds } from "@/lib/bkk-time";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -17,12 +17,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
-import { cn } from "@/lib/utils";
-import { format } from "date-fns";
 import type { DateRange } from "react-day-picker";
-import { PencilLine, ArrowRight, CalendarIcon, Download, XCircle, Printer } from "lucide-react";
+import { PencilLine, ArrowRight, Download, XCircle, Printer } from "lucide-react";
 import { bucketizeQr, parseBuckets, type QrBucketTotal, type QrTimeBucket } from "@/lib/qr-buckets";
 import { canPrintDirect, enqueueDurablePrint, preparePayloadForOutbox, type CounterPrintPayload } from "@/lib/counter-printer";
 import { shiftIdsFor } from "@/lib/dash-range";
@@ -31,6 +27,7 @@ import { CASH_DENOMINATIONS as DENOMS } from "@/lib/cash-denominations";
 import { CashDenominationGrid as DenomGrid } from "@/components/CashDenominationGrid";
 import { closeShiftWithTicket, getShiftCloseBlockers, openShiftSafely, shiftCloseBlockedMessage } from "@/lib/shift-close";
 import { localizeError } from "@/lib/localized-error";
+import { HistoryRangeBar, type HistoryRange } from "@/components/HistoryRangeBar";
 
 export const Route = createFileRoute("/_app/reports")({ component: Reports });
 
@@ -1011,6 +1008,8 @@ function SalesHistoryTab({
 }) {
   const { lang } = useI18n();
   const [mode, setMode] = useState<"daily" | PeriodMode>("daily");
+  const [range, setRange] = useState<HistRange>("today");
+  const [custom, setCustom] = useState<DateRange | undefined>();
   const labels: Record<"daily" | PeriodMode, [string, string]> = {
     daily: ["รายวัน", "Daily"],
     weekly: ["รายสัปดาห์", "Weekly"],
@@ -1026,15 +1025,16 @@ function SalesHistoryTab({
           </Button>
         ))}
       </div>
+      <HistoryRangeBar range={range} onRange={setRange} custom={custom} onCustom={setCustom} />
       <div className={mode === "daily" ? "" : "hidden"}>
-        <DailySalesHistory buildReport={buildReport} restaurantName={restaurantName} />
+        <DailySalesHistory buildReport={buildReport} restaurantName={restaurantName} range={range} custom={custom} />
       </div>
-      {mode !== "daily" && <PeriodSalesHistory key={mode} mode={mode} buildReport={buildReport} />}
+      {mode !== "daily" && <PeriodSalesHistory key={mode} mode={mode} buildReport={buildReport} range={range} custom={custom} />}
     </div>
   );
 }
 
-function PeriodSalesHistory({ mode, buildReport }: { mode: PeriodMode; buildReport: (shift: Shift) => Promise<ReportData> }) {
+function PeriodSalesHistory({ mode, buildReport, range, custom }: { mode: PeriodMode; buildReport: (shift: Shift) => Promise<ReportData>; range: HistRange; custom?: DateRange }) {
   const { lang } = useI18n();
   const th = lang === "th";
   const [shifts, setShifts] = useState<Shift[]>([]);
@@ -1047,14 +1047,14 @@ function PeriodSalesHistory({ mode, buildReport }: { mode: PeriodMode; buildRepo
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const all: Shift[] = [];
-      for (let from = 0; ; from += 1000) {
-        const { data, error } = await supabase.from("shifts").select("*")
-          .order("opened_at", { ascending: false }).range(from, from + 999);
-        if (error) { toast.error(localizeError(error, lang, "load")); break; }
-        all.push(...((data ?? []) as Shift[]));
-        if (!data || data.length < 1000) break;
-      }
+      const bounds = historyBoundsFor(range, custom);
+      if (!bounds) return;
+      const ids = await shiftIdsFor(range, bounds);
+      const { data, error } = ids.length
+        ? await supabase.from("shifts").select("*").in("id", ids).order("opened_at", { ascending: false })
+        : { data: [] as Shift[], error: null };
+      if (error) toast.error(localizeError(error, lang, "load"));
+      const all = (data ?? []) as Shift[];
       if (cancelled) return;
       setShifts(all);
       setListLoading(false);
@@ -1062,7 +1062,7 @@ function PeriodSalesHistory({ mode, buildReport }: { mode: PeriodMode; buildRepo
       setPeriod(keys[0] ?? null);
     })();
     return () => { cancelled = true; };
-  }, [mode]);
+  }, [mode, range, custom, lang]);
 
   const periods = useMemo(() => {
     const map = new Map<string, Shift[]>();
@@ -1243,9 +1243,13 @@ function StaffCreditCard({ r }: { r: ReportData }) {
 function DailySalesHistory({
   buildReport,
   restaurantName,
+  range,
+  custom,
 }: {
   buildReport: (shift: Shift) => Promise<ReportData>;
   restaurantName: string;
+  range: HistRange;
+  custom?: DateRange;
 }) {
   const { lang } = useI18n();
   const [shifts, setShifts] = useState<Shift[]>([]);
@@ -1270,8 +1274,12 @@ function DailySalesHistory({
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const { data, error } = await supabase.from("shifts").select("*")
-        .order("opened_at", { ascending: false }).limit(120);
+      const bounds = historyBoundsFor(range, custom);
+      if (!bounds) return;
+      const ids = await shiftIdsFor(range, bounds);
+      const { data, error } = ids.length
+        ? await supabase.from("shifts").select("*").in("id", ids).order("opened_at", { ascending: false })
+        : { data: [] as Shift[], error: null };
       if (cancelled) return;
       if (error) {
         toast.error(localizeError(error, lang, "load"));
@@ -1281,12 +1289,16 @@ function DailySalesHistory({
       const rows = (data ?? []) as Shift[];
       setShifts(rows);
       if (rows[0]) await openShiftReport(rows[0]);
-      else setLoading(false);
+      else {
+        setSelected(null);
+        setReport(null);
+        setLoading(false);
+      }
     })();
     return () => { cancelled = true; };
-    // The report loader intentionally runs once when this tab mounts.
+    // Reload when the shared history range changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [range, custom]);
 
   const printSelected = async () => {
     if (!selected || !report || printing) return;
@@ -1367,6 +1379,8 @@ function DailySalesHistory({
 
 function ZReportHistoryTab({ restaurantName }: { restaurantName: string }) {
   const { lang } = useI18n();
+  const [range, setRange] = useState<HistRange>("month");
+  const [custom, setCustom] = useState<DateRange | undefined>();
   const [rows, setRows] = useState<ClosedShift[]>([]);
   const [loading, setLoading] = useState(true);
   const [printingId, setPrintingId] = useState<string | null>(null);
@@ -1374,9 +1388,14 @@ function ZReportHistoryTab({ restaurantName }: { restaurantName: string }) {
   const load = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.from("shifts")
-        .select("id,business_day,opened_at,closed_at,opening_float,status,cash_count,totals")
-        .eq("status", "closed").order("business_day", { ascending: false }).limit(120);
+      const bounds = historyBoundsFor(range, custom);
+      if (!bounds) return;
+      const ids = await shiftIdsFor(range, bounds);
+      const { data, error } = ids.length
+        ? await supabase.from("shifts")
+          .select("id,business_day,opened_at,closed_at,opening_float,status,cash_count,totals")
+          .eq("status", "closed").in("id", ids).order("business_day", { ascending: false })
+        : { data: [] as ClosedShift[], error: null };
       if (error) throw error;
       const closedShifts = (data ?? []) as unknown as ClosedShift[];
       const shiftIds = closedShifts.map((shift) => shift.id);
@@ -1417,7 +1436,7 @@ function ZReportHistoryTab({ restaurantName }: { restaurantName: string }) {
     }
   };
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load(); /* eslint-disable-next-line */ }, [range, custom]);
 
   const reprint = async (shift: ClosedShift) => {
     if (!shift.totals) { toast.error(lang === "th" ? "กะนี้ไม่มีข้อมูล Z Report ที่บันทึกไว้" : "This shift does not have a saved Z report snapshot"); return; }
@@ -1461,6 +1480,8 @@ function ZReportHistoryTab({ restaurantName }: { restaurantName: string }) {
   };
 
   return (
+    <div className="space-y-4">
+      <HistoryRangeBar range={range} onRange={setRange} custom={custom} onCustom={setCustom} />
     <Card>
       <CardHeader className="flex-row items-center justify-between gap-3">
         <div>
@@ -1505,10 +1526,10 @@ function ZReportHistoryTab({ restaurantName }: { restaurantName: string }) {
         )}
       </CardContent>
     </Card>
+    </div>
   );
 }
 
-type LoyaltyAuditRange = "today" | "week" | "month" | "all";
 type LoyaltyAuditRow = {
   id: string;
   member_id: string;
@@ -1531,21 +1552,14 @@ const POINT_TYPES = [
   "refund_earn_reversal", "refund_redeem_restore", "merge",
 ];
 
-function loyaltyAuditStart(range: LoyaltyAuditRange) {
-  if (range === "all") return null;
-  // Bangkok business-day start of today, minus 6 / 29 Bangkok days.
-  const today = bkkToday();
-  const key = range === "week" ? addDaysKey(today, -6) : range === "month" ? addDaysKey(today, -29) : today;
-  return new Date(bkkDayBounds(key)[0]);
-}
-
 function csvCell(value: unknown) {
   return `"${String(value ?? "").replace(/"/g, '""')}"`;
 }
 
 function LoyaltyAuditTab() {
   const { t, lang } = useI18n();
-  const [range, setRange] = useState<LoyaltyAuditRange>("month");
+  const [range, setRange] = useState<HistRange>("month");
+  const [custom, setCustom] = useState<DateRange | undefined>();
   const [type, setType] = useState("all");
   const [query, setQuery] = useState("");
   const [rows, setRows] = useState<LoyaltyAuditRow[]>([]);
@@ -1559,8 +1573,9 @@ function LoyaltyAuditTab() {
         .select("id,member_id,bill_id,refund_id,type,points,balance_after,description,expires_at,approved_by,created_at")
         .order("created_at", { ascending: false })
         .limit(1000);
-      const start = loyaltyAuditStart(range);
-      if (start) request = request.gte("created_at", start.toISOString());
+      const bounds = historyBoundsFor(range, custom);
+      if (!bounds) return;
+      request = request.gte("created_at", bounds[0].toISOString()).lte("created_at", bounds[1].toISOString());
       if (type !== "all") request = request.eq("type", type);
 
       const { data, error } = await request;
@@ -1594,7 +1609,7 @@ function LoyaltyAuditTab() {
     }
   };
 
-  useEffect(() => { void load(); /* eslint-disable-next-line */ }, [range, type]);
+  useEffect(() => { void load(); /* eslint-disable-next-line */ }, [range, custom, type]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
@@ -1628,11 +1643,7 @@ function LoyaltyAuditTab() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        {(["today", "week", "month", "all"] as const).map((value) => (
-          <Button key={value} size="sm" variant={range === value ? "default" : "outline"} onClick={() => setRange(value)}>
-            {value === "today" ? t("today") : value === "week" ? t("this_week") : value === "month" ? t("this_month") : t("all")}
-          </Button>
-        ))}
+        <HistoryRangeBar range={range} onRange={setRange} custom={custom} onCustom={setCustom} />
         <Select value={type} onValueChange={setType}>
           <SelectTrigger className="w-52"><SelectValue /></SelectTrigger>
           <SelectContent>
@@ -1691,16 +1702,21 @@ function LoyaltyAuditTab() {
   );
 }
 
-type HistRange = "today" | "yesterday" | "week" | "month" | "custom";
+type HistRange = HistoryRange;
 
 function histBounds(r: Exclude<HistRange, "custom">): [Date, Date] {
   return bkkPresetBounds(r); // Bangkok calendar bounds, device-timezone independent
 }
 
+function historyBoundsFor(range: HistRange, custom?: DateRange): [Date, Date] | null {
+  if (range !== "custom") return histBounds(range);
+  if (!custom?.from || !custom.to) return null;
+  return pickerBounds(custom.from, custom.to);
+}
+
 function BillHistoryTab() {
   const [range, setRange] = useState<HistRange>("today");
   const [custom, setCustom] = useState<DateRange | undefined>();
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [bills, setBills] = useState<BillRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -1787,38 +1803,10 @@ function BillHistoryTab() {
     );
   };
 
-  const customLabel = custom?.from
-    ? custom.to && custom.to.getTime() !== custom.from.getTime()
-      ? `${format(custom.from, "dd MMM")} – ${format(custom.to, "dd MMM yyyy")}`
-      : format(custom.from, "dd MMM yyyy")
-    : "Custom range";
-
   return (
     <div className="space-y-4">
-      <div className="flex gap-2 flex-wrap items-center">
-        {(["today","yesterday","week","month"] as const).map((r) => (
-          <Button key={r} size="sm" variant={range === r ? "default" : "outline"}
-            onClick={() => { setRange(r); }}
-          >
-            {r === "today" ? "Today" : r === "yesterday" ? "Yesterday" : r === "week" ? "This week" : "This month"}
-          </Button>
-        ))}
-        <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
-          <PopoverTrigger asChild>
-            <Button size="sm" variant={range === "custom" ? "default" : "outline"}
-              className={cn(!custom?.from && "text-muted-foreground")}>
-              <CalendarIcon className="h-3.5 w-3.5 mr-1" />
-              {range === "custom" ? customLabel : "Custom range"}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
-            <Calendar mode="range" selected={custom}
-              onSelect={(r) => { setCustom(r); setRange("custom"); if (r?.from && r?.to) setPickerOpen(false); }}
-              numberOfMonths={2} initialFocus className={cn("p-3 pointer-events-auto")} />
-          </PopoverContent>
-        </Popover>
-        {loaded && <span className="text-xs text-muted-foreground ml-1">{bills.length} bill{bills.length !== 1 ? "s" : ""}</span>}
-      </div>
+      <HistoryRangeBar range={range} onRange={setRange} custom={custom} onCustom={setCustom}
+        trailing={loaded ? <span className="ml-1 text-xs text-muted-foreground">{bills.length} bill{bills.length !== 1 ? "s" : ""}</span> : null} />
 
       {loaded && (
         bills.length === 0 ? (
@@ -1877,7 +1865,6 @@ function ItemSalesTab() {
   const { t, lang } = useI18n();
   const [range, setRange] = useState<HistRange>("today");
   const [custom, setCustom] = useState<DateRange | undefined>();
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [rows, setRows] = useState<ItemSalesRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -2003,12 +1990,6 @@ function ItemSalesTab() {
   const totalCost = filtered.reduce((s, r) => s + r.unit_cost * r.qty, 0);
   const totalProfit = totalRevenue - totalCost;
 
-  const customLabel = custom?.from
-    ? custom.to && custom.to.getTime() !== custom.from.getTime()
-      ? `${format(custom.from, "dd MMM")} – ${format(custom.to, "dd MMM yyyy")}`
-      : format(custom.from, "dd MMM yyyy")
-    : t("custom_range");
-
   const handlePrint = () => {
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>${t("item_sales")}</title>
 <style>
@@ -2084,27 +2065,7 @@ ${filtered.map((r, i) => {
   return (
     <div className="space-y-4">
       {/* ── Date filter ── */}
-      <div className="flex gap-2 flex-wrap items-center">
-        {(["today", "yesterday", "week", "month"] as const).map((r) => (
-          <Button key={r} size="sm" variant={range === r ? "default" : "outline"} onClick={() => setRange(r)}>
-            {r === "today" ? t("today") : r === "yesterday" ? t("yesterday") : r === "week" ? t("this_week") : t("this_month")}
-          </Button>
-        ))}
-        <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
-          <PopoverTrigger asChild>
-            <Button size="sm" variant={range === "custom" ? "default" : "outline"}
-              className={cn(!custom?.from && "text-muted-foreground")}>
-              <CalendarIcon className="h-3.5 w-3.5 mr-1" />
-              {range === "custom" ? customLabel : t("custom_range")}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
-            <Calendar mode="range" selected={custom}
-              onSelect={(r) => { setCustom(r); setRange("custom"); if (r?.from && r?.to) setPickerOpen(false); }}
-              numberOfMonths={2} initialFocus className={cn("p-3 pointer-events-auto")} />
-          </PopoverContent>
-        </Popover>
-      </div>
+      <HistoryRangeBar range={range} onRange={setRange} custom={custom} onCustom={setCustom} />
 
       {/* ── Summary cards ── */}
       {loaded && (
@@ -2351,7 +2312,6 @@ function CancelledOrdersSection({ shiftId }: { shiftId: string }) {
 function CancelledOrdersTab() {
   const [range, setRange] = useState<HistRange>("today");
   const [custom, setCustom] = useState<DateRange | undefined>();
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [orders, setOrders] = useState<CancelledOrderRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -2429,44 +2389,18 @@ function CancelledOrdersTab() {
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [range]);
   useEffect(() => { if (range === "custom" && custom?.from && custom?.to) load(); /* eslint-disable-next-line */ }, [custom]);
 
-  const customLabel = custom?.from
-    ? custom.to && custom.to.getTime() !== custom.from.getTime()
-      ? `${format(custom.from, "dd MMM")} – ${format(custom.to, "dd MMM yyyy")}`
-      : format(custom.from, "dd MMM yyyy")
-    : "Custom range";
-
   const grandTotal = orders.reduce((s, o) => s + o.total, 0);
 
   return (
     <div className="space-y-4">
       {/* Date filter */}
-      <div className="flex gap-2 flex-wrap items-center">
-        {(["today", "yesterday", "week", "month"] as const).map((r) => (
-          <Button key={r} size="sm" variant={range === r ? "default" : "outline"} onClick={() => setRange(r)}>
-            {r === "today" ? "Today" : r === "yesterday" ? "Yesterday" : r === "week" ? "This week" : "This month"}
-          </Button>
-        ))}
-        <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
-          <PopoverTrigger asChild>
-            <Button size="sm" variant={range === "custom" ? "default" : "outline"}
-              className={cn(!custom?.from && "text-muted-foreground")}>
-              <CalendarIcon className="h-3.5 w-3.5 mr-1" />
-              {range === "custom" ? customLabel : "Custom range"}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
-            <Calendar mode="range" selected={custom}
-              onSelect={(r) => { setCustom(r); setRange("custom"); if (r?.from && r?.to) setPickerOpen(false); }}
-              numberOfMonths={2} initialFocus className={cn("p-3 pointer-events-auto")} />
-          </PopoverContent>
-        </Popover>
-        {loaded && (
-          <span className="text-xs text-muted-foreground ml-1">
+      <HistoryRangeBar range={range} onRange={setRange} custom={custom} onCustom={setCustom}
+        trailing={loaded ? (
+          <span className="ml-1 text-xs text-muted-foreground">
             {orders.length} order{orders.length !== 1 ? "s" : ""}
             {orders.length > 0 && <> · Total <span className="font-semibold text-destructive">{thb(grandTotal)}</span></>}
           </span>
-        )}
-      </div>
+        ) : null} />
 
       {/* Orders list */}
       {loading && <p className="text-sm text-muted-foreground py-4 text-center">Loading…</p>}

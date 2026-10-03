@@ -38,4 +38,29 @@ assert.match(
   "range selection must be driven by deliberate day clicks",
 );
 
-console.log("OK: date ranges wait for a deliberate second date click");
+const historyPickerSource = await readFile(
+  path.join(repositoryRoot, "src/components/HistoryRangeBar.tsx"),
+  "utf8",
+);
+assert.match(historyPickerSource, /advanceDateRange\(rangeStart, clicked\)/);
+assert.match(historyPickerSource, /if \(!step\.complete\)/);
+assert.match(historyPickerSource, /onDayClick=\{\(clicked\) =>/);
+
+for (const [relativePath, minimumSharedPickers] of [
+  ["src/routes/_app/reports.tsx", 6],
+  ["src/routes/_app/register.tsx", 3],
+]) {
+  const source = await readFile(path.join(repositoryRoot, relativePath), "utf8");
+  assert.doesNotMatch(
+    source,
+    /<Calendar[^>]*mode="range"/,
+    `${relativePath} must use the protected shared history date-range picker`,
+  );
+  const sharedPickerCount = source.match(/<HistoryRangeBar\b/g)?.length ?? 0;
+  assert.ok(
+    sharedPickerCount >= minimumSharedPickers,
+    `${relativePath} must keep every report history screen on the shared range bar`,
+  );
+}
+
+console.log("OK: dashboard and report date ranges wait for a deliberate second date click");

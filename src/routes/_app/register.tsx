@@ -15,12 +15,8 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
-import { cn } from "@/lib/utils";
-import { format } from "date-fns";
 import type { DateRange } from "react-day-picker";
-import { PencilLine, ArrowRight, CalendarIcon, XCircle, Printer } from "lucide-react";
+import { PencilLine, ArrowRight, XCircle, Printer } from "lucide-react";
 import { bucketizeQr, parseBuckets, type QrBucketTotal, type QrTimeBucket } from "@/lib/qr-buckets";
 import { canPrintDirect, enqueueDurablePrint, preparePayloadForOutbox, type CounterPrintPayload } from "@/lib/counter-printer";
 import { shiftIdsFor } from "@/lib/dash-range";
@@ -29,6 +25,7 @@ import { CASH_DENOMINATIONS as DENOMS } from "@/lib/cash-denominations";
 import { CashDenominationGrid as DenomGrid } from "@/components/CashDenominationGrid";
 import { closeShiftWithTicket, getShiftCloseBlockers, openShiftSafely, shiftCloseBlockedMessage } from "@/lib/shift-close";
 import { localizeError } from "@/lib/localized-error";
+import { HistoryRangeBar, type HistoryRange } from "@/components/HistoryRangeBar";
 
 export const Route = createFileRoute("/_app/register")({ component: Register });
 
@@ -821,7 +818,7 @@ function Register() {
   );
 }
 
-type HistRange = "today" | "yesterday" | "week" | "month" | "custom";
+type HistRange = HistoryRange;
 
 function histBounds(r: Exclude<HistRange, "custom">): [Date, Date] {
   return bkkPresetBounds(r); // Bangkok calendar bounds, device-timezone independent
@@ -830,7 +827,6 @@ function histBounds(r: Exclude<HistRange, "custom">): [Date, Date] {
 function BillHistoryTab() {
   const [range, setRange] = useState<HistRange>("today");
   const [custom, setCustom] = useState<DateRange | undefined>();
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [bills, setBills] = useState<BillRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -917,38 +913,10 @@ function BillHistoryTab() {
     );
   };
 
-  const customLabel = custom?.from
-    ? custom.to && custom.to.getTime() !== custom.from.getTime()
-      ? `${format(custom.from, "dd MMM")} – ${format(custom.to, "dd MMM yyyy")}`
-      : format(custom.from, "dd MMM yyyy")
-    : "Custom range";
-
   return (
     <div className="space-y-4">
-      <div className="flex gap-2 flex-wrap items-center">
-        {(["today","yesterday","week","month"] as const).map((r) => (
-          <Button key={r} size="sm" variant={range === r ? "default" : "outline"}
-            onClick={() => { setRange(r); }}
-          >
-            {r === "today" ? "Today" : r === "yesterday" ? "Yesterday" : r === "week" ? "This week" : "This month"}
-          </Button>
-        ))}
-        <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
-          <PopoverTrigger asChild>
-            <Button size="sm" variant={range === "custom" ? "default" : "outline"}
-              className={cn(!custom?.from && "text-muted-foreground")}>
-              <CalendarIcon className="h-3.5 w-3.5 mr-1" />
-              {range === "custom" ? customLabel : "Custom range"}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
-            <Calendar mode="range" selected={custom}
-              onSelect={(r) => { setCustom(r); setRange("custom"); if (r?.from && r?.to) setPickerOpen(false); }}
-              numberOfMonths={2} initialFocus className={cn("p-3 pointer-events-auto")} />
-          </PopoverContent>
-        </Popover>
-        {loaded && <span className="text-xs text-muted-foreground ml-1">{bills.length} bill{bills.length !== 1 ? "s" : ""}</span>}
-      </div>
+      <HistoryRangeBar range={range} onRange={setRange} custom={custom} onCustom={setCustom}
+        trailing={loaded ? <span className="ml-1 text-xs text-muted-foreground">{bills.length} bill{bills.length !== 1 ? "s" : ""}</span> : null} />
 
       {loaded && (
         bills.length === 0 ? (
@@ -1007,7 +975,6 @@ function ItemSalesTab() {
   const { t, lang } = useI18n();
   const [range, setRange] = useState<HistRange>("today");
   const [custom, setCustom] = useState<DateRange | undefined>();
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [rows, setRows] = useState<ItemSalesRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -1133,12 +1100,6 @@ function ItemSalesTab() {
   const totalCost = filtered.reduce((s, r) => s + r.unit_cost * r.qty, 0);
   const totalProfit = totalRevenue - totalCost;
 
-  const customLabel = custom?.from
-    ? custom.to && custom.to.getTime() !== custom.from.getTime()
-      ? `${format(custom.from, "dd MMM")} – ${format(custom.to, "dd MMM yyyy")}`
-      : format(custom.from, "dd MMM yyyy")
-    : t("custom_range");
-
   const handlePrint = () => {
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>${t("item_sales")}</title>
 <style>
@@ -1214,27 +1175,7 @@ ${filtered.map((r, i) => {
   return (
     <div className="space-y-4">
       {/* ── Date filter ── */}
-      <div className="flex gap-2 flex-wrap items-center">
-        {(["today", "yesterday", "week", "month"] as const).map((r) => (
-          <Button key={r} size="sm" variant={range === r ? "default" : "outline"} onClick={() => setRange(r)}>
-            {r === "today" ? t("today") : r === "yesterday" ? t("yesterday") : r === "week" ? t("this_week") : t("this_month")}
-          </Button>
-        ))}
-        <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
-          <PopoverTrigger asChild>
-            <Button size="sm" variant={range === "custom" ? "default" : "outline"}
-              className={cn(!custom?.from && "text-muted-foreground")}>
-              <CalendarIcon className="h-3.5 w-3.5 mr-1" />
-              {range === "custom" ? customLabel : t("custom_range")}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
-            <Calendar mode="range" selected={custom}
-              onSelect={(r) => { setCustom(r); setRange("custom"); if (r?.from && r?.to) setPickerOpen(false); }}
-              numberOfMonths={2} initialFocus className={cn("p-3 pointer-events-auto")} />
-          </PopoverContent>
-        </Popover>
-      </div>
+      <HistoryRangeBar range={range} onRange={setRange} custom={custom} onCustom={setCustom} />
 
       {/* ── Summary cards ── */}
       {loaded && (
@@ -1481,7 +1422,6 @@ function CancelledOrdersSection({ shiftId }: { shiftId: string }) {
 function CancelledOrdersTab() {
   const [range, setRange] = useState<HistRange>("today");
   const [custom, setCustom] = useState<DateRange | undefined>();
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [orders, setOrders] = useState<CancelledOrderRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -1559,44 +1499,18 @@ function CancelledOrdersTab() {
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [range]);
   useEffect(() => { if (range === "custom" && custom?.from && custom?.to) load(); /* eslint-disable-next-line */ }, [custom]);
 
-  const customLabel = custom?.from
-    ? custom.to && custom.to.getTime() !== custom.from.getTime()
-      ? `${format(custom.from, "dd MMM")} – ${format(custom.to, "dd MMM yyyy")}`
-      : format(custom.from, "dd MMM yyyy")
-    : "Custom range";
-
   const grandTotal = orders.reduce((s, o) => s + o.total, 0);
 
   return (
     <div className="space-y-4">
       {/* Date filter */}
-      <div className="flex gap-2 flex-wrap items-center">
-        {(["today", "yesterday", "week", "month"] as const).map((r) => (
-          <Button key={r} size="sm" variant={range === r ? "default" : "outline"} onClick={() => setRange(r)}>
-            {r === "today" ? "Today" : r === "yesterday" ? "Yesterday" : r === "week" ? "This week" : "This month"}
-          </Button>
-        ))}
-        <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
-          <PopoverTrigger asChild>
-            <Button size="sm" variant={range === "custom" ? "default" : "outline"}
-              className={cn(!custom?.from && "text-muted-foreground")}>
-              <CalendarIcon className="h-3.5 w-3.5 mr-1" />
-              {range === "custom" ? customLabel : "Custom range"}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
-            <Calendar mode="range" selected={custom}
-              onSelect={(r) => { setCustom(r); setRange("custom"); if (r?.from && r?.to) setPickerOpen(false); }}
-              numberOfMonths={2} initialFocus className={cn("p-3 pointer-events-auto")} />
-          </PopoverContent>
-        </Popover>
-        {loaded && (
-          <span className="text-xs text-muted-foreground ml-1">
+      <HistoryRangeBar range={range} onRange={setRange} custom={custom} onCustom={setCustom}
+        trailing={loaded ? (
+          <span className="ml-1 text-xs text-muted-foreground">
             {orders.length} order{orders.length !== 1 ? "s" : ""}
             {orders.length > 0 && <> · Total <span className="font-semibold text-destructive">{thb(grandTotal)}</span></>}
           </span>
-        )}
-      </div>
+        ) : null} />
 
       {/* Orders list */}
       {loading && <p className="text-sm text-muted-foreground py-4 text-center">Loading…</p>}
