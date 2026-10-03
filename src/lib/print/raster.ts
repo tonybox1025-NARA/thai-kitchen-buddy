@@ -24,6 +24,17 @@ const CUT = [0x1d, 0x56, 0x42, 0x05]; // partial cut + feed
 const BEEP = [0x1b, 0x42, 0x01, 0x03]; // one short kitchen-printer buzzer
 const ALIGN_CENTER = [0x1b, 0x61, 0x01];
 
+/**
+ * Append generated printer bytes without spreading them into function arguments.
+ *
+ * Rasterised tickets can contain hundreds of thousands of bytes. Using
+ * `array.push(...raster)` turns every byte into a separate JavaScript argument
+ * and overflows the SUNMI WebView call stack on long orders/reprints.
+ */
+function appendBytes(target: number[], bytes: Iterable<number>) {
+  for (const byte of bytes) target.push(byte);
+}
+
 // Font stack: Latin first (Inter), then Thai, then Myanmar — the browser falls back
 // per-glyph so a single mixed-script line renders correctly, like Android's Paint.
 const FAMILY = `"Inter", "Noto Sans Thai", "Padauk", sans-serif`;
@@ -560,7 +571,9 @@ export async function buildReceipt(p: ReceiptPayload): Promise<Uint8Array> {
   d.rule();
   d.text("ขอบคุณค่ะ · Thank you", S.bold, "center");
 
-  const out: number[] = [...INIT, ...d.toRaster()];
+  const out: number[] = [];
+  appendBytes(out, INIT);
+  appendBytes(out, d.toRaster());
   if (p.loyaltyClaimUrl) {
     const loyalty = new Doc(40);
     loyalty.text("สแกน QR เพื่อรับคะแนน", S.bold, "center");
@@ -569,9 +582,13 @@ export async function buildReceipt(p: ReceiptPayload): Promise<Uint8Array> {
       loyalty.text(`+${Math.floor(p.loyaltyEarnPoints!)} points`, S.bold, "center");
     }
     loyalty.text("ใช้ได้ภายใน 30 วัน · Valid for 30 days", S.small, "center");
-    out.push(0x0a, ...loyalty.toRaster(), ...ALIGN_CENTER, ...qrBytes(p.loyaltyClaimUrl), 0x0a);
+    out.push(0x0a);
+    appendBytes(out, loyalty.toRaster());
+    appendBytes(out, ALIGN_CENTER);
+    appendBytes(out, qrBytes(p.loyaltyClaimUrl));
+    out.push(0x0a);
   }
-  out.push(...CUT);
+  appendBytes(out, CUT);
   return Uint8Array.from(out);
 }
 
@@ -639,10 +656,11 @@ export async function buildKitchen(p: KitchenPayload): Promise<Uint8Array> {
   d.text(isCounter ? "COUNTER" : "KITCHEN  မီးဖိုချောင်", S.bold, "center");
 
   const out: number[] = [...INIT];
-  if (p.alert_beep && !isCounter) out.push(...BEEP);
+  if (p.alert_beep && !isCounter) appendBytes(out, BEEP);
   // Counter printers in this shop need the older banded bitmap mode for long
   // checklist tickets; it also avoids overrunning their small raster buffer.
-  out.push(...(isCounter ? d.toLegacyRaster() : d.toRaster()), ...CUT);
+  appendBytes(out, isCounter ? d.toLegacyRaster() : d.toRaster());
+  appendBytes(out, CUT);
   return Uint8Array.from(out);
 }
 
@@ -674,7 +692,11 @@ export async function buildTableQr(p: TableQrPayload): Promise<Uint8Array> {
   d.feed(8);
   d.logo(qrCanvas, qrCanvas.width, qrCanvas.height);
 
-  const out: number[] = [...INIT, ...d.toLegacyRaster(), 0x0a, 0x0a, ...CUT];
+  const out: number[] = [];
+  appendBytes(out, INIT);
+  appendBytes(out, d.toLegacyRaster());
+  out.push(0x0a, 0x0a);
+  appendBytes(out, CUT);
   return Uint8Array.from(out);
 }
 
@@ -701,7 +723,12 @@ export async function buildReport(p: ReportPayload): Promise<Uint8Array> {
   }
 
   d.text(reportTitle, S.bold, "center");
-  return Uint8Array.from([...INIT, ...d.toLegacyRaster(), 0x0a, 0x0a, ...CUT]);
+  const out: number[] = [];
+  appendBytes(out, INIT);
+  appendBytes(out, d.toLegacyRaster());
+  out.push(0x0a, 0x0a);
+  appendBytes(out, CUT);
+  return Uint8Array.from(out);
 }
 
 // ── on-screen / self test (Latin + Thai + Burmese) ────────────────────────────
@@ -717,7 +744,11 @@ export async function buildTest(label = "APP"): Promise<Uint8Array> {
   d.text("မြန်မာ: စမ်းသပ်ပုံနှိပ်ခြင်း", S.myBold);
   d.text("English: print test OK", S.norm);
   d.rule();
-  return Uint8Array.from([...INIT, ...d.toRaster(), ...CUT]);
+  const out: number[] = [];
+  appendBytes(out, INIT);
+  appendBytes(out, d.toRaster());
+  appendBytes(out, CUT);
+  return Uint8Array.from(out);
 }
 
 // ── dispatch ──────────────────────────────────────────────────────────────────
