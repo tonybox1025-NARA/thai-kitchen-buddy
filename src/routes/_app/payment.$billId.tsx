@@ -866,11 +866,16 @@ function PaymentPage() {
   const ensureLoyaltyClaim = async () => {
     if (!bill || !loyaltyEnabled) return null;
 
-    const { data: existing } = await supabase
+    const loadExistingClaim = async () => {
+      const { data } = await supabase
       .from("loyalty_claim_tokens")
       .select("token,claim_points,status")
       .eq("bill_id", bill.id)
       .maybeSingle();
+      return data;
+    };
+
+    const existing = await loadExistingClaim();
     if (existing) {
       return {
         token: existing.token,
@@ -893,6 +898,17 @@ function PaymentPage() {
       expires_at: expiresAt,
     });
     if (error) {
+      // Final payment and paid-receipt recovery can run at nearly the same
+      // instant. If the other path created the one-per-bill claim first, reuse
+      // it instead of allowing the receipt without its loyalty QR.
+      const racedClaim = await loadExistingClaim();
+      if (racedClaim) {
+        return {
+          token: racedClaim.token,
+          url: `${publicBaseUrl()}/loyalty/claim/${racedClaim.token}`,
+          points: Number(racedClaim.claim_points ?? 0),
+        };
+      }
       toast.error(localizeError(error, lang, "save"));
       return null;
     }
@@ -980,11 +996,9 @@ function PaymentPage() {
   const enqueuePaidReceipt = async (jobKey: string) => {
     if (!bill) return;
     const receiptPayments = await loadReceiptPayments();
-    const { data: loyaltyClaim } = await supabase
-      .from("loyalty_claim_tokens")
-      .select("token,claim_points")
-      .eq("bill_id", bill.id)
-      .maybeSingle();
+    // Resolve (or create) the claim before inserting the idempotent receipt
+    // job. Otherwise recovery can win the job-key race with a QR-less payload.
+    const loyaltyClaim = (bill as any).is_test === true ? null : await ensureLoyaltyClaim();
 
     await printCounter({
       kind: "receipt", bill_id: bill.id, restaurant: restName, table: tableCode,
@@ -1010,9 +1024,9 @@ function PaymentPage() {
       pointsDiscountAmount: Number(bill.loyalty_discount_amount ?? 0),
       serviceFeeAmount: Number(bill.service_fee_amount ?? 0),
       roundingAdjustment: Number(bill.rounding_adjustment ?? 0),
-      loyaltyClaimUrl: loyaltyClaim?.token ? `${publicBaseUrl()}/loyalty/claim/${loyaltyClaim.token}` : undefined,
+      loyaltyClaimUrl: loyaltyClaim?.url,
       loyaltyClaimCode: loyaltyClaim?.token,
-      loyaltyEarnPoints: loyaltyClaim ? Number(loyaltyClaim.claim_points ?? 0) : undefined,
+      loyaltyEarnPoints: loyaltyClaim?.points,
     }, { jobKey, sourceType: jobKey.startsWith("receipt:") ? "receipt" : "receipt_reprint", sourceId: bill.id });
   };
 

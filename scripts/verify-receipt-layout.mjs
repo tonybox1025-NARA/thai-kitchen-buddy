@@ -23,5 +23,12 @@ if (
 ) {
   throw new Error("Authoritative receipt payment-method guard is missing");
 }
+if (
+  !payment.includes("const racedClaim = await loadExistingClaim()") ||
+  !payment.includes("await ensureLoyaltyClaim()") ||
+  !payment.includes("loyaltyClaimUrl: loyaltyClaim?.url")
+) {
+  throw new Error("Race-safe receipt loyalty QR guard is missing");
+}
 
 console.log("Customer receipt layout regression guard passed");
