@@ -297,6 +297,35 @@ class Doc {
     });
   }
 
+  /** Customer item row with a hanging indent for wrapped menu names. */
+  receiptItem(qty: number, name: string, right: string, s: Style) {
+    const qtyText = `${qty}x`;
+    const gap = 14;
+    const qtyW = this.measure(qtyText, s);
+    const rightW = this.measure(right, s);
+    const nameX = PAD_X + qtyW + gap;
+    const maxNameW = Math.max(60, CONTENT_W - qtyW - gap - rightW - gap);
+    const lines = this.wrap(name, s, maxNameW);
+    const { asc, lh } = this.metrics(s);
+
+    lines.forEach((line, index) => {
+      const baseline = this.y + asc;
+      this.ops.push((ctx) => {
+        ctx.font = fontStr(s.size, s.bold);
+        ctx.fillStyle = "#000";
+        ctx.textBaseline = "alphabetic";
+        ctx.textAlign = "left";
+        if (index === 0) ctx.fillText(qtyText, PAD_X, baseline);
+        ctx.fillText(line, nameX, baseline);
+        if (index === 0) {
+          ctx.textAlign = "right";
+          ctx.fillText(right, WIDTH - PAD_X, baseline);
+        }
+      });
+      this.y += lh;
+    });
+  }
+
   rule(solid = false) {
     this.y += 6;
     const yy = this.y;
@@ -533,7 +562,7 @@ export async function buildReceipt(p: ReceiptPayload): Promise<Uint8Array> {
     const qty = Number(it.qty) || 0;
     const lineTotal = (Number(it.unit_price) || 0) * qty;
     subtotal += lineTotal;
-    d.row(`${qty}x  ${name}`, money(lineTotal), S.norm);
+    d.receiptItem(qty, name, money(lineTotal), S.norm);
     if ((it.discount_amount ?? 0) > 0) {
       d.row(`  ${it.discount_label || "ส่วนลดรายการ"}`, "-" + money(it.discount_amount!), S.small);
     }

@@ -3,6 +3,22 @@ type ReceiptLine = Record<string, unknown> & {
   discount_amount?: number;
 };
 
+const CUSTOMER_NAME_FIELDS = ["name_th", "name_en", "name_my"] as const;
+
+/** Remove menu-maintenance status marks that must never appear on customer paper. */
+export function cleanCustomerItemName(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  return value.replace(/^(?:\s|✅|✔|☑|️)+/gu, "").trimStart();
+}
+
+function cleanCustomerNames(item: ReceiptLine): ReceiptLine {
+  const cleaned = { ...item };
+  for (const field of CUSTOMER_NAME_FIELDS) {
+    if (field in cleaned) cleaned[field] = cleanCustomerItemName(cleaned[field]);
+  }
+  return cleaned;
+}
+
 const ROW_ONLY_FIELDS = new Set([
   "id",
   "order_id",
@@ -48,7 +64,7 @@ export function aggregateReceiptItems(items: unknown): ReceiptLine[] {
   const grouped = new Map<string, ReceiptLine>();
   for (const rawItem of items) {
     if (!rawItem || typeof rawItem !== "object") continue;
-    const item = rawItem as ReceiptLine;
+    const item = cleanCustomerNames(rawItem as ReceiptLine);
     const key = receiptLineKey(item);
     const existing = grouped.get(key);
     if (!existing) {
