@@ -3,3 +3,4 @@
 - Operational prints (rounds, receipts, voids, QR slips, X/Z/opening, reports) are recorded via enqueue_print_job / submit_pos_round_safely with deterministic job keys; printDirect is only for test prints and the cash drawer — so paper failures never lose tickets or duplicate them (checked by scripts/verify-no-direct-print.sh).
 - Operational dates/times/ranges use src/lib/bkk-time.ts (Asia/Bangkok), never device timezone — owner views remotely; enforced by scripts/verify-bangkok-time.sh.
 - Hourly sales/traffic displays use src/lib/business-hour-order.ts so every screen runs opening -> midnight -> closing, never 00:00 clock order; all build commands enforce scripts/verify-business-hour-order.mjs.
+- Preserve verified operational behavior across later edits: inspect the existing implementation/history before replacing it, add or extend a regression guard for every operational bug fix, and run the build-enforced `npm run verify:regressions` suite before publishing.

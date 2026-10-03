@@ -6,9 +6,10 @@
   "scripts": {
     "dev": "vite dev",
     "verify:business-hours": "node scripts/verify-business-hour-order.mjs",
-    "build": "npm run verify:business-hours && vite build",
-    "build:dev": "npm run verify:business-hours && vite build --mode development",
-    "build:android": "npm run verify:business-hours && BUILD_TARGET=android vite build && node scripts/prepare-android-www.js && cap sync android",
+    "verify:regressions": "bash scripts/verify-no-direct-print.sh && bash scripts/verify-bangkok-time.sh && npm run verify:business-hours",
+    "build": "npm run verify:regressions && vite build",
+    "build:dev": "npm run verify:regressions && vite build --mode development",
+    "build:android": "npm run verify:regressions && BUILD_TARGET=android vite build && node scripts/prepare-android-www.js && cap sync android",
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
