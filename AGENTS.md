@@ -4,3 +4,4 @@
 - Operational dates/times/ranges use src/lib/bkk-time.ts (Asia/Bangkok), never device timezone — owner views remotely; enforced by scripts/verify-bangkok-time.sh.
 - Hourly sales/traffic displays use src/lib/business-hour-order.ts so every screen runs opening -> midnight -> closing, never 00:00 clock order; all build commands enforce scripts/verify-business-hour-order.mjs.
 - Preserve verified operational behavior across later edits: inspect the existing implementation/history before replacing it, add or extend a regression guard for every operational bug fix, and run the build-enforced `npm run verify:regressions` suite before publishing.
+- DashRangeBar date-range mode stages the first date without applying data or closing; only the second deliberate date click applies the range and closes, enforced by scripts/verify-date-range-selection.mjs.

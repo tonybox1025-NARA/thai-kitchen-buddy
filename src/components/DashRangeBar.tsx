@@ -8,6 +8,7 @@ import { format } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import type { DashRange } from "@/lib/dash-range";
 import { useI18n } from "@/lib/i18n";
+import { advanceDateRange } from "@/lib/date-range-selection";
 
 type Props = {
   range: DashRange;
@@ -20,6 +21,22 @@ export function DashRangeBar({ range, onRange, custom, onCustom }: Props) {
   const { t } = useI18n();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerMode, setPickerMode] = useState<"single" | "range">("single");
+  const [rangeStart, setRangeStart] = useState<Date>();
+  const [draftRange, setDraftRange] = useState<DateRange>();
+
+  const changePickerMode = (mode: "single" | "range") => {
+    setPickerMode(mode);
+    setRangeStart(undefined);
+    setDraftRange(undefined);
+  };
+
+  const changePickerOpen = (open: boolean) => {
+    setPickerOpen(open);
+    if (!open) {
+      setRangeStart(undefined);
+      setDraftRange(undefined);
+    }
+  };
 
   const customLabel = custom?.from
     ? custom.to && custom.to.getTime() !== custom.from.getTime()
@@ -42,7 +59,7 @@ export function DashRangeBar({ range, onRange, custom, onCustom }: Props) {
           {rangeLabel[r]}
         </Button>
       ))}
-      <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+      <Popover open={pickerOpen} onOpenChange={changePickerOpen}>
         <PopoverTrigger asChild>
           <Button size="sm" variant={range === "custom" ? "default" : "outline"}
             className={cn(!custom?.from && "text-muted-foreground")}>
@@ -52,10 +69,10 @@ export function DashRangeBar({ range, onRange, custom, onCustom }: Props) {
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="end">
           <div className="flex gap-2 border-b p-2">
-            <Button size="sm" variant={pickerMode === "single" ? "default" : "ghost"} onClick={() => setPickerMode("single")}>
+            <Button size="sm" variant={pickerMode === "single" ? "default" : "ghost"} onClick={() => changePickerMode("single")}>
               {t("single_date")}
             </Button>
-            <Button size="sm" variant={pickerMode === "range" ? "default" : "ghost"} onClick={() => setPickerMode("range")}>
+            <Button size="sm" variant={pickerMode === "range" ? "default" : "ghost"} onClick={() => changePickerMode("range")}>
               {t("date_range")}
             </Button>
           </div>
@@ -74,8 +91,19 @@ export function DashRangeBar({ range, onRange, custom, onCustom }: Props) {
               className={cn("p-3 pointer-events-auto")}
             />
           ) : (
-            <Calendar mode="range" selected={custom}
-              onSelect={(r) => { onCustom(r); onRange("custom"); if (r?.from && r?.to) setPickerOpen(false); }}
+            <Calendar mode="range" selected={draftRange ?? custom}
+              onSelect={(_selected, clicked) => {
+                const step = advanceDateRange(rangeStart, clicked);
+                setDraftRange(step.range);
+                if (!step.complete) {
+                  setRangeStart(clicked);
+                  return;
+                }
+                onCustom(step.range);
+                onRange("custom");
+                setPickerOpen(false);
+                setRangeStart(undefined);
+              }}
               numberOfMonths={2} initialFocus className={cn("p-3 pointer-events-auto")} />
           )}
         </PopoverContent>
