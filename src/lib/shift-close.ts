@@ -2,10 +2,21 @@ import { supabase } from "@/integrations/supabase/client";
 
 export type ShiftCloseBlockers = {
   has_blockers: boolean;
-  open_orders: Array<{ id: string; order_number: string | null; source: string; table_code: string | null; amount: number }>;
+  open_orders: Array<{
+    id: string;
+    order_number: string | null;
+    source: string;
+    table_code: string | null;
+    amount: number;
+  }>;
   open_bills: Array<{ id: string; order_id: string; total: number }>;
   active_tables: Array<{ id: string; code: string; status: string }>;
-  loyalty_issues: Array<{ id: string; points_redeemed: number; loyalty_discount_amount: number; expected_discount: number | null }>;
+  loyalty_issues: Array<{
+    id: string;
+    points_redeemed: number;
+    loyalty_discount_amount: number;
+    expected_discount: number | null;
+  }>;
   manager_review_count?: number;
   auto_resolved_count?: number;
 };
@@ -48,7 +59,25 @@ export async function closeShiftSafely(args: {
   return data as SafeCloseResult;
 }
 
-export function shiftCloseBlockedMessage(blockers: ShiftCloseBlockers): string {
+export function shiftCloseBlockedMessage(
+  blockers: ShiftCloseBlockers,
+  lang: "th" | "en" = "en",
+): string {
+  if (lang === "th") {
+    const details: string[] = [];
+    if (blockers.active_tables.length) {
+      details.push(
+        `โต๊ะที่ยังใช้งาน: ${blockers.active_tables.map((table) => table.code).join(", ")}`,
+      );
+    }
+    if (blockers.open_orders.length)
+      details.push(`ออเดอร์ที่ต้องตรวจสอบ: ${blockers.open_orders.length}`);
+    if (blockers.open_bills.length)
+      details.push(`บิลที่ต้องตรวจสอบ: ${blockers.open_bills.length}`);
+    if (blockers.loyalty_issues?.length)
+      details.push(`ข้อผิดพลาดส่วนลดสมาชิก: ${blockers.loyalty_issues.length}`);
+    return `มีรายการที่ผู้จัดการต้องตรวจสอบ${details.length ? ` · ${details.join(" · ")}` : ""}`;
+  }
   const details: string[] = [];
   if (blockers.active_tables.length) {
     details.push(`Active tables: ${blockers.active_tables.map((table) => table.code).join(", ")}`);
@@ -66,8 +95,10 @@ export function shiftCloseBlockedMessage(blockers: ShiftCloseBlockers): string {
     });
     details.push(`Open orders: ${orders.join(", ")}`);
   }
-  if (blockers.open_bills.length) details.push(`Bill records to review: ${blockers.open_bills.length}`);
-  if (blockers.loyalty_issues?.length) details.push(`Member discount errors: ${blockers.loyalty_issues.length}`);
+  if (blockers.open_bills.length)
+    details.push(`Bill records to review: ${blockers.open_bills.length}`);
+  if (blockers.loyalty_issues?.length)
+    details.push(`Member discount errors: ${blockers.loyalty_issues.length}`);
   return `Closing records need manager review. ${details.join(" · ")}`;
 }
 
@@ -93,7 +124,9 @@ export async function openShiftSafely<S>(args: {
     if (!/fetch|network|timeout|abort/i.test(String(error?.message ?? ""))) break;
     await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
   }
-  throw lastError instanceof Error ? lastError : new Error(String((lastError as any)?.message ?? lastError));
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(String((lastError as any)?.message ?? lastError));
 }
 
 export type CloseWithTicketResult = SafeCloseResult & { adopted?: boolean };
@@ -120,5 +153,7 @@ export async function closeShiftWithTicket(args: {
     if (!/fetch|network|timeout|abort/i.test(String(error?.message ?? ""))) break;
     await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
   }
-  throw lastError instanceof Error ? lastError : new Error(String((lastError as any)?.message ?? lastError));
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(String((lastError as any)?.message ?? lastError));
 }

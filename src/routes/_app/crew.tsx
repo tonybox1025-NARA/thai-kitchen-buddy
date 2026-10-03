@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { tableLabel } from "@/lib/table";
 import { isFrontCounterCategory } from "@/lib/print/routing";
 import { openTableOrder } from "@/lib/open-table-order";
+import { localizeError } from "@/lib/localized-error";
 
 export const Route = createFileRoute("/_app/crew")({ component: CrewPage });
 
@@ -166,7 +167,7 @@ function CrewPage() {
       .eq("is_test", false)
       .order("code");
     if (tableError) {
-      toast.error(tableError.message);
+      toast.error(localizeError(tableError, lang, "load"));
       setLoading(false);
       return;
     }
@@ -261,7 +262,7 @@ function CrewPage() {
       .limit(1);
     const shift = shifts?.[0] ?? null;
     if (shiftError || !shift) {
-      toast.error(shiftError?.message || c.openRegisterFirst);
+      toast.error(shiftError ? localizeError(shiftError, lang, "load") : c.openRegisterFirst);
       setOpening(false);
       return;
     }
@@ -325,7 +326,7 @@ function CrewPage() {
       .eq("id", voidItem.id)
       .neq("status", "voided");
     if (updateError) {
-      toast.error(updateError.message);
+      toast.error(localizeError(updateError, lang, "save"));
       setVoiding(false);
       return;
     }
@@ -337,7 +338,7 @@ function CrewPage() {
       shift_id: selected.shiftId ?? null,
     });
     if (auditError) {
-      toast.error(`${c.auditFailed}: ${auditError.message}`);
+      toast.error(localizeError(auditError, lang, "save"));
       setVoiding(false);
       return;
     }
@@ -398,7 +399,7 @@ function CrewPage() {
         await printCounterJobs([{ ...payload, department: "VOID / CANCEL", station: "VOID / CANCEL", footer: "counter" }], { jobKey: `void:${voidItem.id}`, sourceType: "void", sourceId: voidItem.id });
       } catch (error) {
         toast.error(
-          `${c.printFailed}: ${error instanceof Error ? error.message : "unknown error"}`,
+          localizeError(error, lang, "print"),
         );
       }
     }

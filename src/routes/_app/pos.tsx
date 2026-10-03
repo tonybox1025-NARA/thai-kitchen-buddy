@@ -17,6 +17,7 @@ import { tableLabel } from "@/lib/table";
 import { openTableOrder as ensureTableOrder } from "@/lib/open-table-order";
 import { publicBaseUrl } from "@/lib/public-url";
 import { readDeviceCache, writeDeviceCache } from "@/lib/device-cache";
+import { localizeError } from "@/lib/localized-error";
 
 export const Route = createFileRoute("/_app/pos")({ component: PosPage });
 
@@ -162,7 +163,7 @@ function PosPage() {
         .eq("status", "open")
         .maybeSingle();
       if (orderErr) {
-        toast.error(orderErr.message);
+        toast.error(localizeError(orderErr, lang, "load"));
         return;
       }
       if (order) {
@@ -244,7 +245,7 @@ function PosPage() {
     const { data: shifts, error: shiftError } = await supabase.from("shifts").select("id")
       .eq("status", "open").order("opened_at", { ascending: false }).limit(1);
     const shift = shifts?.[0] ?? null;
-    if (shiftError) { toast.error(shiftError.message); return; }
+    if (shiftError) { toast.error(localizeError(shiftError, lang, "load")); return; }
     if (!shift) {
       toast.error(t("rep_open_register_first"));
       nav({ to: "/register" });
@@ -266,7 +267,7 @@ function PosPage() {
       order_number: orderNumber,
     }).select("id").single();
 
-    if (error || !order) { toast.error(error?.message || "Failed to create order"); return; }
+    if (error || !order) { toast.error(localizeError(error, lang, "order")); return; }
     if (source === "takeout") setTakeoutOpen(false);
     nav({ to: "/order/$orderId", params: { orderId: order.id } });
   };
@@ -277,7 +278,7 @@ function PosPage() {
       (supabase as any).rpc("staff_tab_summary"),
       (supabase as any).rpc("staff_tab_unpaid_details"),
     ]);
-    if (error || chargesError) { toast.error(error?.message ?? chargesError?.message ?? "Could not load staff tabs"); return; }
+    if (error || chargesError) { toast.error(localizeError(error ?? chargesError, lang, "staffTabLoad")); return; }
     setStaffChoices(((people ?? []) as StaffChoice[]).filter((person) => person.active));
     setStaffTabRows(((balances ?? []) as StaffTabSummary[]).map((row) => ({
       ...row,
@@ -307,7 +308,7 @@ function PosPage() {
     });
     setStaffTabBusy(false);
     if (error || !data?.[0]?.order_id) {
-      toast.error(error?.message ?? "Could not start staff tab");
+      toast.error(localizeError(error, lang, "staffTabStart"));
       return;
     }
     setStaffTabOpen(false);
@@ -324,7 +325,7 @@ function PosPage() {
     });
     setStaffTabBusy(false);
     if (error || !data?.[0]) {
-      toast.error(error?.message ?? "Could not settle staff tab");
+      toast.error(localizeError(error, lang, "staffTabSettle"));
       return;
     }
     setPendingStaffSettlement(null);
@@ -347,7 +348,7 @@ function PosPage() {
     });
     setStaffTabBusy(false);
     if (error) {
-      toast.error(error.message);
+      toast.error(localizeError(error, lang, "save"));
       return;
     }
     toast.success(lang === "th" ? "ลบยอดค้างแล้ว" : "Staff charge removed");
@@ -360,7 +361,7 @@ function PosPage() {
       .select("id,table_id,guests,restaurant_tables!inner(id,code,status),order_items(qty,unit_price,status)")
       .eq("status", "open")
       .not("table_id", "is", null);
-    if (error) { toast.error(error.message); return; }
+    if (error) { toast.error(localizeError(error, lang, "load")); return; }
     const options = (data ?? []).map((row: any) => ({
       orderId: row.id,
       tableId: row.table_id,
@@ -409,7 +410,7 @@ function PosPage() {
     if (error) {
       toast.error(error.message.includes("payment, member points, or discounts")
         ? (lang === "th" ? "รวมไม่ได้: เริ่มชำระเงิน ใช้แต้ม หรือส่วนลดแล้ว" : "Cannot combine: payment, points, or a discount has already started")
-        : error.message);
+        : localizeError(error, lang, "combine"));
       return;
     }
     const target = combineOptions.find((x) => x.orderId === combineTargetId);

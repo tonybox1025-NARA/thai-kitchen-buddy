@@ -20,6 +20,7 @@ import { tableLabel } from "@/lib/table";
 import { publicBaseUrl } from "@/lib/public-url";
 import { toast } from "sonner";
 import { isPhoneSearch, normalizePhone } from "@/lib/phone";
+import { localizeError } from "@/lib/localized-error";
 
 export const Route = createFileRoute("/_app/payment/$billId")({ component: PaymentPage });
 
@@ -612,7 +613,7 @@ function PaymentPage() {
       .from("order_item_discounts")
       .upsert(payload, { onConflict: "bill_id,order_item_id" });
     if (error) {
-      toast.error(error.message || (lang === "th" ? "บันทึกส่วนลดไม่สำเร็จ" : "Could not save item discount"));
+      toast.error(localizeError(error, lang, "save"));
       return;
     }
     const nextItemTotal = roundMoney(otherItemDiscounts + itemDiscPreviewAmt);
@@ -641,7 +642,7 @@ function PaymentPage() {
   const removeItemDiscount = async (discount: ItemDiscount) => {
     if (!bill) return;
     const { error } = await (supabase as any).from("order_item_discounts").delete().eq("id", discount.id);
-    if (error) { toast.error(error.message); return; }
+    if (error) { toast.error(localizeError(error, lang, "save")); return; }
     const nextItemTotal = roundMoney(itemDiscountTotal - Number(discount.amount));
     const nextDiscountTotal = roundMoney(billDiscountTotal + nextItemTotal);
     const nextAfterDiscount = Math.max(0, subtotal - nextDiscountTotal - memberDisc - pointsDiscount);
@@ -675,7 +676,7 @@ function PaymentPage() {
       // Persist the exact total shown to the cashier before recording money.
       const syncedBill = await persistBill();
       if (syncedBill?.error) {
-        toast.error(syncedBill.error.message || "Could not sync the bill total");
+        toast.error(localizeError(syncedBill.error, lang, "payment"));
         return false;
       }
 
@@ -697,7 +698,7 @@ function PaymentPage() {
           || String(error.message ?? "").includes("already closed");
         toast.error(duplicateBlocked
           ? (lang === "th" ? "บล็อกการชำระเงินซ้ำแล้ว กรุณาตรวจสอบยอดบิล" : "Duplicate payment blocked. Check the bill balance.")
-          : error.message);
+          : localizeError(error, lang, "payment"));
         await load();
         return false;
       }
@@ -717,7 +718,7 @@ function PaymentPage() {
         const completed = await finalize(inserted);
         if (!completed && inserted.id) {
           const { error: rollbackError } = await supabase.from("payments").delete().eq("id", inserted.id);
-          if (rollbackError) toast.error(`Payment rollback failed: ${rollbackError.message}`);
+          if (rollbackError) toast.error(localizeError(rollbackError, lang, "payment"));
           await load();
           return false;
         }
@@ -729,11 +730,7 @@ function PaymentPage() {
         try {
           await openCashDrawer();
         } catch (drawerError) {
-          toast.error(
-            drawerError instanceof Error
-              ? `Payment saved, but cash drawer did not open: ${drawerError.message}`
-              : "Payment saved, but cash drawer did not open.",
-          );
+          toast.error(localizeError(drawerError, lang, "cashDrawer"));
         }
       }
       return true;
@@ -801,7 +798,7 @@ function PaymentPage() {
           .slice(0, 50),
       );
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not search members");
+      toast.error(localizeError(error, lang, "member"));
     } finally {
       setMemberSearching(false);
     }
@@ -810,7 +807,7 @@ function PaymentPage() {
   const selectMember = async (member: MemberLookup) => {
     if (!bill) return;
     const { error } = await supabase.from("bills").update({ member_id: member.id }).eq("id", bill.id);
-    if (error) { toast.error(error.message); return; }
+    if (error) { toast.error(localizeError(error, lang, "member")); return; }
     setSelectedMember(member);
     setPointsRedeemed(0);
     setMemberSearchOpen(false);
@@ -820,7 +817,7 @@ function PaymentPage() {
   const clearMember = async () => {
     if (!bill) return;
     const { error } = await supabase.from("bills").update({ member_id: null }).eq("id", bill.id);
-    if (error) { toast.error(error.message); return; }
+    if (error) { toast.error(localizeError(error, lang, "member")); return; }
     setSelectedMember(null);
     setPointsRedeemed(0);
   };
@@ -835,7 +832,7 @@ function PaymentPage() {
     const fullName = newName.trim() || newNick.trim();
     const phone = newPhone.trim().replace(/[^\d+]/g, "") || null;
     if (!fullName) { toast.error(t("pay_name_required")); return; }
-    if (!phone) { toast.error("Phone number is required"); return; }
+    if (!phone) { toast.error(lang === "th" ? "กรุณาใส่เบอร์โทรศัพท์" : "Phone number is required"); return; }
     setCreatingMember(true);
     try {
       const { data: result, error: createError } = await (supabase as any).rpc("create_or_get_member", {
@@ -860,7 +857,7 @@ function PaymentPage() {
         ? (signupBonus > 0 ? `Member created · +${signupBonus} pts` : "Member created")
         : "Existing member selected");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not create member");
+      toast.error(localizeError(err, lang, "member"));
     } finally {
       setCreatingMember(false);
     }
@@ -896,7 +893,7 @@ function PaymentPage() {
       expires_at: expiresAt,
     });
     if (error) {
-      toast.error(error.message);
+      toast.error(localizeError(error, lang, "save"));
       return null;
     }
     return { token, url: `${publicBaseUrl()}/loyalty/claim/${token}`, points };
@@ -914,7 +911,7 @@ function PaymentPage() {
       p_cashier_id: staff?.id ?? null,
     });
     if (finalizeError) {
-      toast.error(finalizeError.message || "Could not finalize payment");
+      toast.error(localizeError(finalizeError, lang, "payment"));
       return false;
     }
     const finalizedRow = Array.isArray(finalized) ? finalized[0] : finalized;
@@ -1024,7 +1021,7 @@ function PaymentPage() {
       await enqueuePaidReceipt(`receipt-reprint:${bill.id}:${crypto.randomUUID()}`);
       toast.success(lang === "th" ? "พิมพ์ใบเสร็จซ้ำแล้ว" : "Receipt reprinted");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Receipt reprint failed");
+      toast.error(localizeError(error, lang, "print"));
     } finally {
       setReprintingReceipt(false);
     }
@@ -1074,7 +1071,7 @@ function PaymentPage() {
         p_refunded_by: staff?.id ?? null,
       });
     if (error) {
-      toast.error(error.message);
+      toast.error(localizeError(error, lang, "refund"));
       return;
     }
     setRefundOpen(false); setRefundAmt(0); setRefundReason(""); setRefundItemQty({});

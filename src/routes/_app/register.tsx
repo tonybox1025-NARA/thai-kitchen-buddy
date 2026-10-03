@@ -28,6 +28,7 @@ import { bangkokDateKey } from "@/lib/business-day";
 import { CASH_DENOMINATIONS as DENOMS } from "@/lib/cash-denominations";
 import { CashDenominationGrid as DenomGrid } from "@/components/CashDenominationGrid";
 import { closeShiftWithTicket, getShiftCloseBlockers, openShiftSafely, shiftCloseBlockedMessage } from "@/lib/shift-close";
+import { localizeError } from "@/lib/localized-error";
 
 export const Route = createFileRoute("/_app/register")({ component: Register });
 
@@ -436,7 +437,7 @@ function Register() {
       if (result.created && !canPrintDirect()) void printOpenSlip(result.shift, counts).catch(() => {});
       toast.success(t("rep_shift_opened"));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("rep_load_failed"));
+      toast.error(localizeError(error, lang, "load"));
     } finally {
       openingShiftRef.current = false;
       setOpeningShift(false);
@@ -471,7 +472,7 @@ function Register() {
         toast.info(`Manager review saved: ${reviewCount}. Staff action is not required.`, { duration: 8_000 });
       }
     } catch (error) {
-      toast.error(`Could not prepare the Z report: ${error instanceof Error ? error.message : String(error)}`);
+      toast.error(localizeError(error, lang, "closeShift"));
     }
   };
 
@@ -496,15 +497,15 @@ function Register() {
       });
       if (!result.closed) {
         if (result.reason === "blocked" && result.blockers) {
-          toast.error(shiftCloseBlockedMessage(result.blockers), { duration: 12_000 });
+          toast.error(shiftCloseBlockedMessage(result.blockers, lang), { duration: 12_000 });
         } else {
-          toast.error("Z report was not saved.");
+          toast.error(localizeError(null, lang, "closeShift"));
         }
         return false;
       }
       closeResult = result;
     } catch (error) {
-      toast.error(`Z report was not saved: ${error instanceof Error ? error.message : String(error)}`);
+      toast.error(localizeError(error, lang, "closeShift"));
       return false;
     }
     setZDlg(false); setShift(null); setReport(null);
@@ -693,7 +694,7 @@ function Register() {
           )}
           <DialogFooter className="pt-2">
             <Button variant="outline" onClick={() => setXDlg(false)}>{t("cancel")}</Button>
-            <Button onClick={() => { if (report && shift) void openPrintWindow("X", report, shift, xCashCount, restaurantName).catch((error) => toast.error(error instanceof Error ? error.message : "Print failed")); }}>
+            <Button onClick={() => { if (report && shift) void openPrintWindow("X", report, shift, xCashCount, restaurantName).catch((error) => toast.error(localizeError(error, lang, "print"))); }}>
               Print X Report
             </Button>
           </DialogFooter>
@@ -732,7 +733,7 @@ function Register() {
                 const closed = await submitZ();
                 if (closed && !canPrintDirect()) await openPrintWindow("Z", reportToPrint, shiftToPrint, cashCountToPrint, restaurantName);
               } catch (error) {
-                toast.error(error instanceof Error ? error.message : "Print failed");
+                toast.error(localizeError(error, lang, "print"));
               }
             }}>
               Print &amp; Close shift

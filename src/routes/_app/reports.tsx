@@ -30,6 +30,7 @@ import { bangkokDateKey } from "@/lib/business-day";
 import { CASH_DENOMINATIONS as DENOMS } from "@/lib/cash-denominations";
 import { CashDenominationGrid as DenomGrid } from "@/components/CashDenominationGrid";
 import { closeShiftWithTicket, getShiftCloseBlockers, openShiftSafely, shiftCloseBlockedMessage } from "@/lib/shift-close";
+import { localizeError } from "@/lib/localized-error";
 
 export const Route = createFileRoute("/_app/reports")({ component: Reports });
 
@@ -534,7 +535,7 @@ function Reports() {
       if (result.created && !canPrintDirect()) void printOpenSlip(result.shift, counts).catch(() => {});
       toast.success(t("rep_shift_opened"));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("rep_load_failed"));
+      toast.error(localizeError(error, lang, "load"));
     } finally {
       openingShiftRef.current = false;
       setOpeningShift(false);
@@ -569,7 +570,7 @@ function Reports() {
         toast.info(`Manager review saved: ${reviewCount}. Staff action is not required.`, { duration: 8_000 });
       }
     } catch (error) {
-      toast.error(`Could not prepare the Z report: ${error instanceof Error ? error.message : String(error)}`);
+      toast.error(localizeError(error, lang, "closeShift"));
     }
   };
 
@@ -594,15 +595,15 @@ function Reports() {
       });
       if (!result.closed) {
         if (result.reason === "blocked" && result.blockers) {
-          toast.error(shiftCloseBlockedMessage(result.blockers), { duration: 12_000 });
+          toast.error(shiftCloseBlockedMessage(result.blockers, lang), { duration: 12_000 });
         } else {
-          toast.error("Z report was not saved.");
+          toast.error(localizeError(null, lang, "closeShift"));
         }
         return false;
       }
       closeResult = result;
     } catch (error) {
-      toast.error(`Z report was not saved: ${error instanceof Error ? error.message : String(error)}`);
+      toast.error(localizeError(error, lang, "closeShift"));
       return false;
     }
     setZDlg(false); setShift(null); setReport(null);
@@ -795,7 +796,7 @@ function Reports() {
           )}
           <DialogFooter className="pt-2">
             <Button variant="outline" onClick={() => setXDlg(false)}>{t("cancel")}</Button>
-            <Button onClick={() => { if (report && shift) void openPrintWindow("X", report, shift, xCashCount, restaurantName).catch((error) => toast.error(error instanceof Error ? error.message : "Print failed")); }}>
+            <Button onClick={() => { if (report && shift) void openPrintWindow("X", report, shift, xCashCount, restaurantName).catch((error) => toast.error(localizeError(error, lang, "print"))); }}>
               Print X Report
             </Button>
           </DialogFooter>
@@ -834,7 +835,7 @@ function Reports() {
                 const closed = await submitZ();
                 if (closed && !canPrintDirect()) await openPrintWindow("Z", reportToPrint, shiftToPrint, cashCountToPrint, restaurantName);
               } catch (error) {
-                toast.error(error instanceof Error ? error.message : "Print failed");
+                toast.error(localizeError(error, lang, "print"));
               }
             }}>
               Print &amp; Close shift
@@ -1050,7 +1051,7 @@ function PeriodSalesHistory({ mode, buildReport }: { mode: PeriodMode; buildRepo
       for (let from = 0; ; from += 1000) {
         const { data, error } = await supabase.from("shifts").select("*")
           .order("opened_at", { ascending: false }).range(from, from + 999);
-        if (error) { toast.error(error.message); break; }
+        if (error) { toast.error(localizeError(error, lang, "load")); break; }
         all.push(...((data ?? []) as Shift[]));
         if (!data || data.length < 1000) break;
       }
@@ -1085,7 +1086,7 @@ function PeriodSalesHistory({ mode, buildReport }: { mode: PeriodMode; buildRepo
         const reports = await Promise.all(periodShifts.map((s) => buildReport(s)));
         if (req === reqRef.current) setReport(mergeReports(reports));
       } catch (error) {
-        if (req === reqRef.current) { toast.error(error instanceof Error ? error.message : "Could not load period totals"); setReport(null); }
+        if (req === reqRef.current) { toast.error(localizeError(error, lang, "load")); setReport(null); }
       } finally {
         if (req === reqRef.current) setLoading(false);
       }
@@ -1246,6 +1247,7 @@ function DailySalesHistory({
   buildReport: (shift: Shift) => Promise<ReportData>;
   restaurantName: string;
 }) {
+  const { lang } = useI18n();
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [selected, setSelected] = useState<Shift | null>(null);
   const [report, setReport] = useState<ReportData | null>(null);
@@ -1258,7 +1260,7 @@ function DailySalesHistory({
     try {
       setReport(await buildReport(shift));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not load sales history");
+      toast.error(localizeError(error, lang, "load"));
       setReport(null);
     } finally {
       setLoading(false);
@@ -1272,7 +1274,7 @@ function DailySalesHistory({
         .order("opened_at", { ascending: false }).limit(120);
       if (cancelled) return;
       if (error) {
-        toast.error(error.message);
+        toast.error(localizeError(error, lang, "load"));
         setLoading(false);
         return;
       }
@@ -1293,7 +1295,7 @@ function DailySalesHistory({
       await printSalesHistoryReport(report, selected, restaurantName);
       toast.success("Sales report printed");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Sales report print failed");
+      toast.error(localizeError(error, lang, "print"));
     } finally {
       setPrinting(false);
     }
@@ -1364,6 +1366,7 @@ function DailySalesHistory({
 }
 
 function ZReportHistoryTab({ restaurantName }: { restaurantName: string }) {
+  const { lang } = useI18n();
   const [rows, setRows] = useState<ClosedShift[]>([]);
   const [loading, setLoading] = useState(true);
   const [printingId, setPrintingId] = useState<string | null>(null);
@@ -1408,7 +1411,7 @@ function ZReportHistoryTab({ restaurantName }: { restaurantName: string }) {
         };
       }));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not load Z report history");
+      toast.error(localizeError(error, lang, "load"));
     } finally {
       setLoading(false);
     }
@@ -1417,7 +1420,7 @@ function ZReportHistoryTab({ restaurantName }: { restaurantName: string }) {
   useEffect(() => { void load(); }, []);
 
   const reprint = async (shift: ClosedShift) => {
-    if (!shift.totals) { toast.error("This shift does not have a saved Z report snapshot"); return; }
+    if (!shift.totals) { toast.error(lang === "th" ? "กะนี้ไม่มีข้อมูล Z Report ที่บันทึกไว้" : "This shift does not have a saved Z report snapshot"); return; }
     setPrintingId(shift.id);
     try {
       const report = historicalReport(shift.totals);
@@ -1451,7 +1454,7 @@ function ZReportHistoryTab({ restaurantName }: { restaurantName: string }) {
         : undefined);
       toast.success(`Z report ${shift.business_day} sent to printer`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not print Z report");
+      toast.error(localizeError(error, lang, "print"));
     } finally {
       setPrintingId(null);
     }
@@ -1541,7 +1544,7 @@ function csvCell(value: unknown) {
 }
 
 function LoyaltyAuditTab() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [range, setRange] = useState<LoyaltyAuditRange>("month");
   const [type, setType] = useState("all");
   const [query, setQuery] = useState("");
@@ -1585,7 +1588,7 @@ function LoyaltyAuditTab() {
         };
       }));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("rep_load_failed"));
+      toast.error(localizeError(error, lang, "load"));
     } finally {
       setLoading(false);
     }

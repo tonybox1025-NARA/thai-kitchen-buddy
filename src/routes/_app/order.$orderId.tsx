@@ -21,6 +21,7 @@ import { publicBaseUrl } from "@/lib/public-url";
 import { readDeviceCache } from "@/lib/device-cache";
 import { resolveMenuImage } from "@/lib/pos-assets";
 import { toast } from "sonner";
+import { localizeError } from "@/lib/localized-error";
 
 export const Route = createFileRoute("/_app/order/$orderId")({ component: OrderPage });
 
@@ -450,7 +451,7 @@ function OrderPage() {
       name_th: selected.name_th, name_en: selected.name_en, name_my: selected.name_my,
       qty, unit_price, unit_cost: selected.cost ?? 0, notes: notes || null, modifiers, status: "pending",
     });
-    if (error) toast.error(error.message);
+    if (error) toast.error(localizeError(error, lang, "order"));
     setSelected(null);
   };
 
@@ -472,7 +473,7 @@ function OrderPage() {
       set_config: config,
     });
     if (error) {
-      toast.error(error.message);
+      toast.error(localizeError(error, lang, "order"));
       return;
     }
     setSelectedSet(null);
@@ -497,7 +498,7 @@ function OrderPage() {
     const next = !item.is_takeout;
     const { error } = await (supabase as any).from("order_items").update({ is_takeout: next }).eq("id", item.id);
     if (error) {
-      toast.error(error.message);
+      toast.error(localizeError(error, lang, "order"));
       return;
     }
     setItems((current) => current.map((row) => row.id === item.id ? { ...row, is_takeout: next } : row));
@@ -616,7 +617,7 @@ function OrderPage() {
       p_print_jobs: printJobs,
     });
     if (submitError || !submitted?.[0]) {
-      toast.error(submitError?.message ?? "Send failed — tap again to retry");
+      toast.error(localizeError(submitError, lang, "sendKitchen"));
       return;
     }
     sendAttemptRef.current = null;
@@ -671,7 +672,7 @@ function OrderPage() {
     const live = items.filter((i) => i.status !== "voided");
     if (live.length === 0) { toast.error(t("empty_order")); return; }
     const pending = live.some((i) => i.status === "pending");
-    if (pending) { toast.error(t("send_to_kitchen") + " first"); return; }
+    if (pending) { toast.error(lang === "th" ? "กรุณาส่งออเดอร์เข้าครัวก่อน" : "Send the order to the kitchen first"); return; }
     const billId = await ensureBill();
     if (billId) {
       if (tableId) await supabase.from("restaurant_tables").update({ status: "bill_requested" }).eq("id", tableId);
@@ -684,7 +685,7 @@ function OrderPage() {
     const live = items.filter((item) => item.status !== "voided");
     if (live.length === 0) { toast.error(t("empty_order")); return; }
     if (live.some((item) => item.status === "pending")) {
-      toast.error(`${t("send_to_kitchen")} first`);
+      toast.error(lang === "th" ? "กรุณาส่งออเดอร์เข้าครัวก่อน" : "Send the order to the kitchen first");
       return;
     }
     setRecordingStaffTab(true);
@@ -699,7 +700,7 @@ function OrderPage() {
       toast.success(`${staffDebtorName ?? "Staff"} · ฿${Number(data[0].amount).toFixed(2)} recorded`);
       nav({ to: "/pos" });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not record staff tab");
+      toast.error(localizeError(error, lang, "staffTabStart"));
     } finally {
       setRecordingStaffTab(false);
     }
@@ -749,7 +750,7 @@ function OrderPage() {
       setGuestDialogOpen(false);
       toast.success(lang === "th" ? `แก้จำนวนลูกค้าเป็น ${guestDraft} คนแล้ว` : `Guest count updated to ${guestDraft}`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not update guest count");
+      toast.error(localizeError(error, lang, "save"));
     } finally {
       setSavingGuests(false);
     }
@@ -787,7 +788,7 @@ function OrderPage() {
     });
 
     if (cancelErr) {
-      toast.error(cancelErr.message || t("ord_close_failed"));
+      toast.error(localizeError(cancelErr, lang, "order"));
       return;
     }
 
@@ -807,7 +808,7 @@ function OrderPage() {
     });
     const moved = data?.[0];
     if (error || !moved) {
-      toast.error(error?.message ?? (lang === "th" ? "ย้ายโต๊ะไม่สำเร็จ" : "Could not move table"));
+      toast.error(localizeError(error, lang, "moveTable"));
       await loadOrderState();
       return;
     }
@@ -867,7 +868,7 @@ function OrderPage() {
       applied_by: staff.id,
       updated_at: new Date().toISOString(),
     }, { onConflict: "bill_id,order_item_id" });
-    if (error) { toast.error(error.message); return; }
+    if (error) { toast.error(localizeError(error, lang, "save")); return; }
 
     const { data: billDiscountRows } = await (supabase as any).from("bill_discounts").select("amount").eq("bill_id", billId);
     const billLevelDiscount = roundMoney((billDiscountRows ?? []).reduce((sum: number, row: any) => sum + Number(row.amount), 0));
@@ -894,7 +895,7 @@ function OrderPage() {
     const existing = itemDiscounts.find((discount) => discount.order_item_id === selectedItemForDiscount.id);
     if (!existing) return;
     const { error } = await (supabase as any).from("order_item_discounts").delete().eq("id", existing.id);
-    if (error) { toast.error(error.message); return; }
+    if (error) { toast.error(localizeError(error, lang, "save")); return; }
     const nextItemDiscountTotal = Math.max(0, roundMoney(itemDiscountTotal - Number(existing.amount)));
     const { data: billDiscountRows } = await (supabase as any).from("bill_discounts").select("amount").eq("bill_id", currentBillId);
     const billLevelDiscount = roundMoney((billDiscountRows ?? []).reduce((sum: number, row: any) => sum + Number(row.amount), 0));
@@ -960,7 +961,7 @@ function OrderPage() {
       } as CounterPrintPayload, { jobKey: `round-reprint:${orderId}:${roundNumber}:${crypto.randomUUID()}`, sourceType: "round_reprint", sourceId: orderId });
       toast.success(lang === "th" ? `พิมพ์รอบ ${roundNumber} ที่เคาน์เตอร์แล้ว` : `Round ${roundNumber} reprinted at counter`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Reprint failed");
+      toast.error(localizeError(error, lang, "print"));
     } finally {
       setReprintingRound(null);
     }
