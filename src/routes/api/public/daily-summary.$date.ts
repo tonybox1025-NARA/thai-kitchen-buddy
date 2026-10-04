@@ -4,6 +4,7 @@ import type { Database } from "@/integrations/supabase/types";
 import { bangkokDayUtcBounds } from "@/lib/business-day";
 import { countedCashAfterOpening, totalCashCount } from "@/lib/cash-denominations";
 import { calculateKbankSettlement, previousDateKey } from "@/lib/kbank-settlement";
+import { totalMemberDiscount } from "@/lib/member-discount";
 
 // Daily sales summary for a business day, shaped to fill the LONMOH Manager app's
 // Daily Sales Entry. Read-only aggregate over paid, non-test bills. Uses a path
@@ -168,9 +169,7 @@ export const Route = createFileRoute("/api/public/daily-summary/$date")({
           total_product_sales: sum(billRows, (b) => b.subtotal) + staffSalesGross,
           refund: refundTotal,
           // MB Discount = actual baht reductions, not the number of points spent.
-          mb_discount:
-            sum(billRows, (b) => b.member_discount_amount) +
-            sum(billRows, (b) => b.loyalty_discount_amount),
+          mb_discount: totalMemberDiscount(billRows),
           discount: sum(billRows, (b) => b.discount_amount) + staffDiscount,
           vat: sum(billRows, (b) => b.vat_amount),
           net_sales: sum(billRows, (b) => b.total) + staffCredit - refundTotal,

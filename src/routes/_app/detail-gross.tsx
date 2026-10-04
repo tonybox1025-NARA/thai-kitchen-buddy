@@ -12,6 +12,7 @@ import { DashRangeBar } from "@/components/DashRangeBar";
 import { businessDaysForShifts, type DashRange, rangeBounds, shiftIdsFor } from "@/lib/dash-range";
 import { useI18n } from "@/lib/i18n";
 import { groupBusinessEvents, orderBusinessHours } from "@/lib/business-hour-order";
+import { totalMemberDiscount } from "@/lib/member-discount";
 
 export const Route = createFileRoute("/_app/detail-gross")({
   component: GrossSalesDetail,
@@ -20,7 +21,7 @@ export const Route = createFileRoute("/_app/detail-gross")({
 
 type BillRow = {
   id: string; order_id: string; total: number; subtotal: number;
-  discount_amount: number; member_discount_amount: number; paid_at: string | null;
+  discount_amount: number; member_discount_amount: number; loyalty_discount_amount: number; paid_at: string | null;
   shift_id: string; businessDay: string;
 };
 
@@ -54,7 +55,7 @@ function GrossSalesDetail() {
 
         const [{ data: b }, { data: staffRows }, { data: refundRows }, shiftDays] = await Promise.all([
           supabase.from("bills")
-          .select("id,order_id,total,subtotal,discount_amount,member_discount_amount,paid_at,shift_id")
+          .select("id,order_id,total,subtotal,discount_amount,member_discount_amount,loyalty_discount_amount,paid_at,shift_id")
           .in("status", ["paid", "partial_refund", "refunded"]).in("shift_id", shiftIds)
           .order("paid_at", { ascending: false }).limit(500),
           (supabase as any).from("staff_tab_charges").select("subtotal,discount_amount,amount").in("shift_id", shiftIds).neq("status", "voided"),
@@ -98,7 +99,8 @@ function GrossSalesDetail() {
 
   const gross     = bills.reduce((s, b) => s + Number(b.subtotal), 0) + staffSales.gross;
   const net       = bills.reduce((s, b) => s + Number(b.total), 0) + staffSales.net - refunds;
-  const discounts = bills.reduce((s, b) => s + Number(b.discount_amount) + Number(b.member_discount_amount), 0) + staffSales.discount;
+  const discounts = bills.reduce((s, b) => s + Number(b.discount_amount), 0)
+    + totalMemberDiscount(bills) + staffSales.discount;
 
   // By hour
   const byHour = useMemo(() => {
