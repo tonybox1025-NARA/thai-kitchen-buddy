@@ -115,7 +115,7 @@ export const Route = createFileRoute("/api/public/daily-summary/$date")({
           previousBillIds.length
             ? sb
                 .from("payments")
-                .select("amount,created_at")
+                .select("amount,tip_amount,created_at")
                 .in("bill_id", previousBillIds)
                 .eq("method", "qr")
             : Promise.resolve({ data: [] }),
