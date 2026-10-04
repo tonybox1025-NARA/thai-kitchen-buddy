@@ -57,10 +57,16 @@ describe(`Bangkok time (device TZ=${process.env.TZ ?? "unset"})`, () => {
   test("KBank 23:00 cutoff and QR buckets stay Bangkok", () => {
     const r = calculateKbankSettlement(
       "2026-10-01",
-      [{ amount: 100, created_at: "2026-09-30T15:59:59.000Z" }, { amount: 50, created_at: "2026-09-30T16:00:00.000Z" }],
-      [{ amount: 20, created_at: "2026-10-01T15:59:00.000Z" }, { amount: 7, created_at: "2026-10-01T16:00:00.000Z" }],
+      [
+        { amount: 100, tip_amount: 99, created_at: "2026-09-30T15:59:59.000Z" },
+        { amount: 50, tip_amount: 5, created_at: "2026-09-30T16:00:00.000Z" },
+      ],
+      [
+        { amount: 20, tip_amount: 2, created_at: "2026-10-01T15:59:00.000Z" },
+        { amount: 7, tip_amount: 88, created_at: "2026-10-01T16:00:00.000Z" },
+      ],
     );
-    expect(r).toEqual({ previousAfterCutoff: 50, currentBeforeCutoff: 20, expectedDeposit: 70 });
+    expect(r).toEqual({ previousAfterCutoff: 55, currentBeforeCutoff: 22, expectedDeposit: 77 });
     expect(inBucket("2026-10-01T08:00:00Z", { start: "15:00", end: "18:00" })).toBe(true);
     expect(inBucket("2026-10-01T16:30:00Z", { start: "22:00", end: "02:00" })).toBe(true);
   });

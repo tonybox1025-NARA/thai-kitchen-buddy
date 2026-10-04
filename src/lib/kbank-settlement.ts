@@ -1,5 +1,6 @@
 export type TimedAmount = {
   amount: number | string | null;
+  tip_amount?: number | string | null;
   created_at: string;
 };
 
@@ -14,8 +15,16 @@ export function bangkokCutoffUtc(date: string): string {
   return new Date(`${date}T23:00:00+07:00`).toISOString();
 }
 
-const sum = (rows: TimedAmount[]) =>
-  Number(rows.reduce((total, row) => total + (Number(row.amount) || 0), 0).toFixed(2));
+const sumReceived = (rows: TimedAmount[]) =>
+  Number(
+    rows
+      .reduce(
+        (total, row) =>
+          total + (Number(row.amount) || 0) + (Number(row.tip_amount) || 0),
+        0,
+      )
+      .toFixed(2),
+  );
 
 /**
  * KBANK settles calendar date D as the previous business day's QR receipts
@@ -30,10 +39,10 @@ export function calculateKbankSettlement(
 ) {
   const previousCutoff = bangkokCutoffUtc(previousDateKey(date));
   const currentCutoff = bangkokCutoffUtc(date);
-  const previousAfterCutoff = sum(
+  const previousAfterCutoff = sumReceived(
     previousBusinessDayQr.filter((row) => row.created_at >= previousCutoff),
   );
-  const currentBeforeCutoff = sum(
+  const currentBeforeCutoff = sumReceived(
     currentBusinessDayQr.filter((row) => row.created_at < currentCutoff),
   );
 
