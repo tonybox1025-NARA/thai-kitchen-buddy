@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
+    "guard:ai-protocol": "node scripts/check-ai-collaboration-protocol.mjs",
     "verify:business-hours": "node scripts/verify-business-hour-order.mjs",
     "verify:date-range": "node scripts/verify-date-range-selection.mjs",
-    "verify:regressions": "bash scripts/verify-no-direct-print.sh && bash scripts/verify-bangkok-time.sh && node scripts/verify-print-byte-assembly.mjs && node scripts/verify-receipt-layout.mjs && node scripts/verify-operational-integrity-ui.mjs && node scripts/verify-kbank-settlement.mjs && npm run verify:business-hours && npm run verify:date-range",
+    "verify:regressions": "npm run guard:ai-protocol && bash scripts/verify-no-direct-print.sh && bash scripts/verify-bangkok-time.sh && node scripts/verify-print-byte-assembly.mjs && node scripts/verify-receipt-layout.mjs && node scripts/verify-operational-integrity-ui.mjs && node scripts/verify-kbank-settlement.mjs && npm run verify:business-hours && npm run verify:date-range",
     "build": "npm run verify:regressions && vite build",
     "build:dev": "npm run verify:regressions && vite build --mode development",
     "build:android": "npm run verify:regressions && BUILD_TARGET=android vite build && node scripts/prepare-android-www.js && cap sync android",
