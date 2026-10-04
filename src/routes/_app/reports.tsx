@@ -29,6 +29,7 @@ import { closeShiftWithTicket, getShiftCloseBlockers, openShiftSafely, shiftClos
 import { localizeError } from "@/lib/localized-error";
 import { HistoryRangeBar, type HistoryRange } from "@/components/HistoryRangeBar";
 import { ShiftCloseReview } from "@/components/ShiftCloseReview";
+import { totalMemberDiscount } from "@/lib/member-discount";
 
 export const Route = createFileRoute("/_app/reports")({ component: Reports });
 
@@ -366,7 +367,7 @@ function Reports() {
     const paidTotal = (bills ?? []).reduce((x, b) => x + Number(b.total), 0)
       + (staffTabCharges ?? []).reduce((sum: number, row: any) => sum + Number(row.amount), 0);
     const totalDiscount = (bills ?? []).reduce((x, b) => x + Number(b.discount_amount), 0);
-    const member = (bills ?? []).reduce((x, b) => x + Number(b.member_discount_amount) + Number(b.loyalty_discount_amount ?? 0), 0);
+    const member = totalMemberDiscount(bills ?? []);
     const vatIncluded = (bills ?? []).filter((b) => b.vat_mode === "inclusive").reduce((x, b) => x + Number(b.vat_amount ?? 0), 0);
     const vatAdded = (bills ?? []).filter((b) => b.vat_mode === "exclusive").reduce((x, b) => x + Number(b.vat_amount ?? 0), 0);
     const byMethod: Record<string, number> = { cash: 0, qr: 0, gov_qr: 0, card: 0 };
@@ -1444,6 +1445,17 @@ function ZReportHistoryTab({ restaurantName }: { restaurantName: string }) {
     setPrintingId(shift.id);
     try {
       const report = historicalReport(shift.totals);
+      // Some older close snapshots omitted loyalty-point redemptions from the
+      // Member discount line. Rebuild this one classification from the
+      // authoritative closed bills before printing; no sales data is changed.
+      const { data: memberBills, error: memberBillsError } = await supabase
+        .from("bills")
+        .select("member_discount_amount,loyalty_discount_amount")
+        .eq("shift_id", shift.id)
+        .in("status", ["paid", "partial_refund", "refunded"])
+        .not("is_test", "is", true);
+      if (memberBillsError) throw memberBillsError;
+      report.member = totalMemberDiscount(memberBills ?? []);
       // Older closing snapshots only stored collection totals. Rehydrate the
       // employee and tender detail so a historical reprint remains auditable.
       const { data: activity, error: settlementError } = await (supabase as any)

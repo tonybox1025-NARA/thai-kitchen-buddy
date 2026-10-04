@@ -10,6 +10,7 @@ import { type DashRange, rangeBounds, shiftIdsFor } from "@/lib/dash-range";
 import { ArrowRight, Clock3 } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { IntegrityStatus } from "@/components/IntegrityStatus";
+import { totalMemberDiscount } from "@/lib/member-discount";
 
 export const Route = createFileRoute("/_app/dashboard")({ component: Dashboard });
 
@@ -17,7 +18,7 @@ function Dashboard() {
   const { t } = useI18n();
   const [range, setRange] = useState<DashRange>("today");
   const [custom, setCustom] = useState<DateRange | undefined>();
-  const [bills, setBills]     = useState<{ id: string; order_id: string | null; total: number; subtotal: number; discount_amount: number; member_discount_amount: number; vat_amount: number; vat_mode: "inclusive" | "exclusive" }[]>([]);
+  const [bills, setBills]     = useState<{ id: string; order_id: string | null; total: number; subtotal: number; discount_amount: number; member_discount_amount: number; loyalty_discount_amount: number; vat_amount: number; vat_mode: "inclusive" | "exclusive" }[]>([]);
   const [payments, setPayments] = useState<{ method: string; amount: number; tip_amount: number; bill_id: string }[]>([]);
   const [voidsTotal, setVoidsTotal]   = useState(0);
   const [cancelledCt, setCancelledCt] = useState(0);
@@ -44,7 +45,7 @@ function Dashboard() {
         return;
       }
       const [{ data: b }, { data: voidRows }, { data: cancelledOrds }, { data: refundRows }, { data: staffRows }] = await Promise.all([
-        supabase.from("bills").select("id,order_id,total,subtotal,discount_amount,member_discount_amount,vat_amount,vat_mode")
+        supabase.from("bills").select("id,order_id,total,subtotal,discount_amount,member_discount_amount,loyalty_discount_amount,vat_amount,vat_mode")
           .in("status", ["paid", "partial_refund", "refunded"]).in("shift_id", shiftIds).not("is_test", "is", true),
         supabase.from("voids").select("amount").in("shift_id", shiftIds),
         supabase.from("orders").select("id").in("shift_id", shiftIds).eq("status","cancelled").not("is_test", "is", true),
@@ -85,7 +86,8 @@ function Dashboard() {
   const stats = useMemo(() => {
     const gross     = bills.reduce((s, b) => s + Number(b.subtotal), 0) + staffSales.gross;
     const net       = bills.reduce((s, b) => s + Number(b.total), 0) + staffSales.net - refundsTotal;
-    const discounts = bills.reduce((s, b) => s + Number(b.discount_amount) + Number(b.member_discount_amount), 0) + staffSales.discount;
+    const discounts = bills.reduce((s, b) => s + Number(b.discount_amount), 0)
+      + totalMemberDiscount(bills) + staffSales.discount;
     const byMethod: Record<string,number> = { cash:0, qr:0, gov_qr:0, card:0 };
     payments.forEach(p => { byMethod[p.method] = (byMethod[p.method]??0) + Number(p.amount); });
     const tipTotal = payments.filter(p => p.method==="qr").reduce((s,p) => s+Number(p.tip_amount??0), 0);

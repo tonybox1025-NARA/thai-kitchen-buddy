@@ -11,6 +11,7 @@ import { DashRangeBar } from "@/components/DashRangeBar";
 import { businessDaysForShifts, type DashRange, rangeBounds, shiftIdsFor } from "@/lib/dash-range";
 import { useI18n } from "@/lib/i18n";
 import { groupBusinessEvents } from "@/lib/business-hour-order";
+import { totalMemberDiscount } from "@/lib/member-discount";
 
 export const Route = createFileRoute("/_app/detail-discounts")({
   component: DiscountsDetail,
@@ -76,7 +77,7 @@ function DiscountsDetail() {
 
         const [{ data: bills }, { data: staffCharges }] = await Promise.all([
           supabase.from("bills")
-            .select("id,order_id,discount_amount,member_discount_amount,paid_at,shift_id")
+            .select("id,order_id,discount_amount,member_discount_amount,loyalty_discount_amount,paid_at,shift_id")
             .in("status", ["paid", "partial_refund", "refunded"])
             .in("shift_id", shiftIds)
             .not("is_test", "is", true),
@@ -163,9 +164,10 @@ function DiscountsDetail() {
         }
 
         for (const b of (bills ?? [])) {
-          if (Number(b.member_discount_amount) > 0) {
+          const memberDiscount = totalMemberDiscount([b]);
+          if (memberDiscount > 0) {
             result.push({
-              type: "member", label: t("disc_member"), amount: Number(b.member_discount_amount),
+              type: "member", label: t("disc_member"), amount: memberDiscount,
               staffName: "—",
               tableCode: getTableCode(b.id),
               billId: b.id,
