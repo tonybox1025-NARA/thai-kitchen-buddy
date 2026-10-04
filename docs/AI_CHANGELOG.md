@@ -21,8 +21,8 @@ Add new entries at the top using this template:
 - Scope: Z close/reprint, dashboard totals, discount and gross detail, and Manager App daily-summary export
 - Decision: use one shared MB Discount calculation for both manual member discounts and loyalty-point redemption baht values; historical Z reprints rebuild this classification from authoritative closed bills
 - Verification: member-discount regression guard, full regression suite, and production build passed
-- Git: `codex/fix-z-member-discount`; see the commit containing this entry
-- Delivery: code completed locally; push/merge, Lovable publish, SUNMI update, and live verification reported separately at handoff
+- Git: `codex/fix-z-member-discount`, PR #56; see the commits containing this entry
+- Delivery: PR #56 records Git integration; Lovable publish, SUNMI update, and live verification are reported separately at handoff
 - Follow-up: verify the 2026-10-04 Z reprint shows MB Discount ฿700 after deployment
 
 ## 2026-10-04 — Shared Codex/Claude safety protocol installed
