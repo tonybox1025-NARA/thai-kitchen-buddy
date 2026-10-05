@@ -22,8 +22,8 @@ Add new entries at the top using this template:
 - Decision: customer phones can order only; Crew can manage orders and request a bill; member lookup/signup, reward selection and payment render only in the native SUNMI app; point redemption and earning remain finalized atomically after successful payment
 - Verification: dedicated terminal-only loyalty guard, full regression suite, web build, and Android build
 - Git: `codex/loyalty-terminal-safety`; see the commits containing this entry
-- Delivery: pending merge, Lovable publish, production migration, and Android v1.1.82 release
-- Follow-up: verify the published customer QR, Crew, and updated SUNMI flows
+- Delivery: PR #60 merged, production RPC permissions restricted, Lovable production published and customer QR/API verified live; Android v1.1.82 released
+- Follow-up: install v1.1.82 on SUNMI and verify native member lookup, point selection, and checkout on the device
 
 ## 2026-10-05 — Complete fully collected loyalty Bills safely
 
