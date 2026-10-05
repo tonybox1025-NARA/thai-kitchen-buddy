@@ -21,13 +21,11 @@ import {
   Layers,
   ReceiptText,
   RefreshCw,
-  Gift,
   ArrowLeft,
   Search,
 } from "lucide-react";
 import { toast } from "sonner";
 import { SETS, SET_C_DRINKS, formatSetKitchenNotes, type SetDef, type SetConfig, type SetItem } from "@/lib/set-menu";
-import { walletToken } from "@/lib/wallet";
 
 export const Route = createFileRoute("/menu/$tableCode")({
   component: CustomerMenu,
@@ -104,31 +102,9 @@ type CheckoutState = {
   bill?: {
     id: string;
     subtotal: number;
-    points: number;
-    discount: number;
     total: number;
-    member_id: string | null;
   };
-  member?: {
-    id: string;
-    full_name: string;
-    nickname: string | null;
-    current_points: number;
-    phone?: string | null;
-    line_user_id?: string | null;
-    imported_from?: string | null;
-  } | null;
-  rewards: { points: number; baht: number }[];
 };
-
-function isRecognizedMember(member: CheckoutState["member"]) {
-  if (!member) return false;
-  return Boolean(
-    member.phone ||
-      member.line_user_id ||
-      member.imported_from !== "guest_wallet",
-  );
-}
 
 function categoryLabel(category: Category, lang: Lang) {
   return lang === "th"
@@ -170,12 +146,8 @@ const T = {
     required_missing: "กรุณาเลือกตัวเลือกที่จำเป็นก่อนเพิ่มรายการ",
     submit_slow: "อินเทอร์เน็ตขัดข้องชั่วคราว รายการในตะกร้ายังถูกเก็บไว้ค่ะ",
     request_bill: "เรียกเก็บเงิน",
-    checkout: "ชำระเงิน / ใช้แต้ม",
-    member_points: "แต้มสมาชิก",
-    no_wallet: "เปิดกระเป๋าสมาชิกก่อนเพื่อใช้แต้ม",
+    checkout: "เรียกเก็บเงิน",
     bill_requested: "แจ้งพนักงานแล้ว กำลังนำบิลมาให้ค่ะ",
-    use_reward: "เลือกคูปองส่วนลด",
-    no_reward: "ไม่ใช้แต้ม",
     my_orders: "รายการที่สั่ง",
     current_order: "รายการสั่งของโต๊ะนี้",
     ordered_total: "ยอดสั่งรวม",
@@ -215,12 +187,8 @@ const T = {
     required_missing: "Please choose all required options before adding this item.",
     submit_slow: "The internet connection is temporarily unavailable. Your cart is still saved.",
     request_bill: "Request bill",
-    checkout: "Pay / use points",
-    member_points: "Member points",
-    no_wallet: "Open your member wallet before using points.",
+    checkout: "Request bill",
     bill_requested: "Staff notified. Your bill is on the way.",
-    use_reward: "Choose a reward",
-    no_reward: "Do not use points",
     my_orders: "My orders",
     current_order: "Current table order",
     ordered_total: "Order total",
@@ -594,10 +562,7 @@ function CustomerMenu() {
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [checkout, setCheckout] = useState<CheckoutState | null>(null);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
-  const [memberPhone, setMemberPhone] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [signupOpen, setSignupOpen] = useState(false);
-  const [signupName, setSignupName] = useState("");
   // Set menu state
   const [selectedSetDef, setSelectedSetDef] = useState<SetDef | null>(null);
   const [setMenuOrigin, setSetMenuOrigin] = useState<Menu | null>(null);
@@ -617,9 +582,8 @@ function CustomerMenu() {
     }
   };
 
-  const checkoutEndpoint = (guestToken?: string) => {
+  const checkoutEndpoint = () => {
     const params = new URLSearchParams();
-    if (guestToken) params.set("guest_token", guestToken);
     if (activeOrderId) params.set("order_id", activeOrderId);
     const query = params.toString();
     return `/api/public/checkout/${encodeURIComponent(tableCode)}${query ? `?${query}` : ""}`;
@@ -644,15 +608,7 @@ function CustomerMenu() {
   };
 
   const loadCheckout = async () => {
-    const token = walletToken();
-    // Ensure this device has a wallet. Existing LINE-linked wallets keep their
-    // member identity; first-time guests receive an empty wallet they can claim.
-    await fetch("/api/public/wallet", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ guest_token: token }),
-    });
-    const response = await fetch(checkoutEndpoint(token));
+    const response = await fetch(checkoutEndpoint());
     if (!response.ok) throw new Error(await response.text());
     const next = (await response.json()) as CheckoutState;
     setCheckout(next);
@@ -673,80 +629,6 @@ function CustomerMenu() {
       toast.success(tr.bill_requested);
     } catch (requestError) {
       toast.error(requestError instanceof Error ? requestError.message : "Unable to request bill");
-    } finally {
-      setCheckoutBusy(false);
-    }
-  };
-
-  const reserveReward = async (points: number) => {
-    setCheckoutBusy(true);
-    try {
-      const response = await fetch(checkoutEndpoint(), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "reserve_reward", guest_token: walletToken(), points }),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? "Unable to select reward");
-      await loadCheckout();
-      toast.success(
-        points > 0 ? `−฿${Number(result.reservation.discount_amount).toFixed(0)}` : tr.no_reward,
-      );
-    } catch (rewardError) {
-      toast.error(rewardError instanceof Error ? rewardError.message : "Unable to select reward");
-    } finally {
-      setCheckoutBusy(false);
-    }
-  };
-
-  const linkMemberPhone = async () => {
-    if (!memberPhone.trim()) return;
-    setCheckoutBusy(true);
-    try {
-      const response = await fetch(checkoutEndpoint(), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "link_member_phone",
-          guest_token: walletToken(),
-          phone: memberPhone,
-        }),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? "Unable to connect member");
-      await loadCheckout();
-      setMemberPhone("");
-      toast.success(lang === "th" ? "เชื่อมต่อสมาชิกแล้ว" : "Member connected");
-    } catch (linkError) {
-      toast.error(linkError instanceof Error ? linkError.message : "Unable to connect member");
-    } finally {
-      setCheckoutBusy(false);
-    }
-  };
-
-  const registerMember = async () => {
-    if (!signupName.trim() || memberPhone.replace(/\D/g, "").length < 9) return;
-    setCheckoutBusy(true);
-    try {
-      const response = await fetch(checkoutEndpoint(), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "register_member",
-          guest_token: walletToken(),
-          full_name: signupName,
-          phone: memberPhone,
-        }),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? "Unable to register member");
-      await loadCheckout();
-      setSignupOpen(false);
-      setSignupName("");
-      setMemberPhone("");
-      toast.success(lang === "th" ? "สมัครสมาชิกแล้ว" : "Membership created");
-    } catch (signupError) {
-      toast.error(signupError instanceof Error ? signupError.message : "Unable to register member");
     } finally {
       setCheckoutBusy(false);
     }
@@ -1379,7 +1261,7 @@ function CustomerMenu() {
               <span>{tr.ordered_total}</span>
               <span>฿{Number(orderHistory.total).toFixed(0)}</span>
             </div>
-            {orderHistory.items.length > 0 && (
+            {crewMode && orderHistory.items.length > 0 && (
               <Button
                 className="w-full h-12 gap-2"
                 onClick={async () => {
@@ -1408,7 +1290,7 @@ function CustomerMenu() {
         <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Gift className="h-5 w-5" />
+              <ReceiptText className="h-5 w-5" />
               {tr.checkout}
             </DialogTitle>
           </DialogHeader>
@@ -1421,117 +1303,11 @@ function CustomerMenu() {
                   <span>{tr.ordered_total}</span>
                   <span>฿{Number(checkout.bill?.subtotal ?? 0).toFixed(0)}</span>
                 </div>
-                {Number(checkout.bill?.discount ?? 0) > 0 && (
-                  <div className="flex justify-between text-green-700">
-                    <span>{checkout.bill?.points.toLocaleString()} points</span>
-                    <span>−฿{Number(checkout.bill?.discount).toFixed(0)}</span>
-                  </div>
-                )}
                 <div className="flex justify-between border-t pt-2 text-xl font-bold">
                   <span>Total</span>
                   <span>฿{Number(checkout.bill?.total ?? 0).toFixed(0)}</span>
                 </div>
               </div>
-
-              {checkout.member && isRecognizedMember(checkout.member) ? (
-                <div className="rounded-xl border p-4">
-                  <div className="text-sm text-muted-foreground">{tr.member_points}</div>
-                  <div className="flex items-end justify-between gap-4">
-                    <span className="font-semibold truncate">
-                      {checkout.member.nickname || checkout.member.full_name}
-                    </span>
-                    <span className="text-2xl font-black text-amber-600">
-                      {Number(checkout.member.current_points).toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-3 rounded-xl border p-4">
-                  <div>
-                    <div className="font-semibold">
-                      {lang === "th" ? "สมาชิกเดิม" : "Existing member"}
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      {lang === "th"
-                        ? "กรอกเบอร์โทรที่สมัครสมาชิก ครั้งต่อไปเครื่องนี้จะจำให้"
-                        : "Enter the membership phone once. This phone will be remembered next time."}
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <Input
-                      type="tel"
-                      inputMode="tel"
-                      autoComplete="tel"
-                      placeholder="0xx-xxx-xxxx"
-                      value={memberPhone}
-                      onChange={(event) => setMemberPhone(event.target.value)}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={checkoutBusy || memberPhone.replace(/\D/g, "").length < 9}
-                      onClick={() => void linkMemberPhone()}
-                    >
-                      {lang === "th" ? "เชื่อมต่อ" : "Connect"}
-                    </Button>
-                  </div>
-                  <Button type="button" className="w-full" onClick={() => setSignupOpen(true)}>
-                    {lang === "th" ? "สมัครสมาชิกใหม่" : "New member sign up"}
-                  </Button>
-                </div>
-              )}
-
-              {checkout.member && isRecognizedMember(checkout.member) && (
-                <div className="space-y-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => {
-                      window.location.href = "/wallet";
-                    }}
-                  >
-                    {lang === "th"
-                      ? "เปิดบัตรสมาชิก / เชื่อมต่อ LINE"
-                      : "Open member card / Connect LINE"}
-                  </Button>
-                  <div className="font-semibold">{tr.use_reward}</div>
-                  <div className="grid grid-cols-2 gap-2">
-                    {checkout.rewards.map((reward) => {
-                      const disabled =
-                        checkoutBusy ||
-                        Number(checkout.member?.current_points ?? 0) < reward.points ||
-                        reward.baht > Number(checkout.bill?.subtotal ?? 0);
-                      const selected = checkout.bill?.points === reward.points;
-                      return (
-                        <Button
-                          key={reward.points}
-                          variant={selected ? "default" : "outline"}
-                          disabled={disabled}
-                          className="h-auto py-3 flex-col"
-                          onClick={() => void reserveReward(reward.points)}
-                        >
-                          <span className="font-bold">฿{reward.baht}</span>
-                          <span className="text-xs opacity-75">
-                            {reward.points.toLocaleString()} points
-                          </span>
-                        </Button>
-                      );
-                    })}
-                  </div>
-                  {Number(checkout.bill?.points ?? 0) > 0 && (
-                    <Button
-                      variant="ghost"
-                      className="w-full"
-                      disabled={checkoutBusy}
-                      onClick={() => void reserveReward(0)}
-                    >
-                      {tr.no_reward}
-                    </Button>
-                  )}
-                </div>
-              )}
-
               <Button
                 className="w-full h-12"
                 disabled={checkoutBusy || !!checkout.order.checkout_requested_at}
@@ -1541,49 +1317,6 @@ function CustomerMenu() {
               </Button>
             </div>
           )}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={signupOpen} onOpenChange={setSignupOpen}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>{lang === "th" ? "สมัครสมาชิกใหม่" : "New member sign up"}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <Label>{lang === "th" ? "ชื่อ" : "Name"}</Label>
-              <Input
-                autoComplete="name"
-                value={signupName}
-                onChange={(event) => setSignupName(event.target.value)}
-              />
-            </div>
-            <div>
-              <Label>{lang === "th" ? "เบอร์โทรศัพท์" : "Phone number"}</Label>
-              <Input
-                type="tel"
-                inputMode="tel"
-                autoComplete="tel"
-                value={memberPhone}
-                onChange={(event) => setMemberPhone(event.target.value)}
-              />
-            </div>
-            <Button
-              className="h-12 w-full"
-              disabled={
-                checkoutBusy || !signupName.trim() || memberPhone.replace(/\D/g, "").length < 9
-              }
-              onClick={() => void registerMember()}
-            >
-              {checkoutBusy
-                ? lang === "th"
-                  ? "กำลังสมัคร…"
-                  : "Creating…"
-                : lang === "th"
-                  ? "สมัครและเชื่อมต่อ"
-                  : "Create and connect"}
-            </Button>
-          </div>
         </DialogContent>
       </Dialog>
 
