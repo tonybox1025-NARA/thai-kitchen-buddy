@@ -740,9 +740,16 @@ function PaymentPage() {
     }
   };
 
-  const completeZeroTotal = async () => {
-    if (!bill || total > 0.001 || paidStatus) return;
-    await finalize();
+  const completeCollectedCheckout = async () => {
+    if (!bill || remaining > 0.001 || paidStatus || paymentBusyRef.current) return;
+    paymentBusyRef.current = true;
+    setPaymentBusy(true);
+    try {
+      await finalize();
+    } finally {
+      paymentBusyRef.current = false;
+      setPaymentBusy(false);
+    }
   };
 
   const searchMembers = async () => {
@@ -809,17 +816,48 @@ function PaymentPage() {
     const { error } = await supabase.from("bills").update({ member_id: member.id }).eq("id", bill.id);
     if (error) { toast.error(localizeError(error, lang, "member")); return; }
     setSelectedMember(member);
-    setPointsRedeemed(0);
+    // Re-selecting the original customer is a recovery action when a phone
+    // reward reservation survived but its member link did not. Keep the price
+    // already shown and paid by the customer in that one recovery case.
+    const recoveringCustomerReservation =
+      !bill.member_id &&
+      (bill as any).loyalty_reservation_source === "customer_qr" &&
+      pointsRedeemed > 0;
+    if (!recoveringCustomerReservation) setPointsRedeemed(0);
     setMemberSearchOpen(false);
     toast.success(t("pay_member_selected"));
   };
 
   const clearMember = async () => {
     if (!bill) return;
-    const { error } = await supabase.from("bills").update({ member_id: null }).eq("id", bill.id);
+    // A points reservation must never survive without its member. Clear the
+    // member and all member-derived discounts atomically, with the recalculated
+    // Bill total, so another device cannot collect a discounted orphan Bill.
+    const clearedTotals = computeTotals(
+      Math.max(0, subtotal - totalDisc),
+      settingsVatEnabled,
+      settingsVatMode,
+      Number(bill.vat_rate),
+      settingsServiceFeeRate,
+      settingsRoundingMode,
+    );
+    const { error } = await supabase.from("bills").update({
+      member_id: null,
+      member_discount_amount: 0,
+      points_redeemed: 0,
+      loyalty_discount_amount: 0,
+      loyalty_reserved_at: null,
+      loyalty_reservation_source: null,
+      service_fee_amount: clearedTotals.serviceFeeAmount,
+      vat_amount: clearedTotals.vatAmount,
+      rounding_adjustment: clearedTotals.roundingAdjustment,
+      total: clearedTotals.total,
+    } as any).eq("id", bill.id);
     if (error) { toast.error(localizeError(error, lang, "member")); return; }
     setSelectedMember(null);
+    setMemberDisc(0);
     setPointsRedeemed(0);
+    await load();
   };
 
   const resetNewMember = () => {
@@ -935,11 +973,18 @@ function PaymentPage() {
     if (!bill) return false;
     if (isOffline()) { toast.error(t("err_offline")); return false; }
     const isTestBill = (bill as any).is_test === true;
+    const finalizeMemberId = !isTestBill ? selectedMember?.id ?? bill.member_id ?? null : null;
+    if (pointsRedeemed > 0 && !finalizeMemberId) {
+      toast.error(lang === "th"
+        ? "ไม่พบสมาชิกของส่วนลดแต้ม กรุณากดค้นหาและเลือกลูกค้าคนเดิมก่อนปิดบิล"
+        : "The points discount lost its member link. Find and select the same customer before completing checkout.");
+      return false;
+    }
     const { data: finalized, error: finalizeError } = await (supabase as any).rpc("finalize_bill_payment", {
       p_bill_id: bill.id,
-      p_member_id: !isTestBill ? selectedMember?.id ?? null : null,
-      p_redeem_points: !isTestBill && selectedMember ? pointsRedeemed : 0,
-      p_earn_points: !isTestBill && selectedMember && loyaltyEnabled ? earnPoints : 0,
+      p_member_id: finalizeMemberId,
+      p_redeem_points: finalizeMemberId ? pointsRedeemed : 0,
+      p_earn_points: finalizeMemberId && loyaltyEnabled ? Math.max(0, Math.floor(afterDisc * loyaltyPointsPerBaht)) : 0,
       p_cashier_id: staff?.id ?? null,
     });
     if (finalizeError) {
@@ -1378,8 +1423,8 @@ function PaymentPage() {
             {/* ── Payment methods ── */}
             <h3 className="font-semibold mb-2 text-sm">{t("pay")}</h3>
             {remaining <= 0 ? (
-              <Button className="w-full" size="lg" onClick={completeZeroTotal}>
-                Complete checkout · {thb(0)}
+              <Button className="w-full" size="lg" onClick={completeCollectedCheckout} disabled={paymentBusy}>
+                {lang === "th" ? "ปิดบิล" : "Complete checkout"} · {paid > 0 ? `${lang === "th" ? "รับแล้ว" : "Paid"} ${thb(paid)}` : thb(0)}
               </Button>
             ) : (
             <Tabs defaultValue="cash">

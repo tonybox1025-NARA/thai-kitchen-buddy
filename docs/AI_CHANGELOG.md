@@ -15,6 +15,16 @@ Add new entries at the top using this template:
 - Follow-up: none, or exact remaining work
 ```
 
+## 2026-10-05 — Complete fully collected loyalty Bills safely
+
+- Agent: Codex
+- Scope: POS payment completion, customer points-member linkage, and database invariant
+- Decision: complete checkout from the actual remaining balance, show the collected amount instead of zero, preserve a customer reservation when reconnecting its original member, and reject future points redemptions without a member link
+- Verification: reproduced Table T10 as subtotal ฿288, points discount ฿100, QR paid ฿188, remaining ฿0 with Bill still open; dedicated regression guard and full production build passed
+- Git: `codex/fix-paid-checkout-completion`; see the commits containing this entry
+- Delivery: pending merge, production publish, database trigger application, and SUNMI release
+- Follow-up: reconnect the original customer on the one affected open T10 Bill, then complete checkout
+
 ## 2026-10-05 — Unify member and loyalty discounts in POS reporting
 
 - Agent: Codex
