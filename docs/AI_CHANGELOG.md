@@ -15,6 +15,16 @@ Add new entries at the top using this template:
 - Follow-up: none, or exact remaining work
 ```
 
+## 2026-10-05 — Keep loyalty and payment on SUNMI only
+
+- Agent: Codex
+- Scope: customer QR menu, Crew bill requests, SUNMI checkout, legacy customer-loyalty RPC permissions, and Android release
+- Decision: customer phones can order only; Crew can manage orders and request a bill; member lookup/signup, reward selection and payment render only in the native SUNMI app; point redemption and earning remain finalized atomically after successful payment
+- Verification: dedicated terminal-only loyalty guard, full regression suite, web build, and Android build
+- Git: `codex/loyalty-terminal-safety`; see the commits containing this entry
+- Delivery: pending merge, Lovable publish, production migration, and Android v1.1.82 release
+- Follow-up: verify the published customer QR, Crew, and updated SUNMI flows
+
 ## 2026-10-05 — Complete fully collected loyalty Bills safely
 
 - Agent: Codex

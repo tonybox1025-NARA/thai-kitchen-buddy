@@ -21,8 +21,39 @@ import { publicBaseUrl } from "@/lib/public-url";
 import { toast } from "sonner";
 import { isPhoneSearch, normalizePhone } from "@/lib/phone";
 import { localizeError } from "@/lib/localized-error";
+import { isNativeApp } from "@/lib/print/native-printer";
 
-export const Route = createFileRoute("/_app/payment/$billId")({ component: PaymentPage });
+export const Route = createFileRoute("/_app/payment/$billId")({ component: NativePaymentRoute });
+
+function NativePaymentRoute() {
+  const { lang } = useI18n();
+  if (isNativeApp()) return <PaymentPage />;
+
+  return (
+    <div className="mx-auto flex min-h-[70vh] max-w-xl items-center px-4 py-10">
+      <Card className="w-full">
+        <CardHeader>
+          <CardTitle>
+            {lang === "th" ? "ชำระเงินที่เครื่อง SUNMI POS" : "Checkout on the SUNMI POS"}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <p className="text-muted-foreground">
+            {lang === "th"
+              ? "การค้นหาสมาชิก การใช้แต้ม และการชำระเงิน ใช้ได้เฉพาะเครื่อง SUNMI POS เพื่อป้องกันยอดเงินและแต้มผิดพลาด"
+              : "Member lookup, point redemption and payment are available only on the SUNMI POS to protect payment and loyalty balances."}
+          </p>
+          <Button asChild className="w-full">
+            <Link to="/pos">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              {lang === "th" ? "กลับไปหน้าโต๊ะ" : "Back to tables"}
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 // Loyalty redemption coupon tiers (shop rule): fixed points → baht discount.
 const REDEEM_TIERS = [

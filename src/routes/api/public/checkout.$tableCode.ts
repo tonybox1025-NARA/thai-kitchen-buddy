@@ -3,16 +3,6 @@ import { createClient } from "@supabase/supabase-js";
 import { createFileRoute } from "@tanstack/react-router";
 import type { Database } from "@/integrations/supabase/types";
 import { z } from "zod";
-import { normalizePhone } from "@/lib/phone";
-
-const REWARD_TIERS = [
-  { points: 500, baht: 25 },
-  { points: 1000, baht: 50 },
-  { points: 2000, baht: 100 },
-  { points: 5000, baht: 300 },
-  { points: 10000, baht: 600 },
-  { points: 15000, baht: 1000 },
-] as const;
 
 function client() {
   const url = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
@@ -26,46 +16,9 @@ function client() {
   });
 }
 
-const Body = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("request_bill") }),
-  z.object({
-    action: z.literal("link_member_phone"),
-    guest_token: z.string().min(20).max(120),
-    phone: z.string().trim().min(8).max(24),
-  }),
-  z.object({
-    action: z.literal("register_member"),
-    guest_token: z.string().min(20).max(120),
-    full_name: z.string().trim().min(1).max(120),
-    phone: z.string().trim().min(8).max(24),
-  }),
-  z.object({
-    action: z.literal("reserve_reward"),
-    guest_token: z.string().min(20).max(120),
-    points: z.number().int().min(0),
-  }),
-]);
-
-async function findActiveMembersByPhone(sb: any, wantedPhone: string) {
-  const matches: any[] = [];
-  const pageSize = 1000;
-  for (let from = 0; ; from += pageSize) {
-    const { data: page, error } = await sb
-      .from("members")
-      .select("id,full_name,nickname,current_points,phone,guest_token,status,imported_from")
-      .eq("status", "active")
-      .not("phone", "is", null)
-      .order("id", { ascending: true })
-      .range(from, from + pageSize - 1);
-    if (error) return { matches: [], error };
-    const rows = page ?? [];
-    matches.push(...rows.filter(
-      (member: { phone?: string | null }) => normalizePhone(member.phone) === wantedPhone,
-    ));
-    if (rows.length < pageSize) break;
-  }
-  return { matches, error: null };
-}
+// Public table devices can only ask staff to bring the bill. Member lookup,
+// registration, rewards and every payment action belong to the SUNMI checkout.
+const Body = z.object({ action: z.literal("request_bill") });
 
 async function tableOrder(sb: ReturnType<typeof client>, tableCode: string, orderId?: string | null) {
   if (!sb) return null;
@@ -135,34 +88,15 @@ export const Route = createFileRoute("/api/public/checkout/$tableCode")({
         const sb = client();
         if (!sb) return new Response("Checkout is temporarily unavailable", { status: 503 });
         const found = await tableOrder(sb, params.tableCode, new URL(request.url).searchParams.get("order_id"));
-        if (!found?.order) return Response.json({ order: null, rewards: REWARD_TIERS });
+        if (!found?.order) return Response.json({ order: null });
         const bill = await ensureBill(sb, found.order);
-        const guestToken = new URL(request.url).searchParams.get("guest_token");
-        let member = null;
-        if (guestToken && guestToken.length >= 20) {
-          const result = await (sb as any)
-            .from("members")
-            .select("id,full_name,nickname,current_points,phone,line_user_id,imported_from")
-            .eq("guest_token", guestToken)
-            .eq("status", "active")
-            .maybeSingle();
-          member = result.data ?? null;
-        }
         return Response.json({
           order: { id: found.order.id, checkout_requested_at: found.order.checkout_requested_at },
           bill: {
             id: bill.id,
             subtotal: Number(bill.subtotal),
-            points: Number((bill as any).points_redeemed ?? 0),
-            discount: Number((bill as any).loyalty_discount_amount ?? 0),
-            total: Math.max(
-              0,
-              Number(bill.subtotal) - Number((bill as any).loyalty_discount_amount ?? 0),
-            ),
-            member_id: (bill as any).member_id ?? null,
+            total: Number(bill.total),
           },
-          member,
-          rewards: REWARD_TIERS,
         });
       },
 
@@ -176,155 +110,25 @@ export const Route = createFileRoute("/api/public/checkout/$tableCode")({
           return Response.json({ error: "Invalid JSON" }, { status: 400 });
         }
         const parsed = Body.safeParse(raw);
-        if (!parsed.success)
-          return Response.json({ error: parsed.error.flatten() }, { status: 400 });
+        if (!parsed.success) {
+          return Response.json(
+            { error: "Member, loyalty and payment actions are available only at the SUNMI POS" },
+            { status: 403 },
+          );
+        }
         const found = await tableOrder(sb, params.tableCode, new URL(request.url).searchParams.get("order_id"));
         if (!found?.order) return Response.json({ error: "No open order" }, { status: 404 });
         const bill = await ensureBill(sb, found.order);
-
-        if (parsed.data.action === "request_bill") {
-          const now = new Date().toISOString();
-          await (sb as any)
-            .from("orders")
-            .update({ checkout_requested_at: now })
-            .eq("id", found.order.id);
-          await sb
-            .from("restaurant_tables")
-            .update({ status: "bill_requested" })
-            .eq("id", found.table.id);
-          return Response.json({ ok: true, bill_id: bill.id, requested_at: now });
-        }
-
-        if (parsed.data.action === "link_member_phone") {
-          const wantedPhone = normalizePhone(parsed.data.phone);
-          if (wantedPhone.length < 9) {
-            return Response.json({ error: "Please enter a valid phone number" }, { status: 400 });
-          }
-
-          const { matches, error: memberError } = await findActiveMembersByPhone(sb as any, wantedPhone);
-          if (memberError) return Response.json({ error: memberError.message }, { status: 500 });
-          if (matches.length !== 1) {
-            return Response.json(
-              {
-                error:
-                  matches.length === 0
-                    ? "Member not found"
-                    : "Duplicate phone records need staff review",
-              },
-              { status: matches.length === 0 ? 404 : 409 },
-            );
-          }
-
-          const target = matches[0];
-          const { data: current } = await (sb as any)
-            .from("members")
-            .select("id,current_points,guest_token,imported_from")
-            .eq("guest_token", parsed.data.guest_token)
-            .maybeSingle();
-
-          if (current && current.id !== target.id) {
-            const { count: ledgerCount } = await (sb as any)
-              .from("member_point_ledger")
-              .select("id", { count: "exact", head: true })
-              .eq("member_id", current.id);
-            if (Number(current.current_points ?? 0) !== 0 || Number(ledgerCount ?? 0) !== 0) {
-              return Response.json(
-                { error: "This phone already has wallet activity. Ask staff to merge it safely." },
-                { status: 409 },
-              );
-            }
-            const { error: deleteError } = await (sb as any)
-              .from("members")
-              .delete()
-              .eq("id", current.id);
-            if (deleteError) return Response.json({ error: deleteError.message }, { status: 500 });
-          }
-
-          const { data: linked, error: linkError } = await (sb as any)
-            .from("members")
-            .update({ guest_token: parsed.data.guest_token, updated_at: new Date().toISOString() })
-            .eq("id", target.id)
-            .select("id,full_name,nickname,current_points,phone,imported_from")
-            .single();
-          if (linkError) return Response.json({ error: linkError.message }, { status: 500 });
-          return Response.json({ ok: true, member: linked });
-        }
-
-        if (parsed.data.action === "register_member") {
-          const wantedPhone = normalizePhone(parsed.data.phone);
-          if (wantedPhone.length < 9) {
-            return Response.json({ error: "Please enter a valid phone number" }, { status: 400 });
-          }
-          const { data: current } = await (sb as any)
-            .from("members")
-            .select("id,current_points,guest_token,imported_from")
-            .eq("guest_token", parsed.data.guest_token)
-            .maybeSingle();
-          if (current) {
-            const { count: ledgerCount } = await (sb as any)
-              .from("member_point_ledger")
-              .select("id", { count: "exact", head: true })
-              .eq("member_id", current.id);
-            if (Number(current.current_points ?? 0) !== 0 || Number(ledgerCount ?? 0) !== 0) {
-              return Response.json(
-                { error: "This phone already has wallet activity. Ask staff to merge it safely." },
-                { status: 409 },
-              );
-            }
-          }
-          const { data: settings } = await sb
-            .from("settings")
-            .select("loyalty_signup_bonus")
-            .eq("id", 1)
-            .maybeSingle();
-          const { data: created, error: createError } = await (sb as any).rpc(
-            "create_or_get_member",
-            {
-              p_full_name: parsed.data.full_name,
-              p_nickname: null,
-              p_phone: wantedPhone,
-              p_signup_points: Math.max(0, Math.floor(Number(settings?.loyalty_signup_bonus ?? 0))),
-              p_imported_from: "customer_checkout",
-              p_signup_description: "Signup bonus from customer checkout",
-            },
-          );
-          if (createError) return Response.json({ error: createError.message }, { status: 500 });
-          const memberId = created?.member_id;
-          if (!memberId)
-            return Response.json({ error: "Unable to create member" }, { status: 500 });
-          if (current && current.id !== memberId) {
-            const { error: deleteError } = await (sb as any)
-              .from("members")
-              .delete()
-              .eq("id", current.id);
-            if (deleteError) return Response.json({ error: deleteError.message }, { status: 500 });
-          }
-          const { data: member, error: linkError } = await (sb as any)
-            .from("members")
-            .update({ guest_token: parsed.data.guest_token, updated_at: new Date().toISOString() })
-            .eq("id", memberId)
-            .select("id,full_name,nickname,current_points,phone,imported_from")
-            .single();
-          if (linkError) return Response.json({ error: linkError.message }, { status: 500 });
-          return Response.json({ ok: true, created: Boolean(created.created), member });
-        }
-
-        const { data, error } = await (sb as any).rpc("reserve_customer_bill_loyalty", {
-          p_bill_id: bill.id,
-          p_guest_token: parsed.data.guest_token,
-          p_redeem_points: parsed.data.points,
-        });
-        if (error)
-          return Response.json(
-            { error: error.message },
-            { status: error.message.includes("Insufficient") ? 409 : 400 },
-          );
-        const result = Array.isArray(data) ? data[0] : data;
-        return Response.json({
-          ok: true,
-          reservation: result,
-          total: Math.max(0, Number(bill.subtotal) - Number(result.discount_amount)),
-        });
+        const now = new Date().toISOString();
+        await (sb as any)
+          .from("orders")
+          .update({ checkout_requested_at: now })
+          .eq("id", found.order.id);
+        await sb
+          .from("restaurant_tables")
+          .update({ status: "bill_requested" })
+          .eq("id", found.table.id);
+        return Response.json({ ok: true, bill_id: bill.id, requested_at: now });
       },
     },
   },

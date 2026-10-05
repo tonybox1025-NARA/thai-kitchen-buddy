@@ -24,8 +24,8 @@ android {
         applicationId "com.lonmoh.pos"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 83
-        versionName "1.1.81"
+        versionCode 84
+        versionName "1.1.82"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         // Only the CAP_SANDBOX build may speak plain http, so it can reach the
         // local Supabase. Production is pinned to false: everything it loads is
