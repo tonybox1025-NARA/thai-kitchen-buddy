@@ -76,6 +76,15 @@ export type ReceiptPayload = {
   promo?: string;
   address?: string;
   invoice_no?: string;
+  document_title?: string;
+  seller_legal_name_en?: string;
+  seller_tax_id?: string;
+  seller_branch?: string;
+  non_vat_notice?: string;
+  customer_name?: string;
+  customer_address?: string;
+  customer_tax_id?: string;
+  customer_branch?: string;
   table?: string;
   items?: ReceiptItem[];
   discountAmount?: number;
@@ -543,13 +552,25 @@ export async function buildReceipt(p: ReceiptPayload): Promise<Uint8Array> {
   }
 
   d.text(p.restaurant || "Restaurant", S.big, "center");
+  if (p.document_title) d.text(p.document_title, S.bold, "center");
+  if (p.seller_legal_name_en) d.text(p.seller_legal_name_en, S.small, "center");
   if (p.promo) d.text(p.promo, S.small, "center");
   if (p.address) d.text(p.address, S.small, "center");
+  if (p.seller_tax_id) d.text(`เลขประจำตัวผู้เสียภาษี ${p.seller_tax_id}`, S.small, "center");
+  if (p.seller_branch) d.text(p.seller_branch, S.small, "center");
+  if (p.non_vat_notice) d.text(p.non_vat_notice, S.small, "center");
   d.rule();
 
   d.text(`วันที่ ${fmtDate(now)}  เวลา ${fmtTime(now)}`, S.norm);
   if (p.invoice_no) d.text(`บิล ${p.invoice_no}`, S.norm);
   d.text(`โต๊ะ ${p.table ?? "-"}`, S.norm);
+  if (p.customer_name) {
+    d.rule();
+    d.text(`ลูกค้า ${p.customer_name}`, S.norm);
+    if (p.customer_address) d.text(`ที่อยู่ ${p.customer_address}`, S.small);
+    if (p.customer_tax_id) d.text(`เลขประจำตัวผู้เสียภาษี ${p.customer_tax_id}`, S.small);
+    if (p.customer_branch) d.text(p.customer_branch, S.small);
+  }
   d.rule();
 
   d.text("รายการ", S.bold);

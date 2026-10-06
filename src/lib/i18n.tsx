@@ -421,6 +421,7 @@ const dict: Dict = {
   available_toggle: { th: "พร้อมขาย", en: "Available" },
   printer_counter_ip: { th: "IP เครื่องพิมพ์เคาน์เตอร์", en: "Counter printer IP" },
   printer_kitchen_ip: { th: "IP เครื่องพิมพ์ครัว", en: "Kitchen printer IP" },
+  nav_receipts: { th: "ใบเสร็จ", en: "Receipts" },
   vat_mode: { th: "โหมดภาษี", en: "VAT mode" },
   vat_inclusive: { th: "รวมภาษีในราคา", en: "Tax-inclusive" },
   vat_exclusive: { th: "ภาษีแยกต่างหาก", en: "Tax-exclusive (7% line)" },
