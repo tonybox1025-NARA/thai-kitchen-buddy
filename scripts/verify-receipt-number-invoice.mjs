@@ -6,7 +6,10 @@ const reports = fs.readFileSync("src/routes/_app/reports.tsx", "utf8");
 
 const checks = [
   [migration.includes("ADD COLUMN IF NOT EXISTS receipt_number"), "receipt number column"],
-  [migration.includes("CREATE SEQUENCE IF NOT EXISTS public.receipt_number_seq"), "atomic number sequence"],
+  [migration.includes("CREATE TABLE IF NOT EXISTS public.receipt_number_counters"), "atomic daily counter table"],
+  [migration.includes("AT TIME ZONE 'Asia/Bangkok'"), "Bangkok receipt date"],
+  [migration.includes("'LM'"), "receipt prefix without separators"],
+  [migration.includes("lpad(v_daily_number::text, GREATEST(3"), "daily sequence padded from 001"],
   [migration.includes("assign_bill_receipt_number_trigger"), "paid-bill assignment trigger"],
   [migration.includes("bills_receipt_number_uidx"), "unique receipt number index"],
   [payment.includes("invoice_no: receiptNumber"), "printed receipt number"],
