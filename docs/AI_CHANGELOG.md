@@ -21,9 +21,9 @@ Add new entries at the top using this template:
 - Scope: paid Bills, counter receipts, Bill History search, reprint, and email handoff
 - Decision: assign one immutable `LM-########` number in PostgreSQL when a real Bill becomes paid; preserve the existing durable print path; allow all-history lookup by receipt number and prepare a complete receipt email in the device mail app
 - Verification: dedicated receipt workflow guard, full regression suite, production web build, and Android build
-- Git: `codex/receipt-number-invoice`; see the commits containing this entry
-- Delivery: pending PR, production migration, Lovable publish, Android release, and live verification
-- Follow-up: Thai Full Tax Invoice remains a separate feature because it requires customer legal name/address/Tax ID and the restaurant's statutory invoice rules
+- Git: PR #62, merge commit `7c5c5d13a495afdaac7e779496d6b49ffe07f83a`
+- Delivery: production migration applied and verified for 307 paid Bills with zero duplicate/missing numbers; Lovable production published and live assets verified; Android v1.1.83 released
+- Follow-up: install v1.1.83 on SUNMI and verify one new checkout, receipt-number search, reprint, and device email handoff; Thai Full Tax Invoice remains separate because it requires customer legal name/address/Tax ID and statutory invoice rules
 
 ## 2026-10-05 — Keep loyalty and payment on SUNMI only
 
