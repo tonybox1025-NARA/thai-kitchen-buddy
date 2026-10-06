@@ -71,7 +71,7 @@ import {
 } from "@/lib/print/sampleData";
 import { parseBuckets, isValidBucket, type QrTimeBucket } from "@/lib/qr-buckets";
 import { isNativeApp } from "@/lib/print/native-printer";
-import { AppUpdate, getLatestAppRelease, newerVersion, type GithubRelease } from "@/lib/app-update";
+import { AppUpdate, findPosApk, getLatestAppRelease, newerVersion, type GithubRelease } from "@/lib/app-update";
 import { ManagerPinDialog } from "@/components/ManagerPinDialog";
 import { useAuth } from "@/lib/auth";
 // qrcode is dynamically imported inside QrCodesTab to avoid Node deps at SSR module-eval
@@ -322,7 +322,7 @@ function AppUpdateTab() {
     }
   };
 
-  const posApk = release?.assets.find((asset) => /^Lonmoh-POS-.*\.apk$/i.test(asset.name));
+  const posApk = findPosApk(release);
   const bridgeApk = release?.assets.find((asset) =>
     /^Lonmoh-Print-Bridge-.*\.apk$/i.test(asset.name),
   );
@@ -371,6 +371,11 @@ function AppUpdateTab() {
               <Download className="mr-2 h-4 w-4" />
               {installing ? "Downloading…" : "Update POS"}
             </Button>
+          )}
+          {updateAvailable && !posApk && (
+            <p className="self-center text-sm font-medium text-red-600">
+              POS update file is missing from this release. Please contact a manager.
+            </p>
           )}
           {bridgeApk && (
             <Button
