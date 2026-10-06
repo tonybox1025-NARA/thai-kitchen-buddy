@@ -20,9 +20,9 @@ Add new entries at the top using this template:
 - Agent: Codex
 - Scope: paid Bill receipt-number allocation, historical receipt identifiers, Bill History example, and Android release
 - Decision: use `LMYYYYMMDD001`; derive the date in Bangkok time, reset an atomic sequence to `001` each date, and omit all separators
-- Verification: dedicated receipt workflow guard, full regression suite, production web build, Android build, production database count/uniqueness/date checks, and live web verification
-- Git: branch `codex/private-date-receipt-id`; final commit recorded in Git history
-- Delivery: pending merge, database migration, Lovable publish, and Android release
+- Verification: dedicated receipt workflow guard, full regression suite, production web build, Android build, and production database verification: 308 eligible/numbered/distinct, zero invalid formats, zero Bangkok-date mismatches, and unchanged paid-Bill total `฿136,278.00`
+- Git: PR #64, merge commit `6c46e3d849a8fc7f031ce6594c68c2070499e904`
+- Delivery: production migration applied; Lovable production published and live `LM20261006001` example verified; Android v1.1.84 released
 - Follow-up: install the new Android release on SUNMI and verify the next paid receipt plus Bill History search/reprint
 
 ## 2026-10-06 — Add permanent receipt numbers and receipt retrieval
