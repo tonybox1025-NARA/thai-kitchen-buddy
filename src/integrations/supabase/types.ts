@@ -208,6 +208,7 @@ export type Database = {
           paid_at: string | null
           points_redeemed: number
           quarantined_at: string | null
+          receipt_number: string | null
           rounding_adjustment: number
           rounding_mode: string
           service_fee_amount: number
@@ -236,6 +237,7 @@ export type Database = {
           paid_at?: string | null
           points_redeemed?: number
           quarantined_at?: string | null
+          receipt_number?: string | null
           rounding_adjustment?: number
           rounding_mode?: string
           service_fee_amount?: number
@@ -264,6 +266,7 @@ export type Database = {
           paid_at?: string | null
           points_redeemed?: number
           quarantined_at?: string | null
+          receipt_number?: string | null
           rounding_adjustment?: number
           rounding_mode?: string
           service_fee_amount?: number

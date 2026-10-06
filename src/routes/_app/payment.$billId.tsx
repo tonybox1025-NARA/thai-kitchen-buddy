@@ -10,7 +10,7 @@ import { KeypadInput } from "@/components/KeypadInput";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { ArrowLeft, Banknote, QrCode, CreditCard, Printer, RotateCcw, PencilLine, Eye, Tag, X, Percent, DollarSign, Gift, Scissors, Check, Heart, Search, Split } from "lucide-react";
+import { ArrowLeft, Banknote, QrCode, CreditCard, Printer, RotateCcw, PencilLine, Eye, Tag, X, Percent, DollarSign, Gift, Scissors, Check, Heart, Search, Split, Mail } from "lucide-react";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -72,6 +72,7 @@ type Bill = {
   vat_mode: "inclusive" | "exclusive"; vat_rate: number;
   service_fee_rate: number; service_fee_amount: number; rounding_mode: RoundingMode; rounding_adjustment: number;
   vat_amount: number; total: number; status: string; paid_at: string | null; is_test: boolean;
+  receipt_number: string | null;
 };
 type Item = { id: string; name_th: string; name_en: string; qty: number; unit_price: number; status: string };
 type PaymentMethod = "qr" | "cash" | "card" | "gov_qr";
@@ -227,6 +228,8 @@ function PaymentPage() {
   const paymentBusyRef = useRef(false);
   const [paymentBusy, setPaymentBusy] = useState(false);
   const [reprintingReceipt, setReprintingReceipt] = useState(false);
+  const [emailReceiptOpen, setEmailReceiptOpen] = useState(false);
+  const [receiptEmail, setReceiptEmail] = useState("");
 
   // Refund
   const [refundOpen, setRefundOpen] = useState(false);
@@ -1000,6 +1003,13 @@ function PaymentPage() {
       : payments;
   };
 
+  const loadReceiptNumber = async (): Promise<string | null> => {
+    if (!bill) return null;
+    if (bill.receipt_number) return bill.receipt_number;
+    const { data } = await supabase.from("bills").select("receipt_number").eq("id", bill.id).maybeSingle();
+    return data?.receipt_number ?? null;
+  };
+
   const finalize = async (latestPayment?: Payment) => {
     if (!bill) return false;
     if (isOffline()) { toast.error(t("err_offline")); return false; }
@@ -1029,11 +1039,12 @@ function PaymentPage() {
     // Test tables must not touch real member points or issue loyalty claims.
     const loyaltyClaim = isTestBill ? null : await ensureLoyaltyClaim();
     const receiptPayments = await loadReceiptPayments(latestPayment);
+    const receiptNumber = await loadReceiptNumber();
     // Payment is already committed. The receipt is recorded under a key derived
     // from the bill, so retries/recovery never produce a second receipt.
     try {
     await printCounter({
-      kind: "receipt", bill_id: bill.id, restaurant: restName, table: tableCode,
+      kind: "receipt", bill_id: bill.id, invoice_no: receiptNumber ?? undefined, restaurant: restName, table: tableCode,
       logoUrl: receiptLogoUrl || undefined,
       address: receiptAddress || undefined,
       promo: receiptPromo || undefined,
@@ -1072,12 +1083,13 @@ function PaymentPage() {
   const enqueuePaidReceipt = async (jobKey: string) => {
     if (!bill) return;
     const receiptPayments = await loadReceiptPayments();
+    const receiptNumber = await loadReceiptNumber();
     // Resolve (or create) the claim before inserting the idempotent receipt
     // job. Otherwise recovery can win the job-key race with a QR-less payload.
     const loyaltyClaim = (bill as any).is_test === true ? null : await ensureLoyaltyClaim();
 
     await printCounter({
-      kind: "receipt", bill_id: bill.id, restaurant: restName, table: tableCode,
+      kind: "receipt", bill_id: bill.id, invoice_no: receiptNumber ?? undefined, restaurant: restName, table: tableCode,
       logoUrl: receiptLogoUrl || undefined,
       address: receiptAddress || undefined,
       promo: receiptPromo || undefined,
@@ -1130,6 +1142,33 @@ function PaymentPage() {
     } finally {
       setReprintingReceipt(false);
     }
+  };
+
+  const emailPaidReceipt = async () => {
+    if (!bill || !receiptEmail.trim()) return;
+    const email = receiptEmail.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast.error(lang === "th" ? "กรุณาใส่อีเมลที่ถูกต้อง" : "Enter a valid email address");
+      return;
+    }
+    const receiptNumber = await loadReceiptNumber();
+    const receiptPayments = await loadReceiptPayments();
+    const lines = [
+      restName,
+      `${lang === "th" ? "เลขที่ใบเสร็จ" : "Receipt number"}: ${receiptNumber ?? bill.id}`,
+      `${lang === "th" ? "โต๊ะ" : "Table"}: ${tableCode}`,
+      `${lang === "th" ? "วันที่" : "Date"}: ${new Date(bill.paid_at ?? Date.now()).toLocaleString(undefined, { timeZone: "Asia/Bangkok" })}`,
+      "",
+      ...items.map((item) => `${item.qty} x ${lang === "th" ? item.name_th : item.name_en} — ${thb(Number(item.qty) * Number(item.unit_price))}`),
+      "",
+      `${lang === "th" ? "ยอดรวม" : "Total"}: ${thb(Number(bill.total))}`,
+      ...receiptPayments.map((payment) => `${payment.method.toUpperCase()}: ${thb(Number(payment.amount))}`),
+      "",
+      lang === "th" ? "ขอบคุณค่ะ" : "Thank you",
+    ];
+    const subject = `${restName} ${lang === "th" ? "ใบเสร็จ" : "Receipt"} ${receiptNumber ?? ""}`.trim();
+    window.location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines.join("\n"))}`;
+    setEmailReceiptOpen(false);
   };
 
   const openCash = () => { setCashCount({}); setCashAmount(remaining); setCashOpen(true); };
@@ -1585,6 +1624,11 @@ function PaymentPage() {
             <div className="text-center py-4">
               <div className="text-3xl">✅</div>
               <div className="text-xl font-bold mt-2">{t("paid")}</div>
+              {bill.receipt_number && (
+                <div className="mt-1 font-mono text-sm text-muted-foreground">
+                  {lang === "th" ? "เลขที่ใบเสร็จ" : "Receipt"} {bill.receipt_number}
+                </div>
+              )}
               {appliedDiscount && (
                 <p className="text-sm text-green-600 dark:text-green-400 mt-1">
                   <Tag className="h-3.5 w-3.5 inline mr-1" />
@@ -1595,6 +1639,10 @@ function PaymentPage() {
             <Button className="w-full" onClick={reprintPaidReceipt} disabled={reprintingReceipt}>
               <Printer className="h-4 w-4 mr-2" />
               {reprintingReceipt ? (lang === "th" ? "กำลังพิมพ์…" : "Printing…") : (lang === "th" ? "พิมพ์ใบเสร็จซ้ำ" : "Reprint Receipt")}
+            </Button>
+            <Button variant="outline" className="w-full" onClick={() => setEmailReceiptOpen(true)}>
+              <Mail className="h-4 w-4 mr-2" />
+              {lang === "th" ? "ส่งใบเสร็จทางอีเมล" : "Email Receipt"}
             </Button>
             {canCorrect && (
               <Button variant="outline" className="w-full border-amber-400 text-amber-700 hover:bg-amber-50 dark:text-amber-400" onClick={openCorr}>
@@ -1614,6 +1662,27 @@ function PaymentPage() {
           </div>
         )}
       </aside>
+
+      <Dialog open={emailReceiptOpen} onOpenChange={setEmailReceiptOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{lang === "th" ? "ส่งใบเสร็จทางอีเมล" : "Email Receipt"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="receipt-email">{lang === "th" ? "อีเมลลูกค้า" : "Customer email"}</Label>
+            <Input id="receipt-email" type="email" value={receiptEmail}
+              onChange={(event) => setReceiptEmail(event.target.value)} placeholder="customer@example.com"
+              onKeyDown={(event) => { if (event.key === "Enter") void emailPaidReceipt(); }} />
+            <p className="text-xs text-muted-foreground">
+              {lang === "th" ? "ระบบจะเปิดแอปอีเมลพร้อมรายละเอียดใบเสร็จ กรุณาตรวจสอบแล้วกดส่ง" : "Your email app will open with the receipt details. Review it, then send."}
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEmailReceiptOpen(false)}>{lang === "th" ? "ยกเลิก" : "Cancel"}</Button>
+            <Button onClick={() => void emailPaidReceipt()}><Mail className="h-4 w-4 mr-2" />{lang === "th" ? "เปิดอีเมล" : "Open Email"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Discount dialog ──────────────────────────────────────────────────── */}
       <Dialog open={discDlgOpen} onOpenChange={setDiscDlgOpen}>
