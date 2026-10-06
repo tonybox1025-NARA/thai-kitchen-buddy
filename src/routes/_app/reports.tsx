@@ -18,7 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import type { DateRange } from "react-day-picker";
-import { PencilLine, ArrowRight, Download, XCircle, Printer } from "lucide-react";
+import { PencilLine, ArrowRight, Download, XCircle, Printer, Search } from "lucide-react";
 import { bucketizeQr, parseBuckets, type QrBucketTotal, type QrTimeBucket } from "@/lib/qr-buckets";
 import { canPrintDirect, enqueueDurablePrint, preparePayloadForOutbox, type CounterPrintPayload } from "@/lib/counter-printer";
 import { shiftIdsFor } from "@/lib/dash-range";
@@ -65,6 +65,7 @@ type AdjPay = {
 
 type BillRow = {
   id: string; paid_at: string; total: number;
+  receipt_number: string | null;
   table_code: string;
   payments: { method: string; amount: number }[];
 };
@@ -1734,6 +1735,7 @@ function BillHistoryTab() {
   const [bills, setBills] = useState<BillRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [receiptSearch, setReceiptSearch] = useState("");
 
   const getBounds = (): [Date, Date] | null => {
     if (range === "custom") {
@@ -1745,22 +1747,26 @@ function BillHistoryTab() {
     return histBounds(range);
   };
 
-  const load = async () => {
+  const load = async (searchOverride?: string) => {
     const bounds = getBounds();
     if (!bounds) return;
     setLoading(true);
     try {
-      const shiftIds = await shiftIdsFor(range, bounds);
-      if (!shiftIds.length) { setBills([]); setLoaded(true); return; }
+      const search = (searchOverride ?? receiptSearch).trim().toUpperCase();
+      const shiftIds = search ? [] : await shiftIdsFor(range, bounds);
+      if (!search && !shiftIds.length) { setBills([]); setLoaded(true); return; }
 
-      const { data: rawBills } = await supabase
+      let billsQuery = supabase
         .from("bills")
-        .select("id,total,paid_at,order_id")
+        .select("id,total,paid_at,order_id,receipt_number")
         .not("is_test", "is", true)
         .in("status", ["paid", "partial_refund", "refunded"])
-        .in("shift_id", shiftIds)
         .order("paid_at", { ascending: false })
         .limit(500);
+      billsQuery = search
+        ? billsQuery.ilike("receipt_number", `%${search}%`)
+        : billsQuery.in("shift_id", shiftIds);
+      const { data: rawBills } = await billsQuery;
 
       if (!rawBills?.length) { setBills([]); setLoaded(true); return; }
 
@@ -1784,6 +1790,7 @@ function BillHistoryTab() {
         const tableId = orderMap.get(b.order_id ?? "");
         return {
           id: b.id,
+          receipt_number: b.receipt_number,
           paid_at: b.paid_at ?? "",
           total: Number(b.total),
           table_code: tableId ? (tableMap.get(tableId) ?? "—") : "—",
@@ -1822,6 +1829,16 @@ function BillHistoryTab() {
       <HistoryRangeBar range={range} onRange={setRange} custom={custom} onCustom={setCustom}
         trailing={loaded ? <span className="ml-1 text-xs text-muted-foreground">{bills.length} bill{bills.length !== 1 ? "s" : ""}</span> : null} />
 
+      <div className="flex max-w-xl gap-2">
+        <Input value={receiptSearch} onChange={(event) => setReceiptSearch(event.target.value)}
+          placeholder="Receipt number (for example LM-00000123)"
+          onKeyDown={(event) => { if (event.key === "Enter") void load(); }} />
+        <Button variant="outline" onClick={() => void load()}>
+          <Search className="h-4 w-4 mr-2" />Search
+        </Button>
+        {receiptSearch && <Button variant="ghost" onClick={() => { setReceiptSearch(""); void load(""); }}>Clear</Button>}
+      </div>
+
       {loaded && (
         bills.length === 0 ? (
           <Card>
@@ -1839,6 +1856,7 @@ function BillHistoryTab() {
                     <div>{new Date(b.paid_at).toLocaleTimeString([], { timeZone: "Asia/Bangkok",  hour: "2-digit", minute: "2-digit" })}</div>
                   </div>
                   <span className="font-semibold text-sm shrink-0 w-10">{b.table_code}</span>
+                  <span className="font-mono text-xs shrink-0 w-28">{b.receipt_number ?? "—"}</span>
                   <span className="font-bold tabular-nums shrink-0 w-24 text-right">{thb(b.total)}</span>
                   <div className="flex gap-1 flex-wrap flex-1 min-w-0">
                     {b.payments.map((p, i) => (
