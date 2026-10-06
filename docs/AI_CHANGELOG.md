@@ -15,6 +15,16 @@ Add new entries at the top using this template:
 - Follow-up: none, or exact remaining work
 ```
 
+## 2026-10-06 — Use date-based receipt numbers without separators
+
+- Agent: Codex
+- Scope: paid Bill receipt-number allocation, historical receipt identifiers, Bill History example, and Android release
+- Decision: use `LMYYYYMMDD001`; derive the date in Bangkok time, reset an atomic sequence to `001` each date, and omit all separators
+- Verification: dedicated receipt workflow guard, full regression suite, production web build, Android build, production database count/uniqueness/date checks, and live web verification
+- Git: branch `codex/private-date-receipt-id`; final commit recorded in Git history
+- Delivery: pending merge, database migration, Lovable publish, and Android release
+- Follow-up: install the new Android release on SUNMI and verify the next paid receipt plus Bill History search/reprint
+
 ## 2026-10-06 — Add permanent receipt numbers and receipt retrieval
 
 - Agent: Codex

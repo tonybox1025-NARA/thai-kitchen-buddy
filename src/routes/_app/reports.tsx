@@ -1831,7 +1831,7 @@ function BillHistoryTab() {
 
       <div className="flex max-w-xl gap-2">
         <Input value={receiptSearch} onChange={(event) => setReceiptSearch(event.target.value)}
-          placeholder="Receipt number (for example LM-00000123)"
+          placeholder="Receipt number (for example LM20261006001)"
           onKeyDown={(event) => { if (event.key === "Enter") void load(); }} />
         <Button variant="outline" onClick={() => void load()}>
           <Search className="h-4 w-4 mr-2" />Search

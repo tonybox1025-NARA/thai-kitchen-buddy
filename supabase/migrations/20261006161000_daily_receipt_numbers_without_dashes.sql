@@ -1,7 +1,5 @@
--- Every real paid bill receives one immutable, searchable receipt number.
--- Format: LM + Bangkok payment date + daily sequence, with no separators.
-
-ALTER TABLE public.bills ADD COLUMN IF NOT EXISTS receipt_number text;
+-- Convert the first receipt-number release to LMYYYYMMDD001 format.
+-- This changes receipt identifiers only; sales, payments, loyalty, orders, and shifts are untouched.
 
 CREATE TABLE IF NOT EXISTS public.receipt_number_counters (
   receipt_date date PRIMARY KEY,
@@ -35,12 +33,10 @@ BEGIN
 END;
 $$;
 
-DROP TRIGGER IF EXISTS assign_bill_receipt_number_trigger ON public.bills;
-CREATE TRIGGER assign_bill_receipt_number_trigger
-BEFORE INSERT OR UPDATE OF status ON public.bills
-FOR EACH ROW EXECUTE FUNCTION public.assign_bill_receipt_number();
+-- Renumber the just-introduced identifiers deterministically by Bangkok payment date.
+-- Block checkout writes briefly so no paid Bill can miss the one-time conversion.
+LOCK TABLE public.bills IN SHARE ROW EXCLUSIVE MODE;
 
--- Historical numbering changes no amount, payment, loyalty, order, or shift data.
 WITH numbered AS (
   SELECT
     id,
@@ -52,7 +48,6 @@ WITH numbered AS (
   FROM public.bills
   WHERE status IN ('paid', 'partial_refund', 'refunded')
     AND NOT COALESCE(is_test, false)
-    AND receipt_number IS NULL
 )
 UPDATE public.bills b
 SET receipt_number = 'LM'
@@ -61,20 +56,17 @@ SET receipt_number = 'LM'
 FROM numbered
 WHERE b.id = numbered.id;
 
+TRUNCATE TABLE public.receipt_number_counters;
+
 INSERT INTO public.receipt_number_counters(receipt_date, last_value)
 SELECT
   to_date(substring(receipt_number FROM 3 FOR 8), 'YYYYMMDD'),
   max(substring(receipt_number FROM 11)::integer)
 FROM public.bills
 WHERE receipt_number ~ '^LM[0-9]{11,}$'
-GROUP BY 1
-ON CONFLICT (receipt_date) DO UPDATE
-SET last_value = EXCLUDED.last_value;
+GROUP BY 1;
 
-CREATE UNIQUE INDEX IF NOT EXISTS bills_receipt_number_uidx
-  ON public.bills(receipt_number) WHERE receipt_number IS NOT NULL;
-CREATE INDEX IF NOT EXISTS bills_receipt_number_search_idx
-  ON public.bills(receipt_number text_pattern_ops) WHERE receipt_number IS NOT NULL;
+DROP SEQUENCE IF EXISTS public.receipt_number_seq;
 
 COMMENT ON COLUMN public.bills.receipt_number IS
   'Immutable customer receipt number: LM + Bangkok payment date + daily sequence.';
