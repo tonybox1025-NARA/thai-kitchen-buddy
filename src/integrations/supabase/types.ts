@@ -1700,6 +1700,99 @@ export type Database = {
         }
         Relationships: []
       }
+      receipt_documents: {
+        Row: {
+          bill_id: string
+          created_at: string
+          customer_address: string
+          customer_branch_label: string | null
+          customer_branch_number: string | null
+          customer_email: string | null
+          customer_name: string
+          customer_phone: string | null
+          customer_tax_id: string | null
+          customer_type: string
+          document_kind: string
+          id: string
+          issued_at: string
+          issued_by: string | null
+          receipt_number: string
+          seller_address: string
+          seller_branch_label: string
+          seller_branch_number: string
+          seller_legal_name_en: string
+          seller_legal_name_th: string
+          seller_tax_id: string
+          seller_vat_registered: boolean
+          updated_at: string
+        }
+        Insert: {
+          bill_id: string
+          created_at?: string
+          customer_address: string
+          customer_branch_label?: string | null
+          customer_branch_number?: string | null
+          customer_email?: string | null
+          customer_name: string
+          customer_phone?: string | null
+          customer_tax_id?: string | null
+          customer_type?: string
+          document_kind?: string
+          id?: string
+          issued_at?: string
+          issued_by?: string | null
+          receipt_number: string
+          seller_address: string
+          seller_branch_label: string
+          seller_branch_number: string
+          seller_legal_name_en: string
+          seller_legal_name_th: string
+          seller_tax_id: string
+          seller_vat_registered?: boolean
+          updated_at?: string
+        }
+        Update: {
+          bill_id?: string
+          created_at?: string
+          customer_address?: string
+          customer_branch_label?: string | null
+          customer_branch_number?: string | null
+          customer_email?: string | null
+          customer_name?: string
+          customer_phone?: string | null
+          customer_tax_id?: string | null
+          customer_type?: string
+          document_kind?: string
+          id?: string
+          issued_at?: string
+          issued_by?: string | null
+          receipt_number?: string
+          seller_address?: string
+          seller_branch_label?: string
+          seller_branch_number?: string
+          seller_legal_name_en?: string
+          seller_legal_name_th?: string
+          seller_tax_id?: string
+          seller_vat_registered?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "receipt_documents_bill_id_fkey"
+            columns: ["bill_id"]
+            isOneToOne: true
+            referencedRelation: "bills"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "receipt_documents_issued_by_fkey"
+            columns: ["issued_by"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       refund_items: {
         Row: {
           created_at: string
@@ -1861,6 +1954,9 @@ export type Database = {
       settings: {
         Row: {
           address: string | null
+          business_branch_label: string | null
+          business_branch_number: string | null
+          business_tax_id: string | null
           current_business_day: string
           gov_qr_customer_percent: number
           gov_qr_enabled: boolean
@@ -1871,6 +1967,8 @@ export type Database = {
           loyalty_points_expire_months: number
           loyalty_points_per_baht: number
           loyalty_signup_bonus: number
+          legal_name_en: string | null
+          legal_name_th: string | null
           max_discount_percent: number
           printer_counter_ip: string | null
           printer_kitchen_ip: string | null
@@ -1883,11 +1981,15 @@ export type Database = {
           starting_cash: number
           updated_at: string
           vat_enabled: boolean
+          vat_registered: boolean
           vat_mode: Database["public"]["Enums"]["vat_mode"]
           vat_rate: number
         }
         Insert: {
           address?: string | null
+          business_branch_label?: string | null
+          business_branch_number?: string | null
+          business_tax_id?: string | null
           current_business_day?: string
           gov_qr_customer_percent?: number
           gov_qr_enabled?: boolean
@@ -1898,6 +2000,8 @@ export type Database = {
           loyalty_points_expire_months?: number
           loyalty_points_per_baht?: number
           loyalty_signup_bonus?: number
+          legal_name_en?: string | null
+          legal_name_th?: string | null
           max_discount_percent?: number
           printer_counter_ip?: string | null
           printer_kitchen_ip?: string | null
@@ -1910,11 +2014,15 @@ export type Database = {
           starting_cash?: number
           updated_at?: string
           vat_enabled?: boolean
+          vat_registered?: boolean
           vat_mode?: Database["public"]["Enums"]["vat_mode"]
           vat_rate?: number
         }
         Update: {
           address?: string | null
+          business_branch_label?: string | null
+          business_branch_number?: string | null
+          business_tax_id?: string | null
           current_business_day?: string
           gov_qr_customer_percent?: number
           gov_qr_enabled?: boolean
@@ -1925,6 +2033,8 @@ export type Database = {
           loyalty_points_expire_months?: number
           loyalty_points_per_baht?: number
           loyalty_signup_bonus?: number
+          legal_name_en?: string | null
+          legal_name_th?: string | null
           max_discount_percent?: number
           printer_counter_ip?: string | null
           printer_kitchen_ip?: string | null
@@ -1937,6 +2047,7 @@ export type Database = {
           starting_cash?: number
           updated_at?: string
           vat_enabled?: boolean
+          vat_registered?: boolean
           vat_mode?: Database["public"]["Enums"]["vat_mode"]
           vat_rate?: number
         }

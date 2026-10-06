@@ -15,6 +15,16 @@ Add new entries at the top using this template:
 - Follow-up: none, or exact remaining work
 ```
 
+## 2026-10-07 — Add searchable customer receipt documents
+
+- Agent: Codex
+- Scope: receipt search page, customer and seller receipt records, counter reprint, A4 print/PDF save, navigation, database policy, and Android release
+- Decision: reuse each paid Bill's immutable `LMYYYYMMDD001` number; issue only `ใบเสร็จรับเงิน / RECEIPT` while ABOUT TIME CO., LTD. is not VAT registered; lock seller details and let staff enter only customer details
+- Verification: dedicated customer-receipt guard, changed-file lint, full regression suite, and production web build
+- Git: `codex/customer-receipt-documents`; see the commit containing this entry
+- Delivery: pending merge, production migration, Lovable publish, live verification, and Android v1.1.86 release
+- Follow-up: verify one real LM lookup, customer-data save, counter print, and Print / Save PDF after publishing
+
 ## 2026-10-07 — Keep the Android update action visible
 
 - Agent: Codex
