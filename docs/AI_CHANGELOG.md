@@ -15,6 +15,16 @@ Add new entries at the top using this template:
 - Follow-up: none, or exact remaining work
 ```
 
+## 2026-10-07 — Keep the Android update action visible
+
+- Agent: Codex
+- Scope: GitHub Android release asset, in-app update APK discovery, missing-package feedback, and Android release
+- Decision: publish POS APKs as `LONMOH-POS-vX.Y.Z.apk`; also accept exactly one non-Print-Bridge APK so a harmless upload filename mismatch cannot hide the update button
+- Verification: dedicated updater regression guard, full regression suite, production web build, Android build, GitHub release asset inspection, and SUNMI action availability to be confirmed after install
+- Git: branch `codex/fix-update-and-invoice`; final commit recorded in Git history
+- Delivery: v1.1.84 release asset repaired immediately; hardened v1.1.85 pending merge, publish, and release
+- Follow-up: on SUNMI, tap Check for updates and install v1.1.85; verify the Android installer opens
+
 ## 2026-10-06 — Use date-based receipt numbers without separators
 
 - Agent: Codex

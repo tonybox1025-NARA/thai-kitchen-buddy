@@ -19,6 +19,19 @@ export type GithubRelease = {
   assets: { name: string; browser_download_url: string }[];
 };
 
+export function findPosApk(release: GithubRelease | null): GithubRelease["assets"][number] | undefined {
+  if (!release) return undefined;
+  const named = release.assets.find((asset) => /^LONMOH-POS-.*\.apk$/i.test(asset.name));
+  if (named) return named;
+
+  // A release upload can retain a local build filename such as app-debug.apk.
+  // If there is exactly one APK that is not the Print Bridge, it is the POS update.
+  const candidates = release.assets.filter(
+    (asset) => asset.name.toLowerCase().endsWith(".apk") && !/print[-_ ]?bridge/i.test(asset.name),
+  );
+  return candidates.length === 1 ? candidates[0] : undefined;
+}
+
 const RELEASE_URL = "https://api.github.com/repos/tonybox1025-NARA/thai-kitchen-buddy/releases/latest";
 
 export async function getLatestAppRelease(): Promise<GithubRelease> {
