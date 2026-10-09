@@ -22,7 +22,7 @@ Add new entries at the top using this template:
 - Decision: show the Bangkok business day as a large bilingual `SALES DATE / วันที่ขาย` value, while labeling the later timestamp explicitly as `CLOSED / ปิดกะ`, so an after-midnight close cannot be mistaken for the sales date
 - Verification: dedicated Z report header guard, full regression suite, and production build
 - Git: `codex/emphasize-z-business-day`; see the commit containing this entry
-- Delivery: pending merge, Lovable publish, Android release, and SUNMI physical-print verification
+- Delivery: PR #72 merged and Lovable production published; Android v1.1.88 release prepared for the SUNMI update; physical-print verification remains pending
 - Follow-up: print one Z report on SUNMI and confirm the date hierarchy on paper
 
 ## 2026-10-09 — Simplify the customer receipt layout
