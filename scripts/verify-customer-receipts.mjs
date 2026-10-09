@@ -23,10 +23,25 @@ const checks = [
     page.includes('.eq("receipt_number", receiptNumber)'),
     "exact all-history receipt-number search",
   ],
-  [page.includes("NOT A TAX INVOICE"), "non-VAT notice"],
+  [
+    !page.includes('<div class="notice">') && !page.includes("non_vat_notice:"),
+    "customer print omits the internal non-VAT notice",
+  ],
+  [
+    page.includes("เลขที่ใบเสร็จรับเงิน / Receipt No."),
+    "PDF uses the full receipt-number label",
+  ],
   [page.includes("Print / Save PDF"), "print and PDF-save workflow"],
   [page.includes("formal-receipt:"), "durable counter reprint key"],
-  [raster.includes("customer_address"), "customer details on counter receipt"],
+  [
+    raster.includes("เลขที่ใบเสร็จรับเงิน ${p.invoice_no}") &&
+      !raster.includes("if (p.non_vat_notice)"),
+    "counter receipt number label and hidden internal notice",
+  ],
+  [
+    raster.indexOf("if (p.customer_tax_id)") < raster.indexOf("if (p.customer_address)"),
+    "customer Tax ID appears between customer name and address",
+  ],
   [navigation.includes('{ to: "/receipts"'), "top-level receipt navigation"],
 ];
 

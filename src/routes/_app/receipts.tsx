@@ -147,7 +147,7 @@ function receiptHtml(data: LoadedReceipt, buyer: BuyerForm) {
   <style>
     @page{size:A4;margin:16mm}*{box-sizing:border-box}body{margin:0;color:#111;font-family:Arial,"Noto Sans Thai",sans-serif;font-size:13px}
     .page{max-width:180mm;margin:auto}.center{text-align:center}.title{font-size:22px;font-weight:800;margin:10px 0 4px}.legal{font-size:16px;font-weight:700}
-    .muted{color:#555}.notice{margin:12px 0;padding:8px;border:1px solid #777;text-align:center;font-weight:700}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:16px 0}
+    .muted{color:#555}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:16px 0}
     .box{border:1px solid #bbb;border-radius:6px;padding:10px;min-height:100px}.box h3{margin:0 0 7px;font-size:13px}.line{display:flex;justify-content:space-between;gap:12px;margin:4px 0}
     table{width:100%;border-collapse:collapse;margin-top:12px}th,td{border-bottom:1px solid #ccc;padding:7px 5px;text-align:left}.num{text-align:right;white-space:nowrap}.note{font-size:11px;color:#555}
     .totals{margin:12px 0 0 auto;width:76mm}.total{font-size:17px;font-weight:800;border-top:2px solid #111;padding-top:7px}.footer{margin-top:28px;text-align:center}.no-print{margin:18px 0;text-align:center}
@@ -155,12 +155,11 @@ function receiptHtml(data: LoadedReceipt, buyer: BuyerForm) {
   </style></head><body><div class="page">
     <div class="center"><div class="title">ใบเสร็จรับเงิน / RECEIPT</div><div class="legal">${escapeHtml(seller.legal_name_th)}</div><div class="legal">${escapeHtml(seller.legal_name_en)}</div>
     <div>${escapeHtml(seller.address)}</div><div>เลขประจำตัวผู้เสียภาษี / Tax ID: ${escapeHtml(seller.business_tax_id)}</div><div>${escapeHtml(seller.business_branch_label)} — ${escapeHtml(seller.business_branch_number)}</div></div>
-    <div class="notice">ยังไม่ได้จดทะเบียน VAT — เอกสารนี้เป็นใบเสร็จรับเงิน ไม่ใช่ใบกำกับภาษี<br>NOT VAT REGISTERED — THIS RECEIPT IS NOT A TAX INVOICE</div>
-    <div class="grid"><div class="box"><h3>ข้อมูลลูกค้า / CUSTOMER</h3><div><b>${escapeHtml(buyer.customer_name)}</b></div><div>${escapeHtml(buyer.customer_address)}</div>
-      ${buyer.customer_tax_id ? `<div>Tax ID: ${escapeHtml(buyer.customer_tax_id)}</div>` : ""}
+    <div class="grid"><div class="box"><h3>ข้อมูลลูกค้า / CUSTOMER</h3><div><b>${escapeHtml(buyer.customer_name)}</b></div>
+      ${buyer.customer_tax_id ? `<div>เลขประจำตัวผู้เสียภาษี / Tax ID: ${escapeHtml(buyer.customer_tax_id)}</div>` : ""}<div>${escapeHtml(buyer.customer_address)}</div>
       ${buyer.customer_type === "company" ? `<div>${escapeHtml(buyer.customer_branch_label)} ${escapeHtml(buyer.customer_branch_number)}</div>` : ""}
       ${buyer.customer_email ? `<div>Email: ${escapeHtml(buyer.customer_email)}</div>` : ""}${buyer.customer_phone ? `<div>Tel: ${escapeHtml(buyer.customer_phone)}</div>` : ""}</div>
-    <div class="box"><h3>รายละเอียดใบเสร็จ / RECEIPT DETAILS</h3><div class="line"><span>เลขที่ / No.</span><b>${escapeHtml(bill.receipt_number)}</b></div>
+    <div class="box"><h3>รายละเอียดใบเสร็จ / RECEIPT DETAILS</h3><div class="line"><span>เลขที่ใบเสร็จรับเงิน / Receipt No.</span><b>${escapeHtml(bill.receipt_number)}</b></div>
       <div class="line"><span>วันที่ / Date</span><span>${escapeHtml(new Date(bill.paid_at).toLocaleString("en-GB", { timeZone: "Asia/Bangkok" }))}</span></div>
       <div class="line"><span>โต๊ะ / Table</span><span>${escapeHtml(data.table)}</span></div></div></div>
     <table><thead><tr><th>รายการ / Description</th><th class="num">จำนวน / Qty</th><th class="num">ราคา / Price</th><th class="num">รวม / Amount</th></tr></thead><tbody>${rows}</tbody></table>
@@ -373,7 +372,6 @@ function ReceiptsPage() {
           address: data.seller.address,
           seller_tax_id: data.seller.business_tax_id,
           seller_branch: `${data.seller.business_branch_label} — ${data.seller.business_branch_number}`,
-          non_vat_notice: "ไม่ใช่ใบกำกับภาษี / NOT A TAX INVOICE",
           customer_name: buyer.customer_name,
           customer_address: buyer.customer_address,
           customer_tax_id: buyer.customer_tax_id || undefined,
