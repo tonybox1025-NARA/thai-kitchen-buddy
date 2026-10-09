@@ -15,6 +15,16 @@ Add new entries at the top using this template:
 - Follow-up: none, or exact remaining work
 ```
 
+## 2026-10-09 — Simplify the customer receipt layout
+
+- Agent: Codex
+- Scope: SUNMI counter receipt, printable/PDF receipt, receipt regression guard, and Android release
+- Decision: remove the customer-facing non-VAT disclaimer, label the LM identifier as `เลขที่ใบเสร็จรับเงิน`, and place the customer's Tax ID between the customer name and address
+- Verification: customer-receipt regression guard, full regression suite, and production build
+- Git: `codex/customer-receipt-layout-20261009`; see the commit containing this entry
+- Delivery: pending merge, Lovable publish, Android v1.1.87 release, and SUNMI real-print verification
+- Follow-up: print one customer receipt on SUNMI and confirm the physical layout
+
 ## 2026-10-07 — Add searchable customer receipt documents
 
 - Agent: Codex
