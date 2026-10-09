@@ -15,6 +15,16 @@ Add new entries at the top using this template:
 - Follow-up: none, or exact remaining work
 ```
 
+## 2026-10-09 — Emphasize the Z report sales date
+
+- Agent: Codex
+- Scope: printed Z report header and regression guard
+- Decision: show the Bangkok business day as a large bilingual `SALES DATE / วันที่ขาย` value, while labeling the later timestamp explicitly as `CLOSED / ปิดกะ`, so an after-midnight close cannot be mistaken for the sales date
+- Verification: dedicated Z report header guard, full regression suite, and production build
+- Git: `codex/emphasize-z-business-day`; see the commit containing this entry
+- Delivery: pending merge, Lovable publish, Android release, and SUNMI physical-print verification
+- Follow-up: print one Z report on SUNMI and confirm the date hierarchy on paper
+
 ## 2026-10-09 — Simplify the customer receipt layout
 
 - Agent: Codex
