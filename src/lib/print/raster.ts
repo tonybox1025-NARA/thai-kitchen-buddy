@@ -172,6 +172,10 @@ function fmtDate(d: Date): string {
 function fmtTime(d: Date): string {
   return bkkParts(d).time;
 }
+function fmtBusinessDay(day: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : day;
+}
 
 // ── font readiness ────────────────────────────────────────────────────────────
 // Canvas draws with whatever is loaded at call time and never triggers a font
@@ -758,8 +762,18 @@ export async function buildReport(p: ReportPayload): Promise<Uint8Array> {
   d.text(p.restaurant || "Restaurant", S.big, "center");
   const reportTitle = p.report_type === "OPEN" ? "OPEN SHIFT" : p.report_type === "SALES" ? "SALES REPORT" : `${p.report_type} REPORT`;
   d.text(reportTitle, S.xl, "center");
-  d.text(`Business day ${p.business_day}`, S.small, "center");
-  d.text(`${fmtDate(printedAt)} ${fmtTime(printedAt)}`, S.small, "center");
+  if (p.report_type === "Z") {
+    // The Z report is normally closed after midnight. Make the sales date the
+    // dominant date and explicitly label the later timestamp as the close time
+    // so staff cannot mistake a 9 October print for 9 October sales.
+    d.rule(true);
+    d.text("SALES DATE / วันที่ขาย", S.bold, "center");
+    d.text(fmtBusinessDay(p.business_day), S.xl, "center");
+    d.text(`CLOSED / ปิดกะ: ${fmtDate(printedAt)} ${fmtTime(printedAt)}`, S.small, "center");
+  } else {
+    d.text(`Business day ${p.business_day}`, S.small, "center");
+    d.text(`${fmtDate(printedAt)} ${fmtTime(printedAt)}`, S.small, "center");
+  }
   d.rule(true);
 
   for (const section of p.sections) {
