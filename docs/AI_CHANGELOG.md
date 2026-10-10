@@ -15,6 +15,16 @@ Add new entries at the top using this template:
 - Follow-up: none, or exact remaining work
 ```
 
+## 2026-10-10 — Remove duplicate standalone crispy-pork water mimosa
+
+- Agent: Codex
+- Scope: POS menu row `b2ce3973-9102-4cbd-8417-99a8e7169f26` linked to the newly added Manager menu `defc5eb1-f513-4bb8-8db7-41ec36208c48`
+- Decision: remove the separate ฿108 `ผัดกระเฉดหมูกรอบ` menu at the owner's request and retain the existing ฿69 `ผัดกระเฉดไฟแดง` menu with its two add-on groups, including crispy pork +฿39
+- Verification: the removed row had zero order items, menu add-ons, menu ingredients, and emergency price changes; guarded exact-ID deletion returned one row; post-delete production and live QR-menu reads retain ฿69, its two add-on groups, and no ฿108 row
+- Git: `codex/remove-crispy-water-mimosa-20261010`; see the commit containing this entry
+- Delivery: production POS data updated directly; no schema, web code, Lovable publish, Android build, or SUNMI update required
+- Follow-up: none
+
 ## 2026-10-09 — Emphasize the Z report sales date
 
 - Agent: Codex
