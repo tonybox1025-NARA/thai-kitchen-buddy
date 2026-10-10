@@ -62,7 +62,7 @@ Deno.serve(async (req) => {
         db
           .from("menus")
           .select(
-            "id,manager_menu_id,name_th,name_en,name_my,price,cost,image_url,available,category_id,sort,is_set,is_set_child",
+            "id,manager_menu_id,name_th,name_en,name_my,price,cost,image_url,available,available_qr,category_id,sort,is_set,is_set_child",
           ),
         db.from("categories").select("id,name_th,name_en,name_my,sort"),
         db.from("addon_groups").select("id,name,kitchen_name"),
@@ -301,6 +301,11 @@ Deno.serve(async (req) => {
         available:
           item.target?.available ??
           (menu.is_active !== false && menu.available_pos !== false && menu.is_set_child !== true),
+        // Like POS availability, customer visibility is controlled by shop
+        // staff after the first publish. Future catalog publishes preserve it.
+        available_qr:
+          item.target?.available_qr ??
+          (menu.is_active !== false && menu.available_qr !== false && menu.is_set_child !== true),
         is_set: menu.is_set === true,
         is_set_child: menu.is_set_child === true,
         sort: menu.sort_order ?? index,

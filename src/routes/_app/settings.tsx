@@ -89,6 +89,7 @@ type Menu = {
   price: number;
   cost: number;
   available: boolean;
+  available_qr: boolean;
   image_url?: string | null;
   manager_menu_id?: string | null;
   is_set?: boolean;
@@ -2456,6 +2457,7 @@ function MenuTab() {
       cost: Number(edit.cost ?? 0),
       category_id: edit.category_id ?? null,
       available: edit.available ?? true,
+      available_qr: edit.available_qr ?? true,
       image_url: edit.image_url?.trim() || null,
     };
     let menuId = edit.id;
@@ -2466,6 +2468,16 @@ function MenuTab() {
       // an operator added an add-on to a Manager menu.
       if (!edit.manager_menu_id) {
         await db.from("menus").update(payload).eq("id", menuId);
+      } else {
+        // Availability is owned by the shop. Catalog-owned name, price, image,
+        // recipe and category fields remain read-only on the POS.
+        await db
+          .from("menus")
+          .update({
+            available: payload.available,
+            available_qr: payload.available_qr,
+          })
+          .eq("id", menuId);
       }
     } else {
       const { data: inserted } = await db.from("menus").insert(payload).select("id").single();
@@ -2966,15 +2978,26 @@ function MenuTab() {
               )}
               <div className="flex items-center justify-between rounded-md border px-3 py-2">
                 <div>
-                  <div className="text-sm font-medium">Available for sale</div>
+                  <div className="text-sm font-medium">Staff POS sale</div>
                   <div className="text-xs text-muted-foreground">
-                    Shown on POS and customer ordering menus
+                    Shown to staff on this POS
                   </div>
                 </div>
                 <Switch
-                  disabled={!!edit?.manager_menu_id}
                   checked={edit?.available ?? true}
                   onCheckedChange={(v) => setEdit({ ...edit, available: v })}
+                />
+              </div>
+              <div className="flex items-center justify-between rounded-md border px-3 py-2">
+                <div>
+                  <div className="text-sm font-medium">Customer QR menu</div>
+                  <div className="text-xs text-muted-foreground">
+                    Let customers see and order this item from table QR codes
+                  </div>
+                </div>
+                <Switch
+                  checked={edit?.available_qr ?? true}
+                  onCheckedChange={(v) => setEdit({ ...edit, available_qr: v })}
                 />
               </div>
             </div>

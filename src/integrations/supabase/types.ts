@@ -1068,6 +1068,7 @@ export type Database = {
       menus: {
         Row: {
           available: boolean
+          available_qr: boolean
           category_id: string | null
           cost: number | null
           created_at: string
@@ -1084,6 +1085,7 @@ export type Database = {
         }
         Insert: {
           available?: boolean
+          available_qr?: boolean
           category_id?: string | null
           cost?: number | null
           created_at?: string
@@ -1100,6 +1102,7 @@ export type Database = {
         }
         Update: {
           available?: boolean
+          available_qr?: boolean
           category_id?: string | null
           cost?: number | null
           created_at?: string

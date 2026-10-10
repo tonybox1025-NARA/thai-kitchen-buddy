@@ -184,12 +184,12 @@ export const Route = createFileRoute("/api/public/qr-order")({
         const menuIds = items.map((i) => i.menu_id);
         const { data: menus } = await supabase
           .from("menus")
-          .select("id,category_id,name_th,name_en,name_my,price,cost,available")
+          .select("id,category_id,name_th,name_en,name_my,price,cost,available,available_qr")
           .in("id", menuIds);
         const menuMap = new Map((menus ?? []).map((m) => [m.id, m]));
         for (const it of items) {
           const m = menuMap.get(it.menu_id);
-          if (!m || !m.available)
+          if (!m || !m.available || !m.available_qr)
             return new Response(`Item unavailable: ${it.menu_id}`, { status: 400 });
         }
 
