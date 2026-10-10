@@ -55,9 +55,10 @@ export const Route = createFileRoute("/api/public/qr-menu/$tableCode")({
           supabase
             .from("menus")
             .select(
-              "id,category_id,name_th,name_en,price,available,sort,image_url,is_set,manager_menu_id",
+              "id,category_id,name_th,name_en,price,available,available_qr,sort,image_url,is_set,manager_menu_id",
             )
             .eq("available", true)
+            .eq("available_qr", true)
             .order("sort"),
           supabase.from("settings").select("restaurant_name").eq("id", 1).maybeSingle(),
         ]);
