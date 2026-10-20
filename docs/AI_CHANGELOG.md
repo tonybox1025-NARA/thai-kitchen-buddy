@@ -15,6 +15,36 @@ Add new entries at the top using this template:
 - Follow-up: none, or exact remaining work
 ```
 
+## 2026-10-20 — Confirm native SUNMI delivery boundary and production signer
+
+- Agent: Codex
+- Scope: the user confirmed that the photographed device runs the native SUNMI app; verify the signed update path separately from the already deployed server/web fixes.
+- Decision: the server-side 75-to-67-byte credential fix applies immediately to the existing app. The concurrent-startup client fix still requires a correctly signed Android update for SUNMI; do not treat web publication as native delivery.
+- Verification: current published release is `v1.1.90`, asset `LONMOH-POS-v1.1.90.apk`, SHA-256 `810b20f1d40eb775a6246ae9102591b1854f312c4b52ca434ffb75c8007d5c1e`; `apksigner verify --print-certs` passes with signer SHA-256 `301d4796a027c686d9e5b58146e49f6d645448d5ceb9b01279b68272409f39d3`. The available local keystore is readable but has signer SHA-256 `27ff13e0ce9e95101e33459e3c4e72afcbc9547c32249c66d9a9ebf226e40eac`, which does not match. No local ADB device is attached.
+- Git: implementation remains on canonical `main@db39f06`; evidence and regression checks are checkpointed on `codex/fix-shared-pin-device-password-20261020`, PR #85.
+- Delivery: production backend and web verified; no APK built, released or installed in this step, no device data cleared, and no additional production database writes. Native device login awaits the user's retry result.
+- Follow-up: if native startup still redirects, build a version-incremented signed APK from current canonical main using the original production signing key. Confirm its certificate matches the digest above before releasing or installing over the existing POS; retain all device data and verify login plus restart on SUNMI.
+
+## 2026-10-20 — Deliver shared-PIN login recovery and preserve restored sessions
+
+- Agent: Codex
+- Scope: production POS shared-PIN Edge Function, concurrent device-session restoration, deployed web application, and build-enforced executable regression checks.
+- Decision: keep the internal random password within bcrypt's 72-byte limit and let only the latest concurrent startup validation publish access/session/loading state. This prevents a correct PIN from failing on account creation and prevents a restored login from bouncing between `/login` and `/pos` while clearing selected staff.
+- Verification: old credential generation reproducibly fails at 75 bytes; 128 corrected credentials pass length/character/randomness checks. The actual auth callback fails the old concurrency test and passes ordered/reversed responses, stale PIN version, offline startup, sign-out, unmount, and current PIN rotation. Full `npm run build` including `verify:regressions` passes with the frozen Bun lock; targeted ESLint has no errors and one existing React-refresh warning. Production PIN login and OTP verification return HTTP 200; exactly one confirmed internal device account exists. Live browser login as the user-selected staff reaches the real table page, and reload retains the authenticated staff and table page. Browser connection probes still log existing `/auth/v1/health` HTTP 401 responses; no login request fails.
+- Git: production fixes are canonical `origin/main` commits `332d4e8` and `db39f06`; shared guard/tests/delivery evidence are on `codex/fix-shared-pin-device-password-20261020`, canonical PR #85 from the `jeneraeda-del` fork. Isolated sources match current main exactly for both production implementation files.
+- Delivery: only `shared-pin-auth` deployed to `sbjzbphdjfpjvjbzjuzk`; web deployment `40c49edf-d9ce-451a-9a91-3ce4d84d9e39` is live and verified at `https://thai-kitchen-buddy.lovable.app/pos`. Store PIN, schema, business settings, sales, payments, and printing data were not changed; login created the one intended internal auth account. No new Android APK was built: the server password fix applies to v1.1.90 immediately, while the startup client fix is currently delivered to web only. Physical SUNMI login remains unverified.
+- Follow-up: keep the regression PR integrated with the production fixes; if the shop uses native SUNMI and still sees startup redirects, package the client startup fix in the next signed APK.
+
+## 2026-10-20 — Correct shared-PIN first-device credential length
+
+- Agent: Codex
+- Scope: POS `shared-pin-auth` device-account creation and the build-enforced shared-PIN regression guard.
+- Decision: remove UUID separator characters from the internal random credential, reducing it from 75 to 67 ASCII bytes. Preserve the store PIN, central verification, staff selection, existing accounts, and magic-link session flow.
+- Verification: the new executable regression check reproduces the old 75-byte failure and passes for 128 fresh credentials after the fix; production deployment and login verification are pending at this source checkpoint.
+- Git: `codex/fix-shared-pin-device-password-20261020`; see the commit containing this entry.
+- Delivery: source checkpoint; direct canonical HTTPS push is denied for the connected account, so share through a fork/PR. Backend-only deployment will serve the already installed v1.1.90 without an APK update.
+- Follow-up: deploy the corrected Edge Function, verify one real PIN login and session persistence, and record delivery evidence.
+
 ## 2026-10-20 — Shared device PIN production delivery and Android v1.1.90
 
 - Agent: Codex

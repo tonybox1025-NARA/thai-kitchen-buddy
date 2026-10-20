@@ -1,4 +1,6 @@
 import { readFileSync } from "node:fs";
+import { webcrypto } from "node:crypto";
+import { runInNewContext } from "node:vm";
 
 const read = (path) => readFileSync(path, "utf8");
 const auth = read("src/lib/auth.tsx");
@@ -45,4 +47,28 @@ if (auth.includes("AUTH_INIT_TIMEOUT_MS") || auth.includes("1_800")) {
   process.exit(1);
 }
 
+// Exercise the production credential expression: Supabase Auth rejects more
+// than 72 UTF-8 bytes even after the user's correct store PIN has been verified.
+const passwordExpression = edge.match(/const randomPassword = (.+);/);
+if (!passwordExpression) throw new Error("Device credential generation is missing");
+const passwords = new Set();
+for (let attempt = 0; attempt < 128; attempt += 1) {
+  const password = runInNewContext(passwordExpression[1], { crypto: webcrypto });
+  const bytes = Buffer.byteLength(password, "utf8");
+  if (bytes < 48 || bytes > 72) {
+    throw new Error(`Device credential must use 48-72 UTF-8 bytes; received ${bytes}`);
+  }
+  if (
+    !/[a-z]/.test(password) ||
+    !/[A-Z]/.test(password) ||
+    !/[0-9]/.test(password) ||
+    !/[^a-zA-Z0-9]/.test(password)
+  ) {
+    throw new Error("Device credential must satisfy password character requirements");
+  }
+  passwords.add(password);
+}
+if (passwords.size !== 128) throw new Error("Device credentials must be fresh and random");
+
 console.log("Shared PIN device access contract verified.");
+await import("./test-shared-pin-auth-startup.mjs");
