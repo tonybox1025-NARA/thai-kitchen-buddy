@@ -15,6 +15,16 @@ Add new entries at the top using this template:
 - Follow-up: none, or exact remaining work
 ```
 
+## 2026-10-20 — Shared device PIN production delivery and Android v1.1.90
+
+- Agent: Codex
+- Scope: POS bridge function, POS/Live web publication, Android version 1.1.90, and production verification.
+- Decision: deploy the merged PIN bridge only after the Manager central function passed; publish POS and Live from the verified GitHub main; package the same application code for SUNMI as v1.1.90.
+- Verification: production POS `shared-pin-auth` returned HTTP 200 with `configured=false`, `version=0`, proving the Manager bridge; published POS bundle contains the shared-PIN client; full regression/build and APK certificate/checksum verification are recorded with the release.
+- Git: production function used merged source `976d123`; Lovable's preview-only tuple type correction is in `06522ad`; Android release commit is the commit containing this entry.
+- Delivery: POS Edge Function deployed to `sbjzbphdjfpjvjbzjuzk`; Lovable deployment `83bd8f6a-4d74-4c5b-bf57-d9bb18ce9db6` published to `https://thai-kitchen-buddy.lovable.app`; Android v1.1.90 release pending in this checkpoint.
+- Follow-up: set the first shared PIN in Manager, install v1.1.90 on SUNMI, then verify one real POS login and one Live login.
+
 ## 2026-10-19 — One shared device PIN for POS, Live and Manager
 
 - Agent: Codex
