@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.attendance-live-summary]
 verify_jwt = true
+
+[functions.shared-pin-auth]
+verify_jwt = false

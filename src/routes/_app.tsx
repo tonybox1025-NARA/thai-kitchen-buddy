@@ -6,11 +6,33 @@ import { LanguageToggle } from "@/components/LanguageToggle";
 import { ConnectionStatus } from "@/components/ConnectionStatus";
 import { PinKeypad } from "@/components/PinKeypad";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { LayoutGrid, BarChart3, FileText, Settings, LogOut, UserCircle2, Heart, UtensilsCrossed, BadgePercent, Activity, Wallet, Menu, ReceiptText } from "lucide-react";
+import {
+  LayoutGrid,
+  BarChart3,
+  FileText,
+  Settings,
+  LogOut,
+  UserCircle2,
+  Heart,
+  UtensilsCrossed,
+  BadgePercent,
+  Activity,
+  Wallet,
+  Menu,
+  ReceiptText,
+  KeyRound,
+} from "lucide-react";
 import { installAudioUnlockListeners, unlockAudio } from "@/lib/audio-alert";
 import { useQrAlertCount } from "@/lib/qr-alert-count";
 import { OfflineBanner } from "@/components/OfflineBanner";
@@ -24,12 +46,29 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/_app")({ component: AppLayout });
 
 function AppLayout() {
-  const { loading, session, staff, setStaff, signOut, verifyPin } = useAuth();
+  const {
+    loading,
+    session,
+    staff,
+    accessStatus,
+    setStaff,
+    signOut,
+    verifyPin,
+    signInWithPin,
+    refreshAccessStatus,
+  } = useAuth();
   const { t, lang } = useI18n();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const [pinErr, setPinErr] = useState<string | null>(null);
+  const [selectedStaffId, setSelectedStaffId] = useState("");
+  const [storePin, setStorePin] = useState("");
+  const [pinBusy, setPinBusy] = useState(false);
   const [assetsReady, setAssetsReady] = useState(false);
-  const [assetProgress, setAssetProgress] = useState<AssetProgress>({ done: 0, total: 1, stage: "catalog" });
+  const [assetProgress, setAssetProgress] = useState<AssetProgress>({
+    done: 0,
+    total: 1,
+    stage: "catalog",
+  });
   const needsPosAssets = path === "/pos" || path.startsWith("/order/");
   // The SUNMI is a registered, single-purpose till. Signing the Supabase device
   // session out from the shop floor only strands the next shift at an owner
@@ -40,7 +79,13 @@ function AppLayout() {
   const qrAlertCount = useQrAlertCount(Boolean(session && staff));
   useNativePrintQueue(Boolean(session && staff));
 
-  useEffect(() => { installAudioUnlockListeners(); }, []);
+  useEffect(() => {
+    installAudioUnlockListeners();
+  }, []);
+
+  useEffect(() => {
+    if (session && !staff && !accessStatus) void refreshAccessStatus();
+  }, [session, staff, accessStatus, refreshAccessStatus]);
 
   useEffect(() => {
     if (!session || !staff || !needsPosAssets || assetsReady) {
@@ -48,25 +93,37 @@ function AppLayout() {
     }
     let cancelled = false;
     void syncPosAssets(
-      (progress) => { if (!cancelled) setAssetProgress(progress); },
+      (progress) => {
+        if (!cancelled) setAssetProgress(progress);
+      },
       { preloadImages: Capacitor.isNativePlatform() },
     )
       .catch((error) => {
         console.error("POS asset sync failed", error);
-        toast.warning(lang === "th" ? "อัปเดตเมนูไม่สำเร็จ กำลังใช้ข้อมูลที่บันทึกไว้" : "Menu refresh failed. Using saved menu data.", { id: "pos-catalog-refresh" });
+        toast.warning(
+          lang === "th"
+            ? "อัปเดตเมนูไม่สำเร็จ กำลังใช้ข้อมูลที่บันทึกไว้"
+            : "Menu refresh failed. Using saved menu data.",
+          { id: "pos-catalog-refresh" },
+        );
       })
-      .finally(() => { if (!cancelled) setAssetsReady(true); });
-    return () => { cancelled = true; };
+      .finally(() => {
+        if (!cancelled) setAssetsReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [session, staff, needsPosAssets, assetsReady, lang]);
 
   useEffect(() => {
-    const section = path === "/live"
-      ? "/live"
-      : path.startsWith("/crew")
-        ? "/crew"
-        : path === "/pos" || path.startsWith("/order/") || path.startsWith("/payment/")
-          ? "/pos"
-          : null;
+    const section =
+      path === "/live"
+        ? "/live"
+        : path.startsWith("/crew")
+          ? "/crew"
+          : path === "/pos" || path.startsWith("/order/") || path.startsWith("/payment/")
+            ? "/pos"
+            : null;
     if (section) window.localStorage.setItem("lonmoh:last-app-section", section);
   }, [path]);
 
@@ -84,7 +141,10 @@ function AppLayout() {
   if (loading) {
     return (
       <div className="min-h-screen grid place-items-center bg-background">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-muted border-t-primary" aria-label="Loading" />
+        <div
+          className="h-8 w-8 animate-spin rounded-full border-2 border-muted border-t-primary"
+          aria-label="Loading"
+        />
       </div>
     );
   }
@@ -107,20 +167,80 @@ function AppLayout() {
         <div className="absolute top-4 right-4 flex gap-2">
           <LanguageToggle />
           {!nativeTill && (
-            <Button variant="ghost" size="sm" onClick={() => signOut()}><LogOut className="h-4 w-4 mr-1" />{t("logout")}</Button>
+            <Button variant="ghost" size="sm" onClick={() => signOut()}>
+              <LogOut className="h-4 w-4 mr-1" />
+              {t("logout")}
+            </Button>
           )}
         </div>
-        <div className="w-full max-w-sm">
-          <PinKeypad
-            error={pinErr}
-            onSubmit={async (pin) => {
-              await unlockAudio();
-              const s = await verifyPin(pin);
-              if (s) { setStaff(s); setPinErr(null); }
-              else setPinErr(t("wrong_pin"));
-            }}
-          />
-        </div>
+        {accessStatus && !accessStatus.configured ? (
+          <div className="w-full max-w-sm">
+            <PinKeypad
+              error={pinErr}
+              onSubmit={async (pin) => {
+                await unlockAudio();
+                const selected = await verifyPin(pin);
+                if (selected) {
+                  setStaff(selected);
+                  setPinErr(null);
+                } else setPinErr(t("wrong_pin"));
+              }}
+            />
+          </div>
+        ) : (
+          <div className="w-full max-w-md rounded-xl border bg-card p-6 shadow-xl space-y-5">
+            <div className="text-center space-y-2">
+              <KeyRound className="mx-auto h-8 w-8 text-primary" />
+              <h1 className="text-xl font-semibold">Open LONMOH</h1>
+              <p className="text-sm text-muted-foreground">
+                Choose your name and enter the store PIN
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2 max-h-72 overflow-y-auto">
+              {(accessStatus?.profiles ?? []).map((profile) => (
+                <Button
+                  key={profile.id}
+                  type="button"
+                  variant={selectedStaffId === profile.id ? "default" : "outline"}
+                  className="h-12 justify-start"
+                  onClick={() => setSelectedStaffId(profile.id)}
+                >
+                  <UserCircle2 className="mr-2 h-4 w-4" />
+                  {profile.name}
+                </Button>
+              ))}
+            </div>
+            <Input
+              inputMode="numeric"
+              pattern="[0-9]*"
+              autoComplete="off"
+              value={storePin}
+              onChange={(event) => setStorePin(event.target.value.replace(/\D/g, "").slice(0, 6))}
+              className="h-14 text-center text-2xl tracking-[0.45em]"
+              placeholder="••••••"
+            />
+            {pinErr && <p className="text-sm text-destructive text-center">{pinErr}</p>}
+            <Button
+              className="w-full h-12"
+              disabled={pinBusy || !selectedStaffId || storePin.length !== 6}
+              onClick={async () => {
+                setPinBusy(true);
+                await unlockAudio();
+                const result = await signInWithPin(selectedStaffId, storePin);
+                setPinBusy(false);
+                if (result.staff) {
+                  setPinErr(null);
+                  setStorePin("");
+                } else {
+                  setPinErr(result.error || t("wrong_pin"));
+                  setStorePin("");
+                }
+              }}
+            >
+              Open app
+            </Button>
+          </div>
+        )}
       </div>
     );
   }
@@ -132,15 +252,22 @@ function AppLayout() {
         <div className="w-full max-w-sm text-center space-y-4">
           <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-muted border-t-primary" />
           <div>
-            <p className="text-lg font-semibold">{lang === "th" ? "กำลังเตรียมระบบ POS" : "Preparing POS"}</p>
+            <p className="text-lg font-semibold">
+              {lang === "th" ? "กำลังเตรียมระบบ POS" : "Preparing POS"}
+            </p>
             <p className="text-sm text-muted-foreground">
               {assetProgress.stage === "catalog"
-                ? (lang === "th" ? "กำลังดาวน์โหลดเมนู…" : "Downloading menu…")
+                ? lang === "th"
+                  ? "กำลังดาวน์โหลดเมนู…"
+                  : "Downloading menu…"
                 : `${assetProgress.done}/${assetProgress.total} · ${percent}%`}
             </p>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-muted">
-            <div className="h-full bg-primary transition-[width]" style={{ width: `${percent}%` }} />
+            <div
+              className="h-full bg-primary transition-[width]"
+              style={{ width: `${percent}%` }}
+            />
           </div>
         </div>
       </div>
@@ -163,14 +290,20 @@ function AppLayout() {
     <div className="min-h-screen flex flex-col bg-background" lang={lang}>
       <header className="min-h-14 border-b bg-card flex items-center px-3 sm:px-4 gap-2 sm:gap-4 sticky top-0 z-30">
         <div className="font-semibold text-primary">🍽️ {t("app_name")}</div>
-        <nav className={`${path.startsWith("/crew") ? "hidden" : "hidden lg:flex"} items-center gap-1 ml-4`}>
+        <nav
+          className={`${path.startsWith("/crew") ? "hidden" : "hidden lg:flex"} items-center gap-1 ml-4`}
+        >
           {navItems.map((it) => {
             const active = path.startsWith(it.to);
             const showBadge = it.to === "/pos" && qrAlertCount > 0;
             return (
-              <Link key={it.to} to={it.to}
-                className={`relative flex items-center gap-2 px-3 py-1.5 rounded-md text-sm ${active ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}>
-                <it.icon className="h-4 w-4" />{it.label}
+              <Link
+                key={it.to}
+                to={it.to}
+                className={`relative flex items-center gap-2 px-3 py-1.5 rounded-md text-sm ${active ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+              >
+                <it.icon className="h-4 w-4" />
+                {it.label}
                 {showBadge && (
                   <span className="ml-1 inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-destructive text-destructive-foreground text-xs font-bold animate-pulse">
                     {qrAlertCount}
@@ -183,7 +316,12 @@ function AppLayout() {
         {!path.startsWith("/crew") && (
           <Sheet>
             <SheetTrigger asChild>
-              <Button variant="outline" size="icon" className="shrink-0 lg:hidden" aria-label={lang === "th" ? "เปิดเมนูหลัก" : "Open main menu"}>
+              <Button
+                variant="outline"
+                size="icon"
+                className="shrink-0 lg:hidden"
+                aria-label={lang === "th" ? "เปิดเมนูหลัก" : "Open main menu"}
+              >
                 <Menu className="h-5 w-5" />
               </Button>
             </SheetTrigger>
@@ -219,8 +357,13 @@ function AppLayout() {
                   <p>{staff.role}</p>
                 </div>
                 {!nativeTill && (
-                  <Button variant="outline" className="w-full justify-start" onClick={() => signOut()}>
-                    <LogOut className="mr-2 h-4 w-4" />{t("logout")}
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start"
+                    onClick={() => signOut()}
+                  >
+                    <LogOut className="mr-2 h-4 w-4" />
+                    {t("logout")}
                   </Button>
                 )}
               </div>
@@ -228,7 +371,9 @@ function AppLayout() {
           </Sheet>
         )}
         <div className="ml-auto flex items-center gap-2">
-          <div className="hidden sm:block"><ConnectionStatus /></div>
+          <div className="hidden sm:block">
+            <ConnectionStatus />
+          </div>
           {!path.startsWith("/crew") && <LanguageToggle />}
           <Button variant="outline" size="sm" onClick={() => setStaff(null)} className="gap-2">
             <UserCircle2 className="h-4 w-4" />
@@ -236,7 +381,13 @@ function AppLayout() {
             <span className="hidden sm:inline text-xs text-muted-foreground">({staff.role})</span>
           </Button>
           {!nativeTill && (
-            <Button variant="ghost" size="sm" onClick={() => signOut()} title={t("logout")} className="hidden sm:inline-flex">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => signOut()}
+              title={t("logout")}
+              className="hidden sm:inline-flex"
+            >
               <LogOut className="h-4 w-4" />
             </Button>
           )}
@@ -254,7 +405,9 @@ function AppLayout() {
 function LoginFallback({ onLogin }: { onLogin: () => void }) {
   return (
     <div className="min-h-screen grid place-items-center bg-gradient-to-br from-background to-muted p-4">
-      <div className="absolute top-4 right-4"><LanguageToggle /></div>
+      <div className="absolute top-4 right-4">
+        <LanguageToggle />
+      </div>
       <Card className="w-full max-w-md shadow-xl">
         <CardHeader className="text-center">
           <div className="mx-auto h-14 w-14 rounded-2xl bg-primary text-primary-foreground grid place-items-center mb-2">
@@ -270,9 +423,16 @@ function LoginFallback({ onLogin }: { onLogin: () => void }) {
             </div>
             <div>
               <Label htmlFor="app-preview-password">รหัสผ่าน</Label>
-              <Input id="app-preview-password" type="password" autoComplete="current-password" readOnly />
+              <Input
+                id="app-preview-password"
+                type="password"
+                autoComplete="current-password"
+                readOnly
+              />
             </div>
-            <Button className="w-full" size="lg" onClick={onLogin}>เข้าสู่ระบบ</Button>
+            <Button className="w-full" size="lg" onClick={onLogin}>
+              เข้าสู่ระบบ
+            </Button>
           </div>
         </CardContent>
       </Card>

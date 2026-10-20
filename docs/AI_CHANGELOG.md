@@ -15,6 +15,16 @@ Add new entries at the top using this template:
 - Follow-up: none, or exact remaining work
 ```
 
+## 2026-10-19 — One shared device PIN for POS, Live and Manager
+
+- Agent: Codex
+- Scope: POS authentication provider and login/staff-selection screens, Live route access, central Manager PIN bridge, and a build-enforced regression guard.
+- Decision: remove normal email/password entry after initial setup; choose a staff name and use the same owner-controlled 6-digit PIN as Manager. Keep a persistent device session, require the changed PIN once per device, preserve selected staff attribution, rate-limit failed central verification, and keep valid sessions through slow or offline startup.
+- Verification: all POS regression guards, TypeScript, targeted lint with no errors, and the production web build passed using the canonical frozen Bun lock.
+- Git: `codex/shared-pin-device-login`; exact commit is reported with delivery.
+- Delivery: source only at this entry. POS Edge Function, frontend publication, Android release and real POS/Live verification are pending production deployment.
+- Follow-up: deploy after the Manager shared-PIN database/function, publish, release Android, and verify one real POS login and one Live login.
+
 ## 2026-10-18 — Preserve staff menu availability during Manager publication
 
 - Agent: Codex
