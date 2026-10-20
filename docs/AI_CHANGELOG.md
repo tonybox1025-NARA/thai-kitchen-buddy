@@ -22,7 +22,7 @@ Add new entries at the top using this template:
 - Decision: deploy the merged PIN bridge only after the Manager central function passed; publish POS and Live from the verified GitHub main; package the same application code for SUNMI as v1.1.90.
 - Verification: production POS `shared-pin-auth` returned HTTP 200 with `configured=false`, `version=0`, proving the Manager bridge; published POS bundle contains the shared-PIN client; full regression/build and APK certificate/checksum verification are recorded with the release.
 - Git: production function used merged source `976d123`; Lovable's preview-only tuple type correction is in `06522ad`; Android release commit is the commit containing this entry.
-- Delivery: POS Edge Function deployed to `sbjzbphdjfpjvjbzjuzk`; Lovable deployment `83bd8f6a-4d74-4c5b-bf57-d9bb18ce9db6` published to `https://thai-kitchen-buddy.lovable.app`; Android v1.1.90 release pending in this checkpoint.
+- Delivery: POS Edge Function deployed to `sbjzbphdjfpjvjbzjuzk`; Lovable deployment `83bd8f6a-4d74-4c5b-bf57-d9bb18ce9db6` published to `https://thai-kitchen-buddy.lovable.app`; Android v1.1.90 released as `LONMOH-POS-v1.1.90.apk` with versionCode 92, the same signing certificate as v1.1.89, and SHA-256 `810b20f1d40eb775a6246ae9102591b1854f312c4b52ca434ffb75c8007d5c1e`.
 - Follow-up: set the first shared PIN in Manager, install v1.1.90 on SUNMI, then verify one real POS login and one Live login.
 
 ## 2026-10-19 — One shared device PIN for POS, Live and Manager
