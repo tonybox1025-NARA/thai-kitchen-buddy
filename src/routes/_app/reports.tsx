@@ -1863,7 +1863,7 @@ function BillHistoryTab() {
                       <span key={i}>{methodChip(p.method, p.amount)}</span>
                     ))}
                   </div>
-                  <Link to="/payment/$billId" params={{ billId: b.id }} className="shrink-0">
+                  <Link to="/bill/$billId" params={{ billId: b.id }} className="shrink-0">
                     <Button size="sm" variant="outline">
                       View <ArrowRight className="h-3 w-3 ml-1" />
                     </Button>
