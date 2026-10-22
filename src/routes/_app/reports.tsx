@@ -67,7 +67,7 @@ type BillRow = {
   id: string; paid_at: string; total: number;
   receipt_number: string | null;
   table_code: string;
-  payments: { method: string; amount: number }[];
+  payments: { method: string; amount: number; tip_amount: number }[];
 };
 
 type ClosedShift = Shift & {
@@ -1158,6 +1158,7 @@ function PeriodSalesHistory({ mode, buildReport, range, custom }: { mode: Period
         {!loading && report && periodShifts.length > 0 && (
           <>
             <ReportCard r={report} />
+            <SalesTipsCard r={report} />
             {report.qrByBucket.length > 0 && (
               <Card>
                 <CardHeader><CardTitle className="text-base">KBank QR cutoff</CardTitle></CardHeader>
@@ -1363,6 +1364,7 @@ function DailySalesHistory({
         {!loading && report && (
           <>
             <ReportCard r={report} />
+            <SalesTipsCard r={report} />
             {report.qrByBucket.length > 0 && (
               <Card>
                 <CardHeader><CardTitle className="text-base">KBank QR cutoff</CardTitle></CardHeader>
@@ -1775,7 +1777,7 @@ function BillHistoryTab() {
 
       const [{ data: orders }, { data: pays }] = await Promise.all([
         supabase.from("orders").select("id,table_id").in("id", orderIds),
-        supabase.from("payments").select("bill_id,method,amount").in("bill_id", billIds),
+        supabase.from("payments").select("bill_id,method,amount,tip_amount").in("bill_id", billIds),
       ]);
 
       const tableIds = [...new Set((orders ?? []).map((o) => o.table_id).filter(Boolean))] as string[];
@@ -1796,7 +1798,11 @@ function BillHistoryTab() {
           table_code: tableId ? (tableMap.get(tableId) ?? "—") : "—",
           payments: (pays ?? [])
             .filter((p) => p.bill_id === b.id)
-            .map((p) => ({ method: p.method, amount: Number(p.amount) })),
+            .map((p) => ({
+              method: p.method,
+              amount: Number(p.amount),
+              tip_amount: Number(p.tip_amount ?? 0),
+            })),
         };
       });
 
@@ -1810,7 +1816,7 @@ function BillHistoryTab() {
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [range]);
   useEffect(() => { if (range === "custom" && custom?.from && custom?.to) load(); /* eslint-disable-next-line */ }, [custom]);
 
-  const methodChip = (method: string, amount: number) => {
+  const methodChip = (method: string, amount: number, tipAmount: number) => {
     const cls =
       method === "cash" ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400" :
       method === "qr"   ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400" :
@@ -1820,6 +1826,7 @@ function BillHistoryTab() {
     return (
       <span key={method + amount} className={`text-xs px-2 py-0.5 rounded-full font-medium ${cls}`}>
         {label} {thb(amount)}
+        {tipAmount > 0 && <span className="ml-1 font-semibold">+ Tip {thb(tipAmount)}</span>}
       </span>
     );
   };
@@ -1860,7 +1867,7 @@ function BillHistoryTab() {
                   <span className="font-bold tabular-nums shrink-0 w-24 text-right">{thb(b.total)}</span>
                   <div className="flex gap-1 flex-wrap flex-1 min-w-0">
                     {b.payments.map((p, i) => (
-                      <span key={i}>{methodChip(p.method, p.amount)}</span>
+                      <span key={i}>{methodChip(p.method, p.amount, p.tip_amount)}</span>
                     ))}
                   </div>
                   <Link to="/bill/$billId" params={{ billId: b.id }} className="shrink-0">
@@ -2520,6 +2527,30 @@ function CashSummary({ r, cashCount, overShortLabel }: { r: ReportData; cashCoun
       <Row label="Counted" value={thb(cashTotal)} />
       <Row label={overShortLabel} value={thb(overShort)} bold />
     </div>
+  );
+}
+
+function SalesTipsCard({ r }: { r: ReportData }) {
+  const { lang } = useI18n();
+  const totalTips = cashTipsPaidOut(r);
+  const th = lang === "th";
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">{th ? "ทิป" : "Tips"}</CardTitle>
+        <p className="text-xs text-muted-foreground">
+          {th
+            ? "แสดงแยกจากยอดขายและจ่ายให้พนักงานเป็นเงินสด"
+            : "Shown separately from sales and paid out to staff in cash."}
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-1 text-sm">
+        <Row label={th ? "ทิป QR" : "QR tips"} value={thb(r.tipTotal)} />
+        <Row label={th ? "ทิปบัตรเครดิต" : "Card tips"} value={thb(r.cardTipTotal)} />
+        <Row label={th ? "ทิปรวม" : "Total tips"} value={thb(totalTips)} bold />
+      </CardContent>
+    </Card>
   );
 }
 
