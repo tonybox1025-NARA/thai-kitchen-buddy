@@ -15,6 +15,16 @@ Add new entries at the top using this template:
 - Follow-up: none, or exact remaining work
 ```
 
+## 2026-10-22 — Deliver Bill History read-only details to production
+
+- Agent: Codex
+- Scope: production delivery and live verification of the paid-Bill detail route recorded below.
+- Decision: merge the tested read-only Bill History detail screen and publish it to the POS web app without changing payment, checkout, database, or SUNMI Android behavior.
+- Verification: the full regression suite and production build passed before merge; the published Reports bundle routes Bill History to `/bill/$billId`, and the published Bill bundle contains the order and payment-detail views.
+- Git: feature commit `628d32f`; merged to `main` as `37c765d` through PR #86.
+- Delivery: Lovable deployment `6e45a318-dce5-4060-88cd-1de76ab277f9` is live at `https://thai-kitchen-buddy.lovable.app`; the production response identifies that deployment. No production database, Edge Function, or installed SUNMI Android app was changed.
+- Follow-up: none for the web workflow; refresh the Reports page before the first live use.
+
 ## 2026-10-21 — Open Bill History in a read-only detail screen
 
 - Agent: Codex
