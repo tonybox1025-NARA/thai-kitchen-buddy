@@ -15,6 +15,16 @@ Add new entries at the top using this template:
 - Follow-up: none, or exact remaining work
 ```
 
+## 2026-10-21 — Open Bill History in a read-only detail screen
+
+- Agent: Codex
+- Scope: POS Reports Bill History, a new paid-Bill detail route, and a build-enforced regression guard.
+- Decision: replace the Bill History link to the SUNMI-only checkout screen with a separate read-only detail page showing order items, discounts, totals, tender records, cash/change details, tips, and refunds. The payment route and all checkout behavior remain unchanged.
+- Verification: dedicated Bill History guard, full regression suite, TypeScript, targeted lint, and production build passed using the frozen Bun lock.
+- Git: `codex/bill-history-readonly-detail`; exact commit is reported with delivery.
+- Delivery: isolated source work only while the restaurant is open; no production database change, Lovable publication, Edge Function deployment, merge to main, or SUNMI update.
+- Follow-up: after closing and owner approval, merge and publish the tested source, then verify one Bill History entry on the live app.
+
 ## 2026-10-20 — Shared device PIN production delivery and Android v1.1.90
 
 - Agent: Codex

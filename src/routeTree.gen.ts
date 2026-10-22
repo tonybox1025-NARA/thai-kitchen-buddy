@@ -31,6 +31,7 @@ import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppTimeAnalysisRouteImport } from './routes/_app/time-analysis'
 import { Route as MenuTableCodeRouteImport } from './routes/menu.$tableCode'
 import { Route as PrintTestKindRouteImport } from './routes/print-test.$kind'
+import { Route as AppBillBillIdRouteImport } from './routes/_app/bill.$billId'
 import { Route as AppOrderOrderIdRouteImport } from './routes/_app/order.$orderId'
 import { Route as AppPaymentBillIdRouteImport } from './routes/_app/payment.$billId'
 import { Route as ApiPublicQrOrderRouteImport } from './routes/api/public/qr-order'
@@ -153,6 +154,11 @@ const PrintTestKindRoute = PrintTestKindRouteImport.update({
   path: '/print-test/$kind',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppBillBillIdRoute = AppBillBillIdRouteImport.update({
+  id: '/bill/$billId',
+  path: '/bill/$billId',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppOrderOrderIdRoute = AppOrderOrderIdRouteImport.update({
   id: '/order/$orderId',
   path: '/order/$orderId',
@@ -240,6 +246,7 @@ export interface FileRoutesByFullPath {
   '/time-analysis': typeof AppTimeAnalysisRoute
   '/menu/$tableCode': typeof MenuTableCodeRoute
   '/print-test/$kind': typeof PrintTestKindRoute
+  '/bill/$billId': typeof AppBillBillIdRoute
   '/order/$orderId': typeof AppOrderOrderIdRoute
   '/payment/$billId': typeof AppPaymentBillIdRoute
   '/api/public/qr-order': typeof ApiPublicQrOrderRoute
@@ -275,6 +282,7 @@ export interface FileRoutesByTo {
   '/time-analysis': typeof AppTimeAnalysisRoute
   '/menu/$tableCode': typeof MenuTableCodeRoute
   '/print-test/$kind': typeof PrintTestKindRoute
+  '/bill/$billId': typeof AppBillBillIdRoute
   '/order/$orderId': typeof AppOrderOrderIdRoute
   '/payment/$billId': typeof AppPaymentBillIdRoute
   '/api/public/qr-order': typeof ApiPublicQrOrderRoute
@@ -312,6 +320,7 @@ export interface FileRoutesById {
   '/_app/time-analysis': typeof AppTimeAnalysisRoute
   '/menu/$tableCode': typeof MenuTableCodeRoute
   '/print-test/$kind': typeof PrintTestKindRoute
+  '/_app/bill/$billId': typeof AppBillBillIdRoute
   '/_app/order/$orderId': typeof AppOrderOrderIdRoute
   '/_app/payment/$billId': typeof AppPaymentBillIdRoute
   '/api/public/qr-order': typeof ApiPublicQrOrderRoute
@@ -349,6 +358,7 @@ export interface FileRouteTypes {
     | '/time-analysis'
     | '/menu/$tableCode'
     | '/print-test/$kind'
+    | '/bill/$billId'
     | '/order/$orderId'
     | '/payment/$billId'
     | '/api/public/qr-order'
@@ -384,6 +394,7 @@ export interface FileRouteTypes {
     | '/time-analysis'
     | '/menu/$tableCode'
     | '/print-test/$kind'
+    | '/bill/$billId'
     | '/order/$orderId'
     | '/payment/$billId'
     | '/api/public/qr-order'
@@ -420,6 +431,7 @@ export interface FileRouteTypes {
     | '/_app/time-analysis'
     | '/menu/$tableCode'
     | '/print-test/$kind'
+    | '/_app/bill/$billId'
     | '/_app/order/$orderId'
     | '/_app/payment/$billId'
     | '/api/public/qr-order'
@@ -609,6 +621,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PrintTestKindRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app/bill/$billId': {
+      id: '/_app/bill/$billId'
+      path: '/bill/$billId'
+      fullPath: '/bill/$billId'
+      preLoaderRoute: typeof AppBillBillIdRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/order/$orderId': {
       id: '/_app/order/$orderId'
       path: '/order/$orderId'
@@ -713,6 +732,7 @@ interface AppRouteChildren {
   AppReportsRoute: typeof AppReportsRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppTimeAnalysisRoute: typeof AppTimeAnalysisRoute
+  AppBillBillIdRoute: typeof AppBillBillIdRoute
   AppOrderOrderIdRoute: typeof AppOrderOrderIdRoute
   AppPaymentBillIdRoute: typeof AppPaymentBillIdRoute
 }
@@ -734,6 +754,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppReportsRoute: AppReportsRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppTimeAnalysisRoute: AppTimeAnalysisRoute,
+  AppBillBillIdRoute: AppBillBillIdRoute,
   AppOrderOrderIdRoute: AppOrderOrderIdRoute,
   AppPaymentBillIdRoute: AppPaymentBillIdRoute,
 }
