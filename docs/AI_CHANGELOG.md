@@ -15,6 +15,16 @@ Add new entries at the top using this template:
 - Follow-up: none, or exact remaining work
 ```
 
+## 2026-10-22 — Show tips in Sales and Bill History
+
+- Agent: Codex
+- Scope: POS Reports Sales History, Bill History payment badges, and the Bill History regression guard.
+- Decision: show QR tips, card tips, and total tips separately from sales in every Sales History period, and show each saved payment tip beside its tender in the Bill History list. Existing sales, tender, payout, and reconciliation calculations remain unchanged.
+- Verification: Bill History regression guard, AI protocol guard, TypeScript, full build-enforced regression suite, and production build passed with the frozen Bun lock. Targeted repository lint still reports the existing whole-file Prettier backlog in `reports.tsx`; the focused diff was reviewed without reformatting unrelated code.
+- Git: `codex/show-history-tips`; exact commit is reported with delivery.
+- Delivery: source work only at this entry; no database, payment record, Lovable production, or SUNMI Android change.
+- Follow-up: merge, publish Lovable, and verify the live Sales History and Bill History bundles.
+
 ## 2026-10-22 — Deliver Bill History read-only details to production
 
 - Agent: Codex
