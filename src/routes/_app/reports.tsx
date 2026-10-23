@@ -37,7 +37,8 @@ type Shift = { id: string; business_day: string; opened_at: string; closed_at: s
 type StaffTabCollection = { staffName: string; method: "cash" | "qr"; amount: number };
 type ReportData = {
   gross: number; net: number; discount: number; member: number;
-  coupon: number; // reserved for the upcoming coupon system
+  coupon: number;
+  couponCount: number;
   vatIncluded: number; vatAdded: number;
   voids: number; refunds: number; byMethod: Record<string, number>;
   openingFloat: number; bills: number;
@@ -81,6 +82,7 @@ function historicalReport(raw: Record<string, unknown>): ReportData {
   return {
     gross: Number(raw.gross ?? 0), net: Number(raw.net ?? 0), discount: Number(raw.discount ?? 0),
     member: Number(raw.member ?? 0), coupon: Number(raw.coupon ?? 0),
+    couponCount: Number(raw.couponCount ?? 0),
     vatIncluded: Number(raw.vatIncluded ?? 0), vatAdded: Number(raw.vatAdded ?? 0),
     voids: Number(raw.voids ?? 0), refunds: Number(raw.refunds ?? 0),
     byMethod: { cash: 0, qr: 0, card: 0, gov_qr: 0, ...byMethod },
@@ -161,7 +163,8 @@ async function openPrintWindow(
       { title: "Sales", rows: rows([
         ["Gross sales", thb(r.gross)], ["Customer discount", `- ${thb(customerDiscount(r))}`],
         ...(r.staffTabDiscount > 0 ? [["Staff discount", `- ${thb(r.staffTabDiscount)}`] as [string, string]] : []),
-        ["Member discount", `- ${thb(r.member)}`], ["Coupon", `- ${thb(r.coupon)}`],
+        ["Member discount", `- ${thb(r.member)}`],
+        [`Coupon (${r.couponCount} uses)`, `- ${thb(r.coupon)}`],
         ...(r.vatIncluded > 0 ? [["VAT (7%) included", thb(r.vatIncluded)] as [string, string]] : []),
         ...(r.vatAdded > 0 ? [["VAT (7%) added", thb(r.vatAdded)] as [string, string]] : []), ["Net sales", thb(r.net), true],
       ]) },
@@ -207,7 +210,7 @@ ${row("Gross sales", thb(r.gross))}
 ${row("Customer discount", `- ${thb(customerDiscount(r))}`)}
 ${r.staffTabDiscount > 0 ? row("Staff discount", `- ${thb(r.staffTabDiscount)}`) : ""}
 ${row("Member discount", `- ${thb(r.member)}`)}
-${row("Coupon", `- ${thb(r.coupon)}`)}
+${row(`Coupon (${r.couponCount} uses)`, `- ${thb(r.coupon)}`)}
 ${r.vatIncluded > 0 ? row("VAT (7%) (included)", thb(r.vatIncluded)) : ""}
 ${r.vatAdded > 0 ? row("VAT (7%) (added)", thb(r.vatAdded)) : ""}
 ${row("Net sales", thb(r.net), true)}
@@ -398,6 +401,7 @@ function Reports() {
       ...(((itemDiscs as any[] | null) ?? []).map((row) => ({ ...row, type: "item", free_item_name: null }))),
     ];
     const coupon = billDiscRows.filter((d) => d.free_item_name === "__coupon__").reduce((sum, d) => sum + Number(d.amount), 0);
+    const couponCount = billDiscRows.filter((d) => d.free_item_name === "__coupon__").length;
     const discount = Math.max(0, totalDiscount - coupon) + staffTabDiscount;
     const discApplierIds = [...new Set(discRows.map((d) => d.applied_by).filter(Boolean))] as string[];
     const { data: discStaffList } = discApplierIds.length
@@ -441,7 +445,7 @@ function Reports() {
       }))
       .filter((issue) => Math.abs(issue.paid - issue.expected) > 0.001);
     return {
-      gross, net: paidTotal - refundTotal, discount, member, coupon, vatIncluded, vatAdded,
+      gross, net: paidTotal - refundTotal, discount, member, coupon, couponCount, vatIncluded, vatAdded,
       voids: (voids ?? []).reduce((x, v) => x + Number(v.amount), 0),
       refunds: refundTotal,
       byMethod, openingFloat: Number(s.opening_float), bills: (bills ?? []).length,
@@ -949,7 +953,7 @@ function mergeReports(reports: ReportData[]): ReportData {
   const byStaff = new Map<string, { staffName: string; amount: number; count: number }>();
   const buckets = new Map<string, QrBucketTotal>();
   const numericKeys = [
-    "gross", "net", "discount", "member", "coupon", "vatIncluded", "vatAdded", "voids", "refunds",
+    "gross", "net", "discount", "member", "coupon", "couponCount", "vatIncluded", "vatAdded", "voids", "refunds",
     "openingFloat", "bills", "tipTotal", "cardTipTotal", "cancelledCount", "takeoutTotal",
     "staffMealTotal", "staffTabCharged", "staffTabDiscount", "staffTabCashCollected", "staffTabQrCollected",
   ] as const;
@@ -2597,6 +2601,9 @@ function ReportCard({ r }: { r: ReportData }) {
           </>
         ) : (
           <Row label="Discounts" value={thb(0)} />
+        )}
+        {r.coupon > 0 && (
+          <Row label={`Coupon (${r.couponCount} uses)`} value={`- ${thb(r.coupon)}`} />
         )}
         {r.vatIncluded > 0 && <Row label="VAT (7%) (included)" value={thb(r.vatIncluded)} />}
         {r.vatAdded > 0 && <Row label="VAT (7%) (added)" value={thb(r.vatAdded)} />}
