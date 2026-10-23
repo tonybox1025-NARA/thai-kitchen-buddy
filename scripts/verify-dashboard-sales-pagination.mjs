@@ -9,6 +9,8 @@ const required = [
   '.not("is_test", "is", true)',
   "if (!data || data.length < BILL_PAGE_SIZE) break;",
   "fetchBillsForShifts(shiftIds)",
+  'rpc("staff_tab_shift_activity", { p_shift_ids: shiftIds })',
+  'row.activity_type === "charge"',
 ];
 
 for (const marker of required) {
