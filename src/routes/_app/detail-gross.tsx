@@ -25,6 +25,30 @@ type BillRow = {
   shift_id: string; businessDay: string;
 };
 
+const BILL_PAGE_SIZE = 500;
+
+async function fetchBillsForShifts(shiftIds: string[]): Promise<Omit<BillRow, "businessDay">[]> {
+  const rows: Omit<BillRow, "businessDay">[] = [];
+
+  for (let from = 0; ; from += BILL_PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from("bills")
+      .select("id,order_id,total,subtotal,discount_amount,member_discount_amount,loyalty_discount_amount,paid_at,shift_id")
+      .in("status", ["paid", "partial_refund", "refunded"])
+      .in("shift_id", shiftIds)
+      .not("is_test", "is", true)
+      .order("paid_at", { ascending: false })
+      .order("id", { ascending: true })
+      .range(from, from + BILL_PAGE_SIZE - 1);
+
+    if (error) throw error;
+    rows.push(...((data ?? []) as Omit<BillRow, "businessDay">[]));
+    if (!data || data.length < BILL_PAGE_SIZE) break;
+  }
+
+  return rows;
+}
+
 function GrossSalesDetail() {
   const { t } = useI18n();
   const { range: initialRange } = Route.useSearch();
@@ -53,22 +77,23 @@ function GrossSalesDetail() {
         const shiftIds = await shiftIdsFor(range, bounds);
         if (!shiftIds.length) { setBills([]); setTableMap(new Map()); return; }
 
-        const [{ data: b }, { data: staffRows }, { data: refundRows }, shiftDays] = await Promise.all([
-          supabase.from("bills")
-          .select("id,order_id,total,subtotal,discount_amount,member_discount_amount,loyalty_discount_amount,paid_at,shift_id")
-          .in("status", ["paid", "partial_refund", "refunded"]).in("shift_id", shiftIds)
-          .order("paid_at", { ascending: false }).limit(500),
+        const [b, staffResult, refundResult, shiftDays] = await Promise.all([
+          fetchBillsForShifts(shiftIds),
           (supabase as any).from("staff_tab_charges").select("subtotal,discount_amount,amount").in("shift_id", shiftIds).neq("status", "voided"),
           supabase.from("refunds").select("amount").in("shift_id", shiftIds),
           businessDaysForShifts(shiftIds),
         ]);
+        if (staffResult.error) throw staffResult.error;
+        if (refundResult.error) throw refundResult.error;
+        const staffRows = staffResult.data;
+        const refundRows = refundResult.data;
         setStaffSales({
           gross: (staffRows ?? []).reduce((sum: number, row: any) => sum + Number(row.subtotal ?? row.amount ?? 0), 0),
           net: (staffRows ?? []).reduce((sum: number, row: any) => sum + Number(row.amount ?? 0), 0),
           discount: (staffRows ?? []).reduce((sum: number, row: any) => sum + Number(row.discount_amount ?? 0), 0),
         });
         setRefunds((refundRows ?? []).reduce((sum, row) => sum + Number(row.amount ?? 0), 0));
-        if (!b?.length) { setBills([]); setTableMap(new Map()); return; }
+        if (!b.length) { setBills([]); setTableMap(new Map()); return; }
 
         setBills(b.map((bill) => ({
           ...bill,
