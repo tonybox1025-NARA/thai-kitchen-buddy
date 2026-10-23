@@ -14,6 +14,11 @@ const checks = [
   [detail.includes('.from("order_items")'), "Bill detail loads order items"],
   [detail.includes('.from("payments")'), "Bill detail loads payment methods"],
   [
+    detail.includes("Number(payment.amount) + Number(payment.tip_amount ?? 0)") &&
+      detail.includes('label={copy("ยอดชำระค่าบิล", "Bill payment")}'),
+    "Bill detail shows total transferred with bill and tip breakdown",
+  ],
+  [
     reports.includes('.select("bill_id,method,amount,tip_amount")') &&
       reports.includes("methodChip(p.method, p.amount, p.tip_amount)"),
     "Bill History list displays saved payment tips",
@@ -21,9 +26,11 @@ const checks = [
   [
     reports.includes("function SalesTipsCard") &&
       reports.includes('label={th ? "ทิป QR" : "QR tips"}') &&
+      reports.includes('label={th ? "ยอดรับ QR จริง" : "Actual QR received"}') &&
       reports.includes('label={th ? "ทิปบัตรเครดิต" : "Card tips"}') &&
+      reports.includes('label={th ? "ยอดรับบัตรเครดิตจริง" : "Actual card received"}') &&
       reports.includes('label={th ? "ทิปรวม" : "Total tips"}'),
-    "Sales History separates QR, card, and total tips",
+    "Sales History separates tips and shows actual transferred totals",
   ],
   [detail.includes('.from("refunds")'), "Bill detail loads refund history"],
   [detail.includes("bkkDateTime("), "Bill detail uses Bangkok time"],
