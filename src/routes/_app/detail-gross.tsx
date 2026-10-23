@@ -77,15 +77,17 @@ function GrossSalesDetail() {
         const shiftIds = await shiftIdsFor(range, bounds);
         if (!shiftIds.length) { setBills([]); setTableMap(new Map()); return; }
 
-        const [b, staffResult, refundResult, shiftDays] = await Promise.all([
+        const [b, staffActivityResult, refundResult, shiftDays] = await Promise.all([
           fetchBillsForShifts(shiftIds),
-          (supabase as any).from("staff_tab_charges").select("subtotal,discount_amount,amount").in("shift_id", shiftIds).neq("status", "voided"),
+          (supabase as any).rpc("staff_tab_shift_activity", { p_shift_ids: shiftIds }),
           supabase.from("refunds").select("amount").in("shift_id", shiftIds),
           businessDaysForShifts(shiftIds),
         ]);
-        if (staffResult.error) throw staffResult.error;
+        if (staffActivityResult.error) throw staffActivityResult.error;
         if (refundResult.error) throw refundResult.error;
-        const staffRows = staffResult.data;
+        const staffRows = (staffActivityResult.data ?? []).filter(
+          (row: any) => row.activity_type === "charge",
+        );
         const refundRows = refundResult.data;
         setStaffSales({
           gross: (staffRows ?? []).reduce((sum: number, row: any) => sum + Number(row.subtotal ?? row.amount ?? 0), 0),
