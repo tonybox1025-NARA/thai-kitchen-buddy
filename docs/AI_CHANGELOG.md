@@ -15,6 +15,16 @@ Add new entries at the top using this template:
 - Follow-up: none, or exact remaining work
 ```
 
+## 2026-10-22 — Deliver Sales and Bill History tip visibility
+
+- Agent: Codex
+- Scope: production delivery and live verification of the Sales History and Bill History tip display recorded below.
+- Decision: publish the read-only tip visibility update without changing any saved payment, sales total, cash payout calculation, database object, or Android package.
+- Verification: Lovable synced merge commit `3c30b3b`; the production response identifies deployment `324568de-0e33-4e4a-9771-643616accebf`, and the live Reports bundle contains the QR, card, total, and per-payment tip markers plus the `tip_amount` Bill History query.
+- Git: feature commit `a687e8d`; merged to `main` as `3c30b3b` through PR #88.
+- Delivery: live at `https://thai-kitchen-buddy.lovable.app`; no production database, Edge Function, or installed SUNMI Android app was changed.
+- Follow-up: none for the web workflow; refresh Reports before first use.
+
 ## 2026-10-22 — Show tips in Sales and Bill History
 
 - Agent: Codex
