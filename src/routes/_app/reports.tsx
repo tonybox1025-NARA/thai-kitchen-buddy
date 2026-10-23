@@ -1817,6 +1817,7 @@ function BillHistoryTab() {
   useEffect(() => { if (range === "custom" && custom?.from && custom?.to) load(); /* eslint-disable-next-line */ }, [custom]);
 
   const methodChip = (method: string, amount: number, tipAmount: number) => {
+    const received = amount + tipAmount;
     const cls =
       method === "cash" ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400" :
       method === "qr"   ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400" :
@@ -1825,8 +1826,12 @@ function BillHistoryTab() {
     const label = method === "qr" ? "QR" : method === "gov_qr" ? "Gov QR" : method === "card" ? "Card" : "Cash";
     return (
       <span key={method + amount} className={`text-xs px-2 py-0.5 rounded-full font-medium ${cls}`}>
-        {label} {thb(amount)}
-        {tipAmount > 0 && <span className="ml-1 font-semibold">+ Tip {thb(tipAmount)}</span>}
+        {label} {thb(received)}
+        {tipAmount > 0 && (
+          <span className="ml-1 font-normal opacity-80">
+            (Bill {thb(amount)} + Tip {thb(tipAmount)})
+          </span>
+        )}
       </span>
     );
   };
@@ -2533,6 +2538,8 @@ function CashSummary({ r, cashCount, overShortLabel }: { r: ReportData; cashCoun
 function SalesTipsCard({ r }: { r: ReportData }) {
   const { lang } = useI18n();
   const totalTips = cashTipsPaidOut(r);
+  const qrReceived = r.byMethod.qr + r.tipTotal;
+  const cardReceived = r.byMethod.card + r.cardTipTotal;
   const th = lang === "th";
 
   return (
@@ -2547,7 +2554,9 @@ function SalesTipsCard({ r }: { r: ReportData }) {
       </CardHeader>
       <CardContent className="space-y-1 text-sm">
         <Row label={th ? "ทิป QR" : "QR tips"} value={thb(r.tipTotal)} />
+        <Row label={th ? "ยอดรับ QR จริง" : "Actual QR received"} value={thb(qrReceived)} bold />
         <Row label={th ? "ทิปบัตรเครดิต" : "Card tips"} value={thb(r.cardTipTotal)} />
+        <Row label={th ? "ยอดรับบัตรเครดิตจริง" : "Actual card received"} value={thb(cardReceived)} bold />
         <Row label={th ? "ทิปรวม" : "Total tips"} value={thb(totalTips)} bold />
       </CardContent>
     </Card>

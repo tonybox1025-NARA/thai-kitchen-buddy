@@ -15,6 +15,16 @@ Add new entries at the top using this template:
 - Follow-up: none, or exact remaining work
 ```
 
+## 2026-10-22 — Show the actual transferred amount including tips
+
+- Agent: Codex
+- Scope: POS Bill detail, Bill History payment badges, Sales History tip summary, and the Bill History regression guard.
+- Decision: keep bill payment and tip accounting separate, but display the actual QR/card amount received as payment plus tip. Bill detail and Bill History also retain the bill/tip breakdown, so a ฿724 bill plus ฿26 tip is visibly a ฿750 transfer.
+- Verification: Bill History regression guard, AI protocol guard, TypeScript, full build-enforced regression suite, and production build passed with the frozen Bun lock; merge and live-bundle checks remain for delivery.
+- Git: `codex/show-total-qr-received`; exact commit is reported with delivery.
+- Delivery: source work only at this entry; no database, payment record, reconciliation calculation, Lovable production, or SUNMI Android change.
+- Follow-up: finish validation, merge, publish Lovable, and verify the live Bill and Reports bundles.
+
 ## 2026-10-22 — Deliver Sales and Bill History tip visibility
 
 - Agent: Codex

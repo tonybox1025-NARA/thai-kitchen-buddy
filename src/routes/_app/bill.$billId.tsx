@@ -347,13 +347,21 @@ function BillDetailPage() {
               <div key={payment.id} className="space-y-2 border-b pb-4 last:border-0 last:pb-0">
                 <div className="flex items-center justify-between gap-4">
                   <span className="font-semibold">{paymentName(payment.method, lang)}</span>
-                  <span className="font-bold tabular-nums">{thb(payment.amount)}</span>
+                  <span className="font-bold tabular-nums">
+                    {thb(Number(payment.amount) + Number(payment.tip_amount ?? 0))}
+                  </span>
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {bkkDateTime(payment.created_at, lang)}
                 </p>
                 {Number(payment.tip_amount) > 0 && (
-                  <SummaryRow label={copy("ทิป", "Tip")} value={thb(payment.tip_amount)} />
+                  <>
+                    <SummaryRow
+                      label={copy("ยอดชำระค่าบิล", "Bill payment")}
+                      value={thb(payment.amount)}
+                    />
+                    <SummaryRow label={copy("ทิป", "Tip")} value={thb(payment.tip_amount)} />
+                  </>
                 )}
                 {payment.method === "cash" && payment.cash_received !== null && (
                   <SummaryRow
