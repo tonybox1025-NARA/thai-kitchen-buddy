@@ -15,6 +15,16 @@ Add new entries at the top using this template:
 - Follow-up: none, or exact remaining work
 ```
 
+## 2026-10-22 — Deliver actual transferred totals including tips
+
+- Agent: Codex
+- Scope: production delivery and live verification of the Bill and Sales History transferred-total display recorded below.
+- Decision: publish the read-only display correction while keeping bill payments and tips separate in accounting and leaving all stored data and reconciliation calculations unchanged.
+- Verification: Lovable synced merge commit `45dae0c`; production identifies deployment `5fa514a6-927f-485b-9ef6-a656d371b285`. The live Bill bundle contains `Bill payment`, `Tip`, and `QR Transfer`, while the live Reports bundle contains actual QR/card received plus bill/tip breakdown markers.
+- Git: feature commit `5f6ed48`; merged to `main` as `45dae0c` through PR #90.
+- Delivery: live at `https://thai-kitchen-buddy.lovable.app`; no database, payment record, Edge Function, or installed SUNMI Android app was changed.
+- Follow-up: none for the web workflow; refresh the open Bill or Reports page before checking.
+
 ## 2026-10-22 — Show the actual transferred amount including tips
 
 - Agent: Codex
