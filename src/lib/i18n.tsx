@@ -444,6 +444,7 @@ const dict: Dict = {
   disc_applied_by:    { th: "ใส่โดย",           en: "Applied by"      },
   disc_by_type:       { th: "แยกตามประเภทส่วนลด", en: "Discount breakdown" },
   disc_by_staff:      { th: "แยกตามพนักงาน",   en: "By staff"        },
+  coupon:             { th: "คูปอง",            en: "Coupon"          },
   // special order types
   takeout: { th: "เทคอะเวย์", en: "Takeout" },
   staff_meal: { th: "อาหารพนักงาน", en: "Staff Meal" },

@@ -11,6 +11,9 @@ const required = [
   "fetchBillsForShifts(shiftIds)",
   'rpc("staff_tab_shift_activity", { p_shift_ids: shiftIds })',
   'row.activity_type === "charge"',
+  'fetchCouponDiscount(b.map((bill) => bill.id))',
+  "bills.reduce((s, b) => s + Number(b.discount_amount), 0) - couponDiscount",
+  '[t("coupon"), couponDiscount]',
 ];
 
 for (const marker of required) {

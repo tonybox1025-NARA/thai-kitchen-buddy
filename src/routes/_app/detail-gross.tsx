@@ -26,6 +26,7 @@ type BillRow = {
 };
 
 const BILL_PAGE_SIZE = 500;
+const BILL_ID_BATCH_SIZE = 100;
 
 async function fetchBillsForShifts(shiftIds: string[]): Promise<Omit<BillRow, "businessDay">[]> {
   const rows: Omit<BillRow, "businessDay">[] = [];
@@ -49,6 +50,25 @@ async function fetchBillsForShifts(shiftIds: string[]): Promise<Omit<BillRow, "b
   return rows;
 }
 
+async function fetchCouponDiscount(billIds: string[]): Promise<number> {
+  let total = 0;
+
+  for (let from = 0; from < billIds.length; from += BILL_ID_BATCH_SIZE) {
+    const { data, error } = await (supabase as any)
+      .from("bill_discounts")
+      .select("amount")
+      .in("bill_id", billIds.slice(from, from + BILL_ID_BATCH_SIZE))
+      .eq("free_item_name", "__coupon__");
+    if (error) throw error;
+    total += (data ?? []).reduce(
+      (sum: number, row: { amount: number }) => sum + Number(row.amount),
+      0,
+    );
+  }
+
+  return total;
+}
+
 function GrossSalesDetail() {
   const { t } = useI18n();
   const { range: initialRange } = Route.useSearch();
@@ -59,6 +79,7 @@ function GrossSalesDetail() {
   const [loading, setLoading] = useState(false);
   const [staffSales, setStaffSales] = useState({ gross: 0, net: 0, discount: 0 });
   const [refunds, setRefunds] = useState(0);
+  const [couponDiscount, setCouponDiscount] = useState(0);
 
   const bounds = useMemo<[Date, Date]>(() => {
     if (range === "custom" && custom?.from) {
@@ -75,7 +96,12 @@ function GrossSalesDetail() {
     (async () => {
       try {
         const shiftIds = await shiftIdsFor(range, bounds);
-        if (!shiftIds.length) { setBills([]); setTableMap(new Map()); return; }
+        if (!shiftIds.length) {
+          setBills([]);
+          setTableMap(new Map());
+          setCouponDiscount(0);
+          return;
+        }
 
         const [b, staffActivityResult, refundResult, shiftDays] = await Promise.all([
           fetchBillsForShifts(shiftIds),
@@ -95,12 +121,18 @@ function GrossSalesDetail() {
           discount: (staffRows ?? []).reduce((sum: number, row: any) => sum + Number(row.discount_amount ?? 0), 0),
         });
         setRefunds((refundRows ?? []).reduce((sum, row) => sum + Number(row.amount ?? 0), 0));
-        if (!b.length) { setBills([]); setTableMap(new Map()); return; }
+        if (!b.length) {
+          setBills([]);
+          setTableMap(new Map());
+          setCouponDiscount(0);
+          return;
+        }
 
         setBills(b.map((bill) => ({
           ...bill,
           businessDay: shiftDays.get(bill.shift_id ?? "") ?? "unknown",
         })) as BillRow[]);
+        setCouponDiscount(await fetchCouponDiscount(b.map((bill) => bill.id)));
 
         const orderIds = [...new Set(b.map(x => x.order_id).filter(Boolean))] as string[];
         const { data: orders } = await supabase.from("orders").select("id,table_id,source,order_number").in("id", orderIds);
@@ -126,8 +158,10 @@ function GrossSalesDetail() {
 
   const gross     = bills.reduce((s, b) => s + Number(b.subtotal), 0) + staffSales.gross;
   const net       = bills.reduce((s, b) => s + Number(b.total), 0) + staffSales.net - refunds;
-  const discounts = bills.reduce((s, b) => s + Number(b.discount_amount), 0)
-    + totalMemberDiscount(bills) + staffSales.discount;
+  const discounts = Math.max(
+    0,
+    bills.reduce((s, b) => s + Number(b.discount_amount), 0) - couponDiscount,
+  ) + totalMemberDiscount(bills) + staffSales.discount;
 
   // By hour
   const byHour = useMemo(() => {
@@ -173,8 +207,8 @@ function GrossSalesDetail() {
       {loading ? <p className="text-muted-foreground text-sm text-center py-8">{t("loading")}</p> : (
         <>
           {/* Summary */}
-          <div className="grid grid-cols-3 gap-4">
-            {([[t("gross"), gross], [t("net"), net], [t("discount"), discounts]] as [string, number][]).map(([l, v]) => (
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            {([[t("gross"), gross], [t("net"), net], [t("discount"), discounts], [t("coupon"), couponDiscount]] as [string, number][]).map(([l, v]) => (
               <Card key={l}>
                 <CardContent className="pt-5">
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">{l}</p>
