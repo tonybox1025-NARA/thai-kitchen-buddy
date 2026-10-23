@@ -15,6 +15,16 @@ Add new entries at the top using this template:
 - Follow-up: none, or exact remaining work
 ```
 
+## 2026-10-23 — Archive resigned staff; history no longer blocks removal
+
+- Agent: Claude Code
+- Scope: `supabase/migrations/20261023130000_staff_archive_and_history_fks.sql` (applied to prod `36755238-...` via Lovable connector), `src/routes/_app/settings.tsx` (staff manager).
+- Decision: a resigned staff member could not be deleted — `orders_staff_debtor_id_fkey` (and other references from bills/voids/shifts/etc.) blocked it, which is correct since those records, including cancelled/voided ones, must stay as history. So staff are now **archived (deactivated)** rather than deleted: the Settings staff list shows only active staff; the trash button archives (admin-PIN gated `set_staff_active`) instead of hard-deleting; a new "Inactive / Resigned" section lists archived staff with Reactivate and a Delete-permanently option. Separately, every nullable "action-by" FK to `staff` (14 of them: orders.staff_debtor_id/opened_by/closed_by, bills.cashier_id, order_items.voided_by, shifts.*, voids.voided_by, etc.) was changed to `ON DELETE SET NULL` so a true delete keeps the record and only clears the staff link. Owner/approver NOT-NULL FKs (staff_tab_charges.staff_id, staff_tab_settlements.staff_id, emergency_menu_price_changes.requested_by/approved_by) intentionally stay RESTRICT. Also: staff LEK (resigned) was archived; their ฿15 staff tab was already `voided` (not outstanding), so no balance is affected.
+- Verification: `tsc --noEmit` clean. Post-change DB readback: `list_staff_profiles()` returns 14 active (no LEK); `staff.active=false` for LEK; 20 staff FKs now `ON DELETE SET NULL`, 4 remain RESTRICT by design. POS LIVE and attendance untouched.
+- Git: `claude/staff-archive` off `origin/main@c97385c`.
+- Delivery: DB changes applied to production and verified; frontend source ready — merge + Lovable publish + live verification pending at this checkpoint. SUNMI APK update only needed if staff management is used on-device (Tony manages staff on web).
+- Follow-up: none. Future resignations are self-serve (archive); reactivate or permanently delete from the Inactive section.
+
 ## 2026-10-22 — Deliver actual transferred totals including tips
 
 - Agent: Codex

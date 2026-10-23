@@ -3159,6 +3159,7 @@ function MenuTab() {
 function StaffTab() {
   const { t } = useI18n();
   const [list, setList] = useState<Staff[]>([]);
+  const [archived, setArchived] = useState<Staff[]>([]);
   const [add, setAdd] = useState(false);
   const [name, setName] = useState("");
   const [position, setPosition] = useState<StaffPosition>("staff");
@@ -3175,11 +3176,14 @@ function StaffTab() {
   const [changingPosition, setChangingPosition] = useState(false);
 
   const load = async () => {
-    const { data } = await (supabase as any).rpc("list_staff_profiles");
-    setList((data ?? []).map((person: any) => ({
-      ...person,
-      position: person.job_position,
-    })) as Staff[]);
+    const mapRows = (rows: any[] | null) =>
+      (rows ?? []).map((person: any) => ({ ...person, position: person.job_position })) as Staff[];
+    const [{ data }, { data: archivedData }] = await Promise.all([
+      (supabase as any).rpc("list_staff_profiles"),
+      (supabase as any).rpc("list_archived_staff_profiles"),
+    ]);
+    setList(mapRows(data));
+    setArchived(mapRows(archivedData));
   };
   useEffect(() => {
     load();
@@ -3212,8 +3216,43 @@ function StaffTab() {
     load();
   };
 
-  const del = async (s: Staff) => {
-    if (!confirm(`Delete ${s.name}?`)) return;
+  // Resigned staff are archived (deactivated), not deleted: they leave the staff
+  // list but every past order/bill/void keeps its reference and their name.
+  const archive = async (s: Staff) => {
+    if (!confirm(`Archive ${s.name}? They leave the staff list, and all past records are kept.`)) return;
+    const ap = window.prompt("Admin PIN") ?? "";
+    if (ap.length < 4) {
+      toast.error("Admin PIN required");
+      return;
+    }
+    const { error } = await (supabase as any).rpc("set_staff_active", { _id: s.id, _active: false, _admin_pin: ap });
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(`${s.name} archived`);
+    load();
+  };
+
+  const restore = async (s: Staff) => {
+    const ap = window.prompt("Admin PIN") ?? "";
+    if (ap.length < 4) {
+      toast.error("Admin PIN required");
+      return;
+    }
+    const { error } = await (supabase as any).rpc("set_staff_active", { _id: s.id, _active: true, _admin_pin: ap });
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(`${s.name} reactivated`);
+    load();
+  };
+
+  // Permanent delete, only offered for already-archived staff. Past records stay
+  // (their staff link becomes blank); blocked if the person still owns a staff tab.
+  const destroy = async (s: Staff) => {
+    if (!confirm(`Permanently delete ${s.name}? This cannot be undone. Past records are kept but will no longer show their name.`)) return;
     const ap = window.prompt("Admin PIN") ?? "";
     if (ap.length < 4) {
       toast.error("Admin PIN required");
@@ -3224,6 +3263,7 @@ function StaffTab() {
       toast.error(error.message);
       return;
     }
+    toast.success(`${s.name} deleted`);
     load();
   };
 
@@ -3320,7 +3360,26 @@ function StaffTab() {
           <KeyRound className="mr-2 h-4 w-4" />
           Change PIN
         </Button>
-        <Button variant="ghost" size="sm" onClick={() => del(person)}>
+        <Button variant="ghost" size="sm" title="Archive (remove from list, keep history)" onClick={() => archive(person)}>
+          <Trash2 className="h-4 w-4 text-destructive" />
+        </Button>
+      </CardContent>
+    </Card>
+  );
+
+  const archivedCard = (person: Staff) => (
+    <Card key={person.id}>
+      <CardContent className="py-3 flex flex-wrap items-center gap-3 opacity-75">
+        <div className="flex-1">
+          <div className="font-medium">{person.name}</div>
+          <div className="text-xs text-muted-foreground">
+            {staffPositionLabel(person.position)} · inactive
+          </div>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => restore(person)}>
+          Reactivate
+        </Button>
+        <Button variant="ghost" size="sm" title="Delete permanently" onClick={() => destroy(person)}>
           <Trash2 className="h-4 w-4 text-destructive" />
         </Button>
       </CardContent>
@@ -3347,6 +3406,15 @@ function StaffTab() {
         </div>
         <div className="grid gap-2">{employees.map(staffCard)}</div>
       </section>
+      {archived.length > 0 && (
+        <section className="space-y-2 pt-2">
+          <div className="flex items-center gap-2 border-b pb-2">
+            <h3 className="font-semibold text-muted-foreground">Inactive / Resigned</h3>
+            <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{archived.length}</span>
+          </div>
+          <div className="grid gap-2">{archived.map(archivedCard)}</div>
+        </section>
+      )}
       <Dialog open={add} onOpenChange={setAdd}>
         <DialogContent>
           <DialogHeader>
