@@ -1,5 +1,15 @@
 # Shared AI Change Log
 
+## 2026-10-24 — Keep open Bills synchronized after item changes
+
+- Agent: Codex
+- Scope: open Bill totals, order-line add/change/void handling, and the close-review invariant.
+- Decision: recalculate every existing open Bill from authoritative non-voided order lines and saved discounts whenever an order line changes, including service fee, VAT, and rounding. Paid historical Bills remain immutable.
+- Verification: build-enforced void-before-payment regression guard plus the full POS validation suite; exact results are reported with delivery.
+- Git: `codex/fix-void-before-payment-20261024`; exact commit is reported with delivery.
+- Delivery: source and migration pending validation at this entry. The affected 2026-10-24 T08 record is separately repaired only after authoritative production readback.
+- Follow-up: validate, merge, apply the migration, repair T08, and confirm no pending close-review record remains.
+
 ## 2026-10-24 — Use Manager's current shift on POS Live
 
 - Agent: Codex
