@@ -1,5 +1,15 @@
 # Shared AI Change Log
 
+## 2026-10-24 — Use Manager's current shift on POS Live
+
+- Agent: Codex
+- Scope: POS Live attendance response/display and a build-enforced regression guard.
+- Decision: prefer Manager's `display_shift` value and retain the old local clock-in inference only as backward compatibility for an older Manager function response. This shows the temporary 15:00–02:00 window without altering raw fingerprint times, payroll calculations or attendance rows.
+- Verification: dedicated Live guard, AI protocol guard, TypeScript, the full build-enforced regression suite and production build pass with the canonical Bun lock.
+- Git: `codex/live-manager-shift-20261024`, based on `origin/main` `144bf2f`.
+- Delivery: source prepared; merge, Lovable publish and authenticated Live verification remain separate until completed. No Android update is required for the web Live page.
+- Follow-up: deploy the matching Manager function first, then publish POS and confirm one Live attendance row shows 15:00–02:00.
+
 This append-only log records material completed work by Codex or Claude Code. It complements Git history; it does not replace commits, pull requests, tests, deployment records, or Supabase audit evidence.
 
 Add new entries at the top using this template:

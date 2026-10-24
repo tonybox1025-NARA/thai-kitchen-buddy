@@ -18,7 +18,13 @@ type RTable = {
 };
 type OpenOrder = { id: string; table_id: string | null; shift_id: string | null; opened_at: string };
 type AttendancePerson = { external_code: string; employee_id: string | null; external_name: string };
-type AttendanceDay = { external_code: string; employee_id: string | null; clock_in: string | null; clock_out: string | null };
+type AttendanceDay = {
+  external_code: string;
+  employee_id: string | null;
+  clock_in: string | null;
+  clock_out: string | null;
+  display_shift?: string | null;
+};
 type TableItemLine = {
   orderId: string;
   name_th: string;
@@ -372,7 +378,9 @@ function LivePage() {
             </button>
             {attendanceOpen && <div className="space-y-2 border-t px-4 pb-4 pt-3">
               {attendance.map((row) => {
-                const shift = inferredShift(row.clock_in);
+                // Manager owns the temporary/current attendance window. Keep
+                // the legacy inference only for an older function response.
+                const shift = row.display_shift ?? inferredShift(row.clock_in);
                 const working = !!row.clock_in && !row.clock_out;
                 return (
                   <div key={row.external_code} className="flex items-center gap-3 rounded-lg border px-3 py-2">
