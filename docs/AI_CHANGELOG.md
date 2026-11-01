@@ -1,5 +1,15 @@
 # Shared AI Change Log
 
+## 2026-11-01 — Correct LM20261101031 split tender
+
+- Agent: Codex
+- Scope: one production POS Bill on business day 2026-11-01 and its two tender rows only.
+- Decision: Tony confirmed that the ฿600 Bill was actually paid ฿400 by 60/40 and ฿200 by normal QR, not ฿600 by normal QR. Preserve the Bill total, receipt number, paid timestamp, closed order, open shift, items, inventory, and every other Bill.
+- Verification: guarded production readback shows receipt `LM20261101031`, paid Bill ฿600, two payments totaling ฿600 (QR ฿200 and 60/40 ฿400), zero tip, closed order, and the same open 2026-11-01 shift.
+- Git: documentation-only audit entry on `codex/repair-lm20261101031-split-tender`; exact commit is reported with delivery.
+- Delivery: guarded production data repair completed while the shift remained open; no application code, schema, Lovable publication, Android build, item sales, or inventory was changed.
+- Follow-up: none; the eventual Z report will read the corrected tender split from the live payment rows.
+
 ## 2026-10-24 — Keep open Bills synchronized after item changes
 
 - Agent: Codex
