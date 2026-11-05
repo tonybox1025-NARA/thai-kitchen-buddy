@@ -19,5 +19,14 @@ assert.match(source, /Weekday × hour/);
 assert.match(source, /After 02:00 summary/);
 assert.match(source, /After-midnight activity stays with the original business day/);
 assert.match(source, /Guests use table-open time; sales use payment time/);
+assert.match(source, /const \[selectedMonth, setSelectedMonth\] = useState\(currentMonthKey\)/);
+assert.match(source, /if \(range === "month"\) return monthBounds\(selectedMonth\)/);
+assert.match(source, /shiftIdsFor\(range === "month" \? "custom" : range, bounds\)/);
+assert.match(source, /type="month"/);
+assert.match(source, /max=\{currentMonth\}/);
+assert.match(source, /event\.target\.value > currentMonth \? currentMonth : event\.target\.value/);
+assert.match(source, /Month shown/);
+assert.match(source, /Previous month/);
+assert.match(source, /Next month/);
 
 console.log("OK: weekday-by-hour analysis preserves shift business days and late-hour averages");
