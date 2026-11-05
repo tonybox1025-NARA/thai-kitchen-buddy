@@ -69,7 +69,13 @@ type TableStat = {
 const emptyHour = (): HourStat => ({ guests: 0, tables: 0, sales: 0, bills: 0 });
 const hourLabel = (hour: number) => `${String(hour).padStart(2, "0")}:00`;
 const timeLabel = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleTimeString([], { timeZone: "Asia/Bangkok",  hour: "2-digit", minute: "2-digit" }) : "—";
+  iso
+    ? new Date(iso).toLocaleTimeString([], {
+        timeZone: "Asia/Bangkok",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "—";
 
 function TimeAnalysis() {
   const { lang } = useI18n();
@@ -169,6 +175,7 @@ function TimeAnalysis() {
     const shiftDay = new Map(shifts.map((s) => [s.id, s.business_day]));
     const orderShift = new Map(orders.map((o) => [o.id, o.shift_id]));
     const hourly = Array.from({ length: 24 }, emptyHour);
+    const weekdayHours = Array.from({ length: 7 }, () => Array.from({ length: 24 }, emptyHour));
     const weekdays = Array.from(
       { length: 7 },
       () => ({ guests: 0, tables: 0, sales: 0, bills: 0, days: new Set<string>() }) as DayStat,
@@ -202,6 +209,9 @@ function TimeAnalysis() {
       );
     }
     const diningOrders = orders.filter(isDiningOrder);
+    for (const shift of shifts) {
+      weekdays[weekdayOfKey(shift.business_day)].days.add(shift.business_day);
+    }
     for (const order of diningOrders) {
       const at = new Date(order.opened_at);
       const h = bkkHour(at);
@@ -217,6 +227,8 @@ function TimeAnalysis() {
       weekdays[weekday].guests += guests;
       weekdays[weekday].tables += 1;
       weekdays[weekday].days.add(day);
+      weekdayHours[weekday][h].guests += guests;
+      weekdayHours[weekday][h].tables += 1;
       const d = ensureDay(day);
       d.guests += guests;
       d.tables += 1;
@@ -237,6 +249,8 @@ function TimeAnalysis() {
       weekdays[weekday].sales += total;
       weekdays[weekday].bills += 1;
       weekdays[weekday].days.add(day);
+      weekdayHours[weekday][h].sales += total;
+      weekdayHours[weekday][h].bills += 1;
       const d = ensureDay(day);
       d.sales += total;
       d.bills += 1;
@@ -252,6 +266,7 @@ function TimeAnalysis() {
     return {
       hourly,
       weekdays,
+      weekdayHours,
       daily: [...daily.entries()].sort((a, b) => b[0].localeCompare(a[0])),
       totalGuests,
       totalTables: diningOrders.length,
@@ -384,6 +399,16 @@ function TimeAnalysis() {
   );
   const maxGuests = Math.max(1, ...activeHours.map((h) => h.guests));
   const maxSales = Math.max(1, ...activeHours.map((h) => h.sales));
+  const weekdayActiveHours = orderBusinessHours(
+    Array.from({ length: 24 }, (_, hour) => ({
+      hour,
+      active: analysis.weekdayHours.some((weekday) => {
+        const value = weekday[hour];
+        return value.guests || value.tables || value.sales || value.bills;
+      }),
+    })).filter((value) => value.active),
+  );
+  const lateHours = weekdayActiveHours.filter(({ hour }) => hour >= 2 && hour < 12);
   const weekdayNames = th
     ? ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"]
     : ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -506,6 +531,119 @@ function TimeAnalysis() {
                         </tbody>
                       </table>
                     </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>{th ? "วันในสัปดาห์ × ชั่วโมง" : "Weekday × hour"}</CardTitle>
+                  <p className="text-xs text-muted-foreground">
+                    {th
+                      ? "ค่าเฉลี่ยต่อวันที่เปิด แยกตามวันทำการของกะ ยอดหลังเที่ยงคืนยังอยู่กับวันทำการเดิม"
+                      : "Average per operating day, grouped by shift business day. After-midnight activity stays with the original business day."}
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  {weekdayActiveHours.length === 0 ? (
+                    <Empty th={th} />
+                  ) : (
+                    <>
+                      <div>
+                        <h3 className="mb-3 text-sm font-semibold">
+                          {th ? "สรุปหลัง 02:00 น." : "After 02:00 summary"}
+                        </h3>
+                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+                          {analysis.weekdays.map((weekday, weekdayIndex) => {
+                            const days = weekday.days.size;
+                            const late = lateHours.reduce(
+                              (total, { hour }) => {
+                                const value = analysis.weekdayHours[weekdayIndex][hour];
+                                total.guests += value.guests;
+                                total.sales += value.sales;
+                                total.bills += value.bills;
+                                return total;
+                              },
+                              { guests: 0, sales: 0, bills: 0 },
+                            );
+                            return (
+                              <div key={weekdayIndex} className="rounded-lg border p-3 text-sm">
+                                <div className="font-semibold">{weekdayNames[weekdayIndex]}</div>
+                                <div className="mt-2 text-lg font-bold">
+                                  {days ? (late.guests / days).toFixed(1) : "0.0"}
+                                  <span className="ml-1 text-xs font-normal text-muted-foreground">
+                                    {th ? "คน/วัน" : "guests/day"}
+                                  </span>
+                                </div>
+                                <div className="font-semibold text-amber-600">
+                                  {thb(days ? late.sales / days : 0)}
+                                  <span className="ml-1 text-xs font-normal text-muted-foreground">
+                                    {th ? "/วัน" : "/day"}
+                                  </span>
+                                </div>
+                                <div className="mt-1 text-xs text-muted-foreground">
+                                  {days ? (late.bills / days).toFixed(1) : "0.0"}{" "}
+                                  {th ? "บิล/วัน" : "bills/day"} · {days} {th ? "วัน" : "days"}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="overflow-x-auto rounded-lg border">
+                        <table className="min-w-max text-sm">
+                          <thead>
+                            <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
+                              <th className="sticky left-0 z-10 min-w-32 bg-muted px-3 py-3">
+                                {th ? "วันทำการ" : "Business day"}
+                              </th>
+                              {weekdayActiveHours.map(({ hour }) => (
+                                <th key={hour} className="min-w-28 px-3 py-3 text-center font-mono">
+                                  {hourLabel(hour)}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {analysis.weekdays.map((weekday, weekdayIndex) => {
+                              const days = weekday.days.size;
+                              return (
+                                <tr key={weekdayIndex} className="border-b last:border-0">
+                                  <th className="sticky left-0 z-10 bg-background px-3 py-3 text-left">
+                                    {weekdayNames[weekdayIndex]}
+                                    <small className="ml-1 font-normal text-muted-foreground">
+                                      ({days})
+                                    </small>
+                                  </th>
+                                  {weekdayActiveHours.map(({ hour }) => {
+                                    const value = analysis.weekdayHours[weekdayIndex][hour];
+                                    return (
+                                      <td key={hour} className="px-3 py-3 text-center">
+                                        <div className="font-semibold">
+                                          {days ? (value.guests / days).toFixed(1) : "0.0"}
+                                          <span className="ml-1 text-[10px] font-normal text-muted-foreground">
+                                            {th ? "คน" : "guests"}
+                                          </span>
+                                        </div>
+                                        <div className="text-xs font-medium text-amber-600">
+                                          {thb(days ? value.sales / days : 0)}
+                                        </div>
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {th
+                          ? "ลูกค้าใช้เวลาที่เปิดโต๊ะ ยอดขายใช้เวลาที่ชำระเงิน และทั้งสองรายการยึดวันทำการของกะ"
+                          : "Guests use table-open time; sales use payment time. Both are assigned to the shift business day."}
+                      </p>
+                    </>
                   )}
                 </CardContent>
               </Card>
