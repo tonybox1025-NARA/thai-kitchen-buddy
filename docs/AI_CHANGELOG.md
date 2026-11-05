@@ -1,5 +1,15 @@
 # Shared AI Change Log
 
+## 2026-11-05 — Choose a historical month in Time analysis
+
+- Agent: Codex
+- Scope: POS Time analysis monthly range controls and the weekday/hour regression guard.
+- Decision: keep the Monthly preset but add previous/next controls and a direct month picker. Historical months load their complete Bangkok business-day range, while navigation cannot move beyond the current Bangkok month.
+- Verification: dedicated Time analysis guard, AI protocol guard, TypeScript, full regression suite, and production build; exact results are reported with delivery.
+- Git: `codex/time-analysis-month-picker-20261105`; exact commit is reported with delivery.
+- Delivery: source implementation in progress at this entry; merge, Lovable publication, and live verification remain separate.
+- Follow-up: complete validation, merge, publish, and verify the live Time analysis bundle.
+
 ## 2026-11-05 — Compare guests and sales by weekday and hour
 
 - Agent: Codex

@@ -1,9 +1,23 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { bkkHour, weekdayOfKey } from "@/lib/bkk-time";
-import { pickerBounds } from "@/lib/bkk-time";
+import {
+  addDaysKey,
+  bkkHour,
+  bkkRangeBounds,
+  bkkToday,
+  pickerBounds,
+  weekdayOfKey,
+} from "@/lib/bkk-time";
 import { useEffect, useMemo, useState } from "react";
 import type { DateRange } from "react-day-picker";
-import { ArrowLeft, Clock3, ReceiptText, Table2, Users } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  Clock3,
+  ReceiptText,
+  Table2,
+  Users,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { DashRangeBar } from "@/components/DashRangeBar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -68,6 +82,16 @@ type TableStat = {
 
 const emptyHour = (): HourStat => ({ guests: 0, tables: 0, sales: 0, bills: 0 });
 const hourLabel = (hour: number) => `${String(hour).padStart(2, "0")}:00`;
+const currentMonthKey = () => bkkToday().slice(0, 7);
+const moveMonthKey = (key: string, offset: number) => {
+  const [year, month] = key.split("-").map(Number);
+  const moved = new Date(Date.UTC(year, month - 1 + offset, 1));
+  return `${moved.getUTCFullYear()}-${String(moved.getUTCMonth() + 1).padStart(2, "0")}`;
+};
+const monthBounds = (key: string): [Date, Date] => {
+  const nextMonth = moveMonthKey(key, 1);
+  return bkkRangeBounds(`${key}-01`, addDaysKey(`${nextMonth}-01`, -1));
+};
 const timeLabel = (iso: string | null) =>
   iso
     ? new Date(iso).toLocaleTimeString([], {
@@ -81,6 +105,7 @@ function TimeAnalysis() {
   const { lang } = useI18n();
   const th = lang === "th";
   const [range, setRange] = useState<DashRange>("week");
+  const [selectedMonth, setSelectedMonth] = useState(currentMonthKey);
   const [custom, setCustom] = useState<DateRange | undefined>();
   const [shifts, setShifts] = useState<ShiftRow[]>([]);
   const [orders, setOrders] = useState<OrderRow[]>([]);
@@ -91,13 +116,14 @@ function TimeAnalysis() {
   const [loading, setLoading] = useState(false);
 
   const bounds = useMemo<[Date, Date]>(() => {
+    if (range === "month") return monthBounds(selectedMonth);
     if (range === "custom" && custom?.from) {
       const from = pickerBounds(custom.from, custom.to)[0];
       const to = pickerBounds(custom.from, custom.to)[1];
       return [from, to];
     }
     return rangeBounds(range === "custom" ? "today" : range);
-  }, [range, custom]);
+  }, [range, custom, selectedMonth]);
 
   useEffect(() => {
     if (range === "custom" && !custom?.from) return;
@@ -105,7 +131,7 @@ function TimeAnalysis() {
     setLoading(true);
     (async () => {
       try {
-        const shiftIds = await shiftIdsFor(range, bounds);
+        const shiftIds = await shiftIdsFor(range === "month" ? "custom" : range, bounds);
         if (!shiftIds.length) {
           if (!cancelled) {
             setShifts([]);
@@ -412,6 +438,12 @@ function TimeAnalysis() {
   const weekdayNames = th
     ? ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"]
     : ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const monthLabel = new Intl.DateTimeFormat(th ? "th-TH" : "en-US", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${selectedMonth}-01T00:00:00Z`));
+  const currentMonth = currentMonthKey();
 
   return (
     <div className="mx-auto max-w-7xl space-y-5 p-4 sm:p-6">
@@ -436,6 +468,52 @@ function TimeAnalysis() {
         </div>
         <DashRangeBar range={range} onRange={setRange} custom={custom} onCustom={setCustom} />
       </div>
+
+      {range === "month" && (
+        <div className="flex flex-wrap items-center justify-end gap-2 rounded-lg border bg-card p-2">
+          <span className="mr-auto text-sm font-medium text-muted-foreground">
+            {th ? "เดือนที่แสดง" : "Month shown"}
+          </span>
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            className="h-9 w-9"
+            aria-label={th ? "เดือนก่อนหน้า" : "Previous month"}
+            onClick={() => setSelectedMonth((month) => moveMonthKey(month, -1))}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <label className="relative">
+            <span className="sr-only">{th ? "เลือกเดือน" : "Choose month"}</span>
+            <input
+              type="month"
+              value={selectedMonth}
+              max={currentMonth}
+              onChange={(event) => {
+                if (event.target.value) {
+                  setSelectedMonth(
+                    event.target.value > currentMonth ? currentMonth : event.target.value,
+                  );
+                }
+              }}
+              className="h-9 rounded-md border bg-background px-3 text-sm font-semibold text-foreground"
+            />
+          </label>
+          <span className="min-w-36 text-center text-sm font-semibold">{monthLabel}</span>
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            className="h-9 w-9"
+            aria-label={th ? "เดือนถัดไป" : "Next month"}
+            disabled={selectedMonth >= currentMonth}
+            onClick={() => setSelectedMonth((month) => moveMonthKey(month, 1))}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
 
       <Tabs defaultValue="time" className="space-y-5">
         <TabsList className="h-11 w-full justify-start overflow-x-auto sm:w-auto">
