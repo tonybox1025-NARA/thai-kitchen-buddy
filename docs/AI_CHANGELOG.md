@@ -1,5 +1,15 @@
 # Shared AI Change Log
 
+## 2026-11-05 — Compare guests and sales by weekday and hour
+
+- Agent: Codex
+- Scope: POS Time analysis, weekday/hour averages, after-02:00 closing summary, and a build-enforced regression guard.
+- Decision: add a weekday-by-hour matrix and late-night summary using table-open time for guests and payment time for sales. Both remain assigned to the shift `business_day`, so after-midnight activity is not moved to the following weekday.
+- Verification: dedicated weekday/hour guard, AI protocol guard, TypeScript, full regression suite, and production build; exact results are reported with delivery.
+- Git: `codex/weekday-hour-analysis-20261105`; exact commit is reported with delivery.
+- Delivery: source implementation in progress at this entry; merge, Lovable publication, and live verification remain separate.
+- Follow-up: complete validation, merge, publish, and verify the live Time analysis bundle.
+
 ## 2026-10-24 — Keep open Bills synchronized after item changes
 
 - Agent: Codex
@@ -26,6 +36,7 @@ Add new entries at the top using this template:
 
 ```markdown
 ## YYYY-MM-DD — Short title
+
 - Agent: Codex | Claude Code
 - Scope: files/workflows affected
 - Decision: what changed and why
