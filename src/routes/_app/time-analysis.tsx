@@ -106,6 +106,8 @@ function TimeAnalysis() {
   const th = lang === "th";
   const [range, setRange] = useState<DashRange>("week");
   const [selectedMonth, setSelectedMonth] = useState(currentMonthKey);
+  const [summaryStartHour, setSummaryStartHour] = useState(2);
+  const [summaryEndHour, setSummaryEndHour] = useState(11);
   const [custom, setCustom] = useState<DateRange | undefined>();
   const [shifts, setShifts] = useState<ShiftRow[]>([]);
   const [orders, setOrders] = useState<OrderRow[]>([]);
@@ -434,10 +436,17 @@ function TimeAnalysis() {
       }),
     })).filter((value) => value.active),
   );
-  const lateHours = weekdayActiveHours.filter(({ hour }) => hour >= 2 && hour < 12);
+  const summaryHours = weekdayActiveHours.filter(({ hour }) =>
+    summaryStartHour <= summaryEndHour
+      ? hour >= summaryStartHour && hour <= summaryEndHour
+      : hour >= summaryStartHour || hour <= summaryEndHour,
+  );
   const weekdayNames = th
     ? ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"]
     : ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const weekdayDisplayOrder = [1, 2, 3, 4, 5, 6, 0];
+  const hourOptions = orderBusinessHours(Array.from({ length: 24 }, (_, hour) => ({ hour })));
+  const summaryRangeLabel = `${hourLabel(summaryStartHour)}–${hourLabel(summaryEndHour + 1 === 24 ? 0 : summaryEndHour + 1)}`;
   const monthLabel = new Intl.DateTimeFormat(th ? "th-TH" : "en-US", {
     month: "long",
     year: "numeric",
@@ -628,13 +637,56 @@ function TimeAnalysis() {
                   ) : (
                     <>
                       <div>
-                        <h3 className="mb-3 text-sm font-semibold">
-                          {th ? "สรุปหลัง 02:00 น." : "After 02:00 summary"}
-                        </h3>
+                        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+                          <h3 className="text-sm font-semibold">
+                            {th
+                              ? `สรุปช่วงเวลา ${summaryRangeLabel}`
+                              : `${summaryRangeLabel} summary`}
+                          </h3>
+                          <div className="flex flex-wrap items-center gap-2 text-xs">
+                            <label className="flex items-center gap-2">
+                              <span className="text-muted-foreground">
+                                {th ? "ตั้งแต่" : "From"}
+                              </span>
+                              <select
+                                aria-label={th ? "เวลาเริ่มต้น" : "Summary start hour"}
+                                value={summaryStartHour}
+                                onChange={(event) =>
+                                  setSummaryStartHour(Number(event.target.value))
+                                }
+                                className="h-9 rounded-md border bg-background px-2 font-mono text-sm"
+                              >
+                                {hourOptions.map(({ hour }) => (
+                                  <option key={hour} value={hour}>
+                                    {hourLabel(hour)}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <label className="flex items-center gap-2">
+                              <span className="text-muted-foreground">
+                                {th ? "ถึง" : "Through"}
+                              </span>
+                              <select
+                                aria-label={th ? "เวลาสิ้นสุด" : "Summary end hour"}
+                                value={summaryEndHour}
+                                onChange={(event) => setSummaryEndHour(Number(event.target.value))}
+                                className="h-9 rounded-md border bg-background px-2 font-mono text-sm"
+                              >
+                                {hourOptions.map(({ hour }) => (
+                                  <option key={hour} value={hour}>
+                                    {hourLabel(hour)}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          </div>
+                        </div>
                         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-                          {analysis.weekdays.map((weekday, weekdayIndex) => {
+                          {weekdayDisplayOrder.map((weekdayIndex) => {
+                            const weekday = analysis.weekdays[weekdayIndex];
                             const days = weekday.days.size;
-                            const late = lateHours.reduce(
+                            const selected = summaryHours.reduce(
                               (total, { hour }) => {
                                 const value = analysis.weekdayHours[weekdayIndex][hour];
                                 total.guests += value.guests;
@@ -648,19 +700,19 @@ function TimeAnalysis() {
                               <div key={weekdayIndex} className="rounded-lg border p-3 text-sm">
                                 <div className="font-semibold">{weekdayNames[weekdayIndex]}</div>
                                 <div className="mt-2 text-lg font-bold">
-                                  {days ? (late.guests / days).toFixed(1) : "0.0"}
+                                  {days ? (selected.guests / days).toFixed(1) : "0.0"}
                                   <span className="ml-1 text-xs font-normal text-muted-foreground">
                                     {th ? "คน/วัน" : "guests/day"}
                                   </span>
                                 </div>
                                 <div className="font-semibold text-amber-600">
-                                  {thb(days ? late.sales / days : 0)}
+                                  {thb(days ? selected.sales / days : 0)}
                                   <span className="ml-1 text-xs font-normal text-muted-foreground">
                                     {th ? "/วัน" : "/day"}
                                   </span>
                                 </div>
                                 <div className="mt-1 text-xs text-muted-foreground">
-                                  {days ? (late.bills / days).toFixed(1) : "0.0"}{" "}
+                                  {days ? (selected.bills / days).toFixed(1) : "0.0"}{" "}
                                   {th ? "บิล/วัน" : "bills/day"} · {days} {th ? "วัน" : "days"}
                                 </div>
                               </div>
@@ -684,7 +736,8 @@ function TimeAnalysis() {
                             </tr>
                           </thead>
                           <tbody>
-                            {analysis.weekdays.map((weekday, weekdayIndex) => {
+                            {weekdayDisplayOrder.map((weekdayIndex) => {
+                              const weekday = analysis.weekdays[weekdayIndex];
                               const days = weekday.days.size;
                               return (
                                 <tr key={weekdayIndex} className="border-b last:border-0">
@@ -714,6 +767,40 @@ function TimeAnalysis() {
                               );
                             })}
                           </tbody>
+                          <tfoot>
+                            <tr className="border-t-2 bg-muted/30">
+                              <th className="sticky left-0 z-10 bg-muted px-3 py-3 text-left">
+                                {th ? "รวมช่วงเวลา" : "Time total"}
+                              </th>
+                              {weekdayActiveHours.map(({ hour }) => {
+                                const total = analysis.weekdayHours.reduce(
+                                  (sum, weekday) => {
+                                    sum.guests += weekday[hour].guests;
+                                    sum.sales += weekday[hour].sales;
+                                    sum.bills += weekday[hour].bills;
+                                    return sum;
+                                  },
+                                  { guests: 0, sales: 0, bills: 0 },
+                                );
+                                return (
+                                  <td key={hour} className="px-3 py-3 text-center">
+                                    <div className="font-bold">
+                                      {total.guests.toLocaleString()}
+                                      <span className="ml-1 text-[10px] font-normal text-muted-foreground">
+                                        {th ? "คน" : "guests"}
+                                      </span>
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">
+                                      {total.bills.toLocaleString()} {th ? "บิล" : "bills"}
+                                    </div>
+                                    <div className="text-xs font-semibold text-amber-600">
+                                      {thb(total.sales)}
+                                    </div>
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          </tfoot>
                         </table>
                       </div>
                       <p className="text-xs text-muted-foreground">
@@ -732,7 +819,8 @@ function TimeAnalysis() {
                     <CardTitle>{th ? "เฉลี่ยตามวันในสัปดาห์" : "Average by weekday"}</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-2">
-                    {analysis.weekdays.map((d, i) => {
+                    {weekdayDisplayOrder.map((i) => {
+                      const d = analysis.weekdays[i];
                       const days = Math.max(1, d.days.size);
                       return (
                         <div

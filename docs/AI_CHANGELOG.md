@@ -1,5 +1,15 @@
 # Shared AI Change Log
 
+## 2026-11-05 — Select closing hours and show hourly totals
+
+- Agent: Codex
+- Scope: POS Time analysis weekday/hour section and its build-enforced regression guard.
+- Decision: replace the fixed after-02:00 summary with selectable start/end hours that support crossing midnight, order weekdays Monday through Sunday, and add actual guest, Bill, and sales totals under every hour column.
+- Verification: dedicated Time analysis guard, AI protocol guard, TypeScript, full regression suite, and production build; exact results are reported with delivery.
+- Git: `codex/time-analysis-band-totals-20261105`; exact commit is reported with delivery.
+- Delivery: source implementation in progress at this entry; merge, Lovable publication, and live verification remain separate.
+- Follow-up: complete validation, merge, publish, and verify the live Time analysis bundle.
+
 ## 2026-11-05 — Choose a historical month in Time analysis
 
 - Agent: Codex
