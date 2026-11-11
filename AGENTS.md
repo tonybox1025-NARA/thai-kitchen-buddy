@@ -7,10 +7,10 @@
 
 Before analyzing, editing, testing, deploying, or changing production data:
 
-1. Read [`docs/AI_COLLABORATION_PROTOCOL.md`](docs/AI_COLLABORATION_PROTOCOL.md) completely.
-2. Confirm this checkout belongs to `https://github.com/tonybox1025-NARA/thai-kitchen-buddy.git` and start from the latest `origin/main`, never from a stale local `main`.
+1. Read this `AGENTS.md`, [`CLAUDE.md`](CLAUDE.md), and [`docs/AI_COLLABORATION_PROTOCOL.md`](docs/AI_COLLABORATION_PROTOCOL.md) completely. Confirm the `AI_PROTOCOL:REQUIRED` marker exists in both root instruction files; otherwise stop because the checkout is old or incorrect.
+2. Run `git remote get-url origin`, `git fetch origin --prune`, `git status --short --branch`, and `git log -1 origin/main`. Confirm the remote is `https://github.com/tonybox1025-NARA/thai-kitchen-buddy.git` and start from the latest `origin/main`, never from a stale local `main`.
 3. Inspect relevant history, current diffs, remote Codex/Claude work branches, and [`docs/AI_CHANGELOG.md`](docs/AI_CHANGELOG.md).
-4. Preserve all user or other-agent work. Never reset, overwrite, discard, or silently replace it.
+4. If the remote is wrong, the checkout is dirty, or local `main` is stale, do not edit it. Preserve all user or other-agent work and use a clean isolated checkout from the latest `origin/main`; never reset, clean, overwrite, discard, or silently replace existing work.
 5. Run `npm run guard:ai-protocol` before handoff. For implementation work, also run the relevant tests and the build-enforced regression checks.
 
 The shared protocol is mandatory for both Codex and Claude Code. If any instruction conflicts, follow the safer rule and stop before destructive or production-changing action.

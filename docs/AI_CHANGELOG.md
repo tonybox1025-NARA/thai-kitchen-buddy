@@ -311,3 +311,12 @@ Add new entries at the top using this template:
 - Git: see the commit that introduced this entry
 - Delivery: repository workflow only; no POS behavior or production data changed
 - Follow-up: none
+
+## 2026-11-11 — Scope LONMOH bootstrap rules to this repository
+
+- Agent: Codex
+- Scope: repository instructions only
+- Decision: move the POS-specific remote, preflight command, clean-worktree, and protocol-marker requirements out of Tony's global Codex instructions and make them explicit in this repository's `AGENTS.md`
+- Verification: `npm run guard:ai-protocol`
+- Delivery: repository workflow only; no POS behavior, app build, deployment, or production data changed
+- Follow-up: none
