@@ -2769,6 +2769,16 @@ export type Database = {
       }
       heal_table_projection: { Args: never; Returns: number }
       is_admin_pin: { Args: { _pin: string }; Returns: boolean }
+      list_archived_staff_profiles: {
+        Args: never
+        Returns: {
+          active: boolean
+          id: string
+          job_position: string
+          name: string
+          role: Database["public"]["Enums"]["app_role"]
+        }[]
+      }
       list_staff: {
         Args: never
         Returns: {
@@ -2942,6 +2952,10 @@ export type Database = {
               charge_id: string
             }[]
           }
+      refresh_open_bill_totals_for_order: {
+        Args: { p_order_id: string }
+        Returns: undefined
+      }
       refund_bill_items_with_loyalty: {
         Args: {
           p_bill_id: string
@@ -3006,6 +3020,10 @@ export type Database = {
           member_name: string
           reserved_points: number
         }[]
+      }
+      set_staff_active: {
+        Args: { _active: boolean; _admin_pin?: string; _id: string }
+        Returns: undefined
       }
       set_staff_pin: {
         Args: { _admin_pin?: string; _pin: string; _staff_id: string }
