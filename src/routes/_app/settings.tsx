@@ -218,6 +218,7 @@ function SettingsPage() {
         <TabsList>
           <TabsTrigger value="general">{t("general")}</TabsTrigger>
           <TabsTrigger value="menu">{t("menu_management")}</TabsTrigger>
+          <TabsTrigger value="featured">QR Featured</TabsTrigger>
           <TabsTrigger value="ingredients">{t("ingredients")}</TabsTrigger>
           <TabsTrigger value="addons">{t("add_ons")}</TabsTrigger>
           <TabsTrigger value="kitchen-zones">{t("set_kitchen_zones")}</TabsTrigger>
@@ -233,6 +234,9 @@ function SettingsPage() {
         </TabsContent>
         <TabsContent value="menu">
           <MenuTab />
+        </TabsContent>
+        <TabsContent value="featured">
+          <QrFeaturedTab />
         </TabsContent>
         <TabsContent value="ingredients">
           <IngredientsTab />
@@ -264,6 +268,304 @@ function SettingsPage() {
           </TabsContent>
         )}
       </Tabs>
+    </div>
+  );
+}
+
+// ── QR Featured sections (Today's Special / New Menu / Popular) ───────────────
+// Self-contained curation: staff pick existing menus into the virtual sections
+// shown at the top of the customer QR menu, and can rename the section titles.
+// Reads/writes only the two qr_featured_* tables — never menus, categories,
+// orders, or any print path.
+type FeaturedSectionRow = {
+  key: string;
+  name_th: string;
+  name_en: string;
+  emoji: string | null;
+  sort: number;
+  enabled: boolean;
+};
+type FeaturedMenuRow = {
+  id: string;
+  name_th: string;
+  name_en: string;
+  available: boolean;
+  available_qr: boolean;
+};
+
+function QrFeaturedTab() {
+  const { lang } = useI18n();
+  const L = (th: string, en: string) => (lang === "th" ? th : en);
+  const db = supabase as any;
+
+  const [sections, setSections] = useState<FeaturedSectionRow[]>([]);
+  const [itemsBySection, setItemsBySection] = useState<Record<string, string[]>>({});
+  const [menuById, setMenuById] = useState<Map<string, FeaturedMenuRow>>(new Map());
+  const [pool, setPool] = useState<FeaturedMenuRow[]>([]);
+  const [search, setSearch] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [unavailable, setUnavailable] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const [{ data: sectionRows, error: secErr }, { data: itemRows }, { data: menus }] =
+        await Promise.all([
+          db
+            .from("qr_featured_sections")
+            .select("key,name_th,name_en,emoji,sort,enabled")
+            .order("sort"),
+          db.from("qr_featured_items").select("section_key,menu_id,sort").order("sort"),
+          db.from("menus").select("id,name_th,name_en,available,available_qr").order("name_th"),
+        ]);
+      if (secErr) {
+        setUnavailable(true);
+        setLoading(false);
+        return;
+      }
+      setSections((sectionRows ?? []) as FeaturedSectionRow[]);
+      const grouped: Record<string, string[]> = {};
+      for (const row of (itemRows ?? []) as { section_key: string; menu_id: string }[]) {
+        (grouped[row.section_key] ??= []).push(row.menu_id);
+      }
+      setItemsBySection(grouped);
+      const allMenus = (menus ?? []) as FeaturedMenuRow[];
+      setMenuById(new Map(allMenus.map((m) => [m.id, m])));
+      setPool(allMenus.filter((m) => m.available && m.available_qr));
+      setUnavailable(false);
+    } catch {
+      setUnavailable(true);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const patchSection = (key: string, patch: Partial<FeaturedSectionRow>) =>
+    setSections((prev) => prev.map((s) => (s.key === key ? { ...s, ...patch } : s)));
+
+  const addItem = async (sectionKey: string, menuId: string) => {
+    setBusy(true);
+    const nextSort = (itemsBySection[sectionKey] ?? []).length;
+    const { error } = await db
+      .from("qr_featured_items")
+      .insert({ section_key: sectionKey, menu_id: menuId, sort: nextSort });
+    setBusy(false);
+    if (error) {
+      toast.error(`${L("เพิ่มไม่สำเร็จ", "Add failed")}: ${error.message}`);
+      return;
+    }
+    setItemsBySection((prev) => ({
+      ...prev,
+      [sectionKey]: [...(prev[sectionKey] ?? []), menuId],
+    }));
+    setSearch((prev) => ({ ...prev, [sectionKey]: "" }));
+  };
+
+  const removeItem = async (sectionKey: string, menuId: string) => {
+    setBusy(true);
+    const { error } = await db
+      .from("qr_featured_items")
+      .delete()
+      .eq("section_key", sectionKey)
+      .eq("menu_id", menuId);
+    setBusy(false);
+    if (error) {
+      toast.error(`${L("ลบไม่สำเร็จ", "Remove failed")}: ${error.message}`);
+      return;
+    }
+    setItemsBySection((prev) => ({
+      ...prev,
+      [sectionKey]: (prev[sectionKey] ?? []).filter((id) => id !== menuId),
+    }));
+  };
+
+  const saveSection = async (section: FeaturedSectionRow) => {
+    setBusy(true);
+    const { error } = await db
+      .from("qr_featured_sections")
+      .update({
+        name_th: section.name_th.trim(),
+        name_en: section.name_en.trim(),
+        emoji: section.emoji?.trim() || null,
+        enabled: section.enabled,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("key", section.key);
+    setBusy(false);
+    if (error) {
+      toast.error(`${L("บันทึกไม่สำเร็จ", "Save failed")}: ${error.message}`);
+      return;
+    }
+    toast.success(L("บันทึกแล้ว", "Saved"));
+  };
+
+  const menuLabel = (m: FeaturedMenuRow) =>
+    lang === "th" ? m.name_th || m.name_en : m.name_en || m.name_th;
+
+  if (loading) return <p className="text-sm text-muted-foreground py-8">Loading…</p>;
+  if (unavailable)
+    return (
+      <Card>
+        <CardContent className="py-8 text-sm text-muted-foreground">
+          {L(
+            "ยังไม่มีตาราง QR Featured — โปรดปรับใช้ migration แล้วรีเฟรช",
+            "QR Featured tables are not set up yet. Apply the migration, then refresh.",
+          )}
+        </CardContent>
+      </Card>
+    );
+
+  return (
+    <div className="space-y-5 max-w-2xl">
+      <p className="text-sm text-muted-foreground">
+        {L(
+          "เลือกเมนูที่มีอยู่แล้วมาจัดไว้ในหมวดแนะนำ ที่แสดงด้านบนสุดของเมนู QR ของลูกค้า และแก้ชื่อหมวด (ไทย/อังกฤษ) ได้ที่นี่",
+          "Pick existing menus into the featured sections shown at the top of the customer QR menu. You can also rename each section (Thai / English) here.",
+        )}
+      </p>
+      {sections.map((section) => {
+        const itemIds = itemsBySection[section.key] ?? [];
+        const q = (search[section.key] ?? "").trim().toLocaleLowerCase();
+        const candidates = q
+          ? pool
+              .filter(
+                (m) =>
+                  !itemIds.includes(m.id) &&
+                  `${m.name_th} ${m.name_en}`.toLocaleLowerCase().includes(q),
+              )
+              .slice(0, 8)
+          : [];
+        return (
+          <Card key={section.key}>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <span>{section.emoji || "⭐"}</span>
+                <span>{lang === "th" ? section.name_th : section.name_en}</span>
+                {!section.enabled && (
+                  <span className="text-xs text-muted-foreground font-normal">
+                    {L("(ซ่อน)", "(hidden)")}
+                  </span>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs">ไทย (TH)</Label>
+                  <Input
+                    value={section.name_th}
+                    onChange={(e) => patchSection(section.key, { name_th: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">English (EN)</Label>
+                  <Input
+                    value={section.name_en}
+                    onChange={(e) => patchSection(section.key, { name_en: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Emoji</Label>
+                  <Input
+                    value={section.emoji ?? ""}
+                    onChange={(e) => patchSection(section.key, { emoji: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={section.enabled}
+                    onCheckedChange={(v) => patchSection(section.key, { enabled: v })}
+                  />
+                  <span className="text-sm">{L("แสดงให้ลูกค้า", "Show to customers")}</span>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="ml-auto"
+                  disabled={busy}
+                  onClick={() => saveSection(section)}
+                >
+                  {L("บันทึกชื่อ", "Save title")}
+                </Button>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs">
+                  {L("เมนูในหมวดนี้", "In this section")} ({itemIds.length})
+                </Label>
+                {itemIds.length === 0 && (
+                  <p className="text-sm text-muted-foreground">{L("ยังไม่มี", "None yet")}</p>
+                )}
+                {itemIds.map((id) => {
+                  const m = menuById.get(id);
+                  const hidden = m && (!m.available || !m.available_qr);
+                  return (
+                    <div key={id} className="flex items-center gap-2 border rounded-lg px-3 py-2">
+                      <span className="flex-1 text-sm truncate">
+                        {m ? menuLabel(m) : id}
+                        {hidden && (
+                          <span className="ml-2 text-xs text-amber-600">
+                            {L("(ซ่อนจาก QR)", "(hidden from QR)")}
+                          </span>
+                        )}
+                      </span>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 text-destructive"
+                        disabled={busy}
+                        onClick={() => removeItem(section.key, id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs">{L("เพิ่มเมนู", "Add menu")}</Label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    className="pl-9"
+                    placeholder={L("ค้นหาเมนู…", "Search menu…")}
+                    value={search[section.key] ?? ""}
+                    onChange={(e) =>
+                      setSearch((prev) => ({ ...prev, [section.key]: e.target.value }))
+                    }
+                  />
+                </div>
+                {candidates.length > 0 && (
+                  <div className="border rounded-lg divide-y">
+                    {candidates.map((m) => (
+                      <button
+                        key={m.id}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 flex items-center gap-2 disabled:opacity-50"
+                        disabled={busy}
+                        onClick={() => addItem(section.key, m.id)}
+                      >
+                        <Plus className="h-4 w-4 text-primary shrink-0" />
+                        <span className="truncate">{menuLabel(m)}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {q && candidates.length === 0 && (
+                  <p className="text-xs text-muted-foreground">{L("ไม่พบเมนู", "No match")}</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })}
     </div>
   );
 }

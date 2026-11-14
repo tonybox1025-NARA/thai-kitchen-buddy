@@ -177,6 +177,50 @@ export const Route = createFileRoute("/api/public/qr-menu/$tableCode")({
           usedCategoryIds.has(category.id),
         );
 
+        // Featured QR sections (Today's Special / New Menu / Popular). Entirely
+        // optional and self-contained: any failure here — missing tables, query
+        // error — must leave the rest of the menu untouched, so it degrades to an
+        // empty list and the customer still sees the normal categories.
+        let featuredSections: Array<{
+          key: string;
+          name_th: string;
+          name_en: string;
+          emoji: string | null;
+          menu_ids: string[];
+        }> = [];
+        try {
+          const visibleIds = new Set(visibleMenus.map((menu: any) => menu.id));
+          const [{ data: sectionRows }, { data: itemRows }] = await Promise.all([
+            db
+              .from("qr_featured_sections")
+              .select("key,name_th,name_en,emoji,sort,enabled")
+              .eq("enabled", true)
+              .order("sort"),
+            db.from("qr_featured_items").select("section_key,menu_id,sort").order("sort"),
+          ]);
+          const itemsBySection = new Map<string, string[]>();
+          for (const row of (itemRows ?? []) as { section_key: string; menu_id: string }[]) {
+            // Respect the duplicate-collapse and keep only menus visible on the QR
+            // menu, so a hidden or sold-out item drops out of the section on its own.
+            const canonicalId = duplicateToCanonical.get(row.menu_id) ?? row.menu_id;
+            if (!visibleIds.has(canonicalId)) continue;
+            const list = itemsBySection.get(row.section_key) ?? [];
+            if (!list.includes(canonicalId)) list.push(canonicalId);
+            itemsBySection.set(row.section_key, list);
+          }
+          featuredSections = ((sectionRows ?? []) as any[])
+            .map((section) => ({
+              key: section.key as string,
+              name_th: section.name_th as string,
+              name_en: section.name_en as string,
+              emoji: (section.emoji ?? null) as string | null,
+              menu_ids: itemsBySection.get(section.key) ?? [],
+            }))
+            .filter((section) => section.menu_ids.length > 0);
+        } catch {
+          featuredSections = [];
+        }
+
         return Response.json(
           {
             table,
@@ -185,6 +229,7 @@ export const Route = createFileRoute("/api/public/qr-menu/$tableCode")({
             restaurant_name: settings?.restaurant_name ?? "Restaurant",
             addonsByMenuId,
             setDefsByMenuId,
+            featuredSections,
           },
           {
             headers: {

@@ -48,6 +48,13 @@ type Menu = {
   is_set?: boolean;
 };
 type Category = { id: string; name_th: string; name_en: string; sort: number };
+type FeaturedSection = {
+  key: string;
+  name_th: string;
+  name_en: string;
+  emoji: string | null;
+  menu_ids: string[];
+};
 type AddonOption = { id: string; name: string; price: number };
 type AddonGroup = {
   id: string;
@@ -538,6 +545,7 @@ function CustomerMenu() {
     restaurant_name: string;
     addonsByMenuId: Record<string, AddonGroup[]>;
     setDefsByMenuId?: Record<string, SetDef>;
+    featuredSections?: FeaturedSection[];
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -708,18 +716,39 @@ function CustomerMenu() {
     return result;
   }, [data, orderedCategories]);
 
+  // Resolve each featured section's menu ids to the menu objects the page
+  // already holds. Ids that are hidden or sold out simply drop out.
+  const featuredResolved = useMemo(() => {
+    if (!data?.featuredSections?.length)
+      return [] as Array<FeaturedSection & { menus: Menu[] }>;
+    const byId = new Map(data.menus.map((m) => [m.id, m]));
+    return data.featuredSections
+      .map((section) => ({
+        ...section,
+        menus: section.menu_ids
+          .map((id) => byId.get(id))
+          .filter((m): m is Menu => Boolean(m)),
+      }))
+      .filter((section) => section.menus.length > 0);
+  }, [data]);
+
   const filtered = useMemo(() => {
     if (!data) return [];
-    const byCategory =
-      activeCat === "all"
-        ? allMenusSorted
-        : allMenusSorted.filter((m) => m.category_id === activeCat);
+    let base: Menu[];
+    if (activeCat === "all") {
+      base = allMenusSorted;
+    } else if (activeCat.startsWith("feat:")) {
+      const key = activeCat.slice(5);
+      base = featuredResolved.find((section) => section.key === key)?.menus ?? [];
+    } else {
+      base = allMenusSorted.filter((m) => m.category_id === activeCat);
+    }
     const query = searchQuery.trim().toLocaleLowerCase();
-    if (!query) return byCategory;
-    return byCategory.filter((menu) =>
+    if (!query) return base;
+    return base.filter((menu) =>
       `${menu.name_th} ${menu.name_en}`.toLocaleLowerCase().includes(query),
     );
-  }, [allMenusSorted, activeCat, data, searchQuery]);
+  }, [allMenusSorted, featuredResolved, activeCat, data, searchQuery]);
 
   const menuSections = useMemo(() => {
     if (!data || activeCat !== "all") return [];
@@ -730,6 +759,23 @@ function CustomerMenu() {
       }))
       .filter((section) => section.menus.length > 0);
   }, [activeCat, data, filtered, orderedCategories]);
+
+  // Featured sections pinned to the top of the All view (search-aware). The
+  // same items also remain in their own category below, like any "featured" row.
+  const featuredSectionsAll = useMemo(() => {
+    if (!data || activeCat !== "all") return [];
+    const query = searchQuery.trim().toLocaleLowerCase();
+    return featuredResolved
+      .map((section) => ({
+        ...section,
+        menus: query
+          ? section.menus.filter((menu) =>
+              `${menu.name_th} ${menu.name_en}`.toLocaleLowerCase().includes(query),
+            )
+          : section.menus,
+      }))
+      .filter((section) => section.menus.length > 0);
+  }, [data, activeCat, featuredResolved, searchQuery]);
 
   const cartTotal = useMemo(() => cart.reduce((s, c) => s + c.qty * c.price, 0), [cart]);
   const cartCount = useMemo(() => cart.reduce((s, c) => s + c.qty, 0), [cart]);
@@ -1025,6 +1071,21 @@ function CustomerMenu() {
             >
               {tr.all}
             </Button>
+            {featuredResolved.map((section) => {
+              const catKey = `feat:${section.key}`;
+              return (
+                <Button
+                  data-cat={catKey}
+                  key={catKey}
+                  variant={activeCat === catKey ? "default" : "outline"}
+                  onClick={() => switchCat(catKey)}
+                  className="h-10 whitespace-nowrap rounded-full px-4 text-sm font-semibold"
+                >
+                  {section.emoji ? `${section.emoji} ` : ""}
+                  {lang === "th" ? section.name_th : section.name_en}
+                </Button>
+              );
+            })}
             {orderedCategories.map((c) => (
               <Button
                 data-cat={c.id}
@@ -1069,6 +1130,17 @@ function CustomerMenu() {
         )}
         {activeCat === "all" ? (
           <div className="space-y-7">
+            {featuredSectionsAll.map((section) => (
+              <section key={`feat:${section.key}`}>
+                <h2 className="mb-3 border-b pb-2 text-base font-bold text-foreground">
+                  {section.emoji ? `${section.emoji} ` : ""}
+                  {lang === "th" ? section.name_th : section.name_en}
+                </h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {section.menus.map(renderMenuCard)}
+                </div>
+              </section>
+            ))}
             {menuSections.map(({ category, menus }) => (
               <section key={category.id}>
                 <h2 className="mb-3 border-b pb-2 text-base font-bold text-foreground">
