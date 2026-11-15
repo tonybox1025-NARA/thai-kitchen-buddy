@@ -289,6 +289,7 @@ type FeaturedMenuRow = {
   id: string;
   name_th: string;
   name_en: string;
+  price: number;
   available: boolean;
   available_qr: boolean;
 };
@@ -326,7 +327,10 @@ function QrFeaturedTab() {
             .from("qr_featured_items")
             .select("section_key,menu_id,sort,price_override")
             .order("sort"),
-          db.from("menus").select("id,name_th,name_en,available,available_qr").order("name_th"),
+          db
+            .from("menus")
+            .select("id,name_th,name_en,price,available,available_qr")
+            .order("name_th"),
         ]);
       if (secErr) {
         setUnavailable(true);
@@ -571,7 +575,8 @@ function QrFeaturedTab() {
                   const m = menuById.get(id);
                   const hidden = m && (!m.available || !m.available_qr);
                   const k = priceKey(section.key, id);
-                  const hasSpecial = (priceByKey[k] ?? null) != null;
+                  const special = priceByKey[k] ?? null;
+                  const hasSpecial = special != null && m != null && special < Number(m.price);
                   return (
                     <div key={id} className="border rounded-lg px-3 py-2 space-y-2">
                       <div className="flex items-center gap-2">
@@ -583,6 +588,11 @@ function QrFeaturedTab() {
                             </span>
                           )}
                         </span>
+                        {m && (
+                          <span className="shrink-0 text-xs text-muted-foreground">
+                            {L("ราคาปกติ", "Normal")} ฿{Number(m.price).toFixed(0)}
+                          </span>
+                        )}
                         <Button
                           size="icon"
                           variant="ghost"
@@ -613,8 +623,15 @@ function QrFeaturedTab() {
                           }}
                         />
                         <span className="text-xs text-muted-foreground">฿</span>
-                        {hasSpecial && (
-                          <span className="text-xs text-primary">{L("ลดราคา", "Discounted")}</span>
+                        {hasSpecial && m && (
+                          <span className="text-xs flex items-center gap-1">
+                            <span className="text-muted-foreground line-through">
+                              ฿{Number(m.price).toFixed(0)}
+                            </span>
+                            <span className="text-destructive font-medium">
+                              → ฿{Number(special).toFixed(0)}
+                            </span>
+                          </span>
                         )}
                       </div>
                     </div>
@@ -645,7 +662,10 @@ function QrFeaturedTab() {
                         onClick={() => addItem(section.key, m.id)}
                       >
                         <Plus className="h-4 w-4 text-primary shrink-0" />
-                        <span className="truncate">{menuLabel(m)}</span>
+                        <span className="truncate flex-1">{menuLabel(m)}</span>
+                        <span className="shrink-0 text-xs text-muted-foreground">
+                          ฿{Number(m.price).toFixed(0)}
+                        </span>
                       </button>
                     ))}
                   </div>
