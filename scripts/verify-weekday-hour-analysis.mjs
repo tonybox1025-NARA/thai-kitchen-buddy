@@ -36,13 +36,22 @@ assert.doesNotMatch(source, /\.sales \/ days/);
 assert.doesNotMatch(source, /guests\/day/);
 assert.match(source, /const \[selectedMonth, setSelectedMonth\] = useState\(currentMonthKey\)/);
 assert.match(source, /if \(range === "month"\) return monthBounds\(selectedMonth\)/);
-assert.match(source, /shiftIdsFor\(range === "month" \? "custom" : range, bounds\)/);
+assert.match(source, /range === "month" \|\| range === "week" \? "custom" : range/);
 assert.match(source, /type="month"/);
 assert.match(source, /max=\{currentMonth\}/);
 assert.match(source, /event\.target\.value > currentMonth \? currentMonth : event\.target\.value/);
 assert.match(source, /Month shown/);
 assert.match(source, /Previous month/);
 assert.match(source, /Next month/);
+// Week picker: choose which specific week (Monday..Sunday), with "this week" guard.
+assert.match(source, /const \[selectedWeek, setSelectedWeek\] = useState\(currentWeekKey\)/);
+assert.match(source, /if \(range === "week"\) return weekBounds\(selectedWeek\)/);
+assert.match(source, /const weekBounds = \(mondayKey: string\)/);
+assert.match(source, /Previous week/);
+assert.match(source, /Next week/);
+assert.match(source, /disabled=\{selectedWeek >= currentWeek\}/);
+// Controls stay pinned while the table scrolls.
+assert.match(source, /sticky top-14/);
 
 console.log(
   "OK: weekday-by-hour analysis preserves shift business days and shows actual totals (reconciling rows/columns)",

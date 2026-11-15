@@ -4,6 +4,7 @@ import {
   bkkHour,
   bkkRangeBounds,
   bkkToday,
+  mondayOfKey,
   pickerBounds,
   weekdayOfKey,
 } from "@/lib/bkk-time";
@@ -92,6 +93,11 @@ const monthBounds = (key: string): [Date, Date] => {
   const nextMonth = moveMonthKey(key, 1);
   return bkkRangeBounds(`${key}-01`, addDaysKey(`${nextMonth}-01`, -1));
 };
+// Week = Monday..Sunday (Bangkok). selectedWeek is always the Monday date key.
+const currentWeekKey = () => mondayOfKey(bkkToday());
+const moveWeekKey = (key: string, offset: number) => addDaysKey(key, offset * 7);
+const weekBounds = (mondayKey: string): [Date, Date] =>
+  bkkRangeBounds(mondayKey, addDaysKey(mondayKey, 6));
 const timeLabel = (iso: string | null) =>
   iso
     ? new Date(iso).toLocaleTimeString([], {
@@ -106,6 +112,7 @@ function TimeAnalysis() {
   const th = lang === "th";
   const [range, setRange] = useState<DashRange>("week");
   const [selectedMonth, setSelectedMonth] = useState(currentMonthKey);
+  const [selectedWeek, setSelectedWeek] = useState(currentWeekKey);
   const [summaryStartHour, setSummaryStartHour] = useState(2);
   const [summaryEndHour, setSummaryEndHour] = useState(11);
   // Whether the user manually narrowed the hour range; until then it defaults to
@@ -124,13 +131,14 @@ function TimeAnalysis() {
 
   const bounds = useMemo<[Date, Date]>(() => {
     if (range === "month") return monthBounds(selectedMonth);
+    if (range === "week") return weekBounds(selectedWeek);
     if (range === "custom" && custom?.from) {
       const from = pickerBounds(custom.from, custom.to)[0];
       const to = pickerBounds(custom.from, custom.to)[1];
       return [from, to];
     }
     return rangeBounds(range === "custom" ? "today" : range);
-  }, [range, custom, selectedMonth]);
+  }, [range, custom, selectedMonth, selectedWeek]);
 
   useEffect(() => {
     if (range === "custom" && !custom?.from) return;
@@ -138,7 +146,10 @@ function TimeAnalysis() {
     setLoading(true);
     (async () => {
       try {
-        const shiftIds = await shiftIdsFor(range === "month" ? "custom" : range, bounds);
+        const shiftIds = await shiftIdsFor(
+          range === "month" || range === "week" ? "custom" : range,
+          bounds,
+        );
         if (!shiftIds.length) {
           if (!cancelled) {
             setShifts([]);
@@ -490,9 +501,21 @@ function TimeAnalysis() {
     timeZone: "UTC",
   }).format(new Date(`${selectedMonth}-01T00:00:00Z`));
   const currentMonth = currentMonthKey();
+  const currentWeek = currentWeekKey();
+  const weekEndKey = addDaysKey(selectedWeek, 6);
+  const fmtWeekDay = (key: string) =>
+    new Intl.DateTimeFormat(th ? "th-TH" : "en-US", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(new Date(`${key}T00:00:00Z`));
+  const weekRangeLabel = `${fmtWeekDay(selectedWeek)} – ${fmtWeekDay(weekEndKey)}`;
 
   return (
     <div className="mx-auto max-w-7xl space-y-5 p-4 sm:p-6">
+      {/* Pinned controls: stay visible (just below the app bar) while the table scrolls. */}
+      <div className="sticky top-14 z-20 -mx-4 space-y-3 border-b bg-background px-4 pb-3 pt-2 sm:-mx-6 sm:px-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Link to="/dashboard">
@@ -560,6 +583,47 @@ function TimeAnalysis() {
           </Button>
         </div>
       )}
+
+      {range === "week" && (
+        <div className="flex flex-wrap items-center justify-end gap-2 rounded-lg border bg-card p-2">
+          <span className="mr-auto text-sm font-medium text-muted-foreground">
+            {th ? "สัปดาห์ที่แสดง" : "Week shown"}
+          </span>
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            className="h-9 w-9"
+            aria-label={th ? "สัปดาห์ก่อนหน้า" : "Previous week"}
+            onClick={() => setSelectedWeek((week) => moveWeekKey(week, -1))}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span className="min-w-52 text-center text-sm font-semibold">{weekRangeLabel}</span>
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            className="h-9 w-9"
+            aria-label={th ? "สัปดาห์ถัดไป" : "Next week"}
+            disabled={selectedWeek >= currentWeek}
+            onClick={() => setSelectedWeek((week) => moveWeekKey(week, 1))}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-9"
+            disabled={selectedWeek >= currentWeek}
+            onClick={() => setSelectedWeek(currentWeek)}
+          >
+            {th ? "สัปดาห์นี้" : "This week"}
+          </Button>
+        </div>
+      )}
+      </div>
 
       <Tabs defaultValue="time" className="space-y-5">
         <TabsList className="h-11 w-full justify-start overflow-x-auto sm:w-auto">
