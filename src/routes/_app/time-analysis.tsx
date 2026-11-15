@@ -108,6 +108,11 @@ function TimeAnalysis() {
   const [selectedMonth, setSelectedMonth] = useState(currentMonthKey);
   const [summaryStartHour, setSummaryStartHour] = useState(2);
   const [summaryEndHour, setSummaryEndHour] = useState(11);
+  // Whether the user manually narrowed the hour range; until then it defaults to
+  // the full active business-day span so the whole table shows.
+  const [rangeTouched, setRangeTouched] = useState(false);
+  // Heat-map shading metric for the weekday × hour grid.
+  const [heatMetric, setHeatMetric] = useState<"guests" | "sales">("guests");
   const [custom, setCustom] = useState<DateRange | undefined>();
   const [shifts, setShifts] = useState<ShiftRow[]>([]);
   const [orders, setOrders] = useState<OrderRow[]>([]);
@@ -436,6 +441,14 @@ function TimeAnalysis() {
       }),
     })).filter((value) => value.active),
   );
+  const firstActiveHour = weekdayActiveHours[0]?.hour ?? 0;
+  const lastActiveHour = weekdayActiveHours[weekdayActiveHours.length - 1]?.hour ?? 0;
+  // Until the user picks a range, default to the full active business-day span.
+  useEffect(() => {
+    if (rangeTouched || weekdayActiveHours.length === 0) return;
+    setSummaryStartHour(firstActiveHour);
+    setSummaryEndHour(lastActiveHour);
+  }, [rangeTouched, weekdayActiveHours.length, firstActiveHour, lastActiveHour]);
   const summaryHours = weekdayActiveHours.filter(({ hour }) =>
     summaryStartHour <= summaryEndHour
       ? hour >= summaryStartHour && hour <= summaryEndHour
@@ -446,7 +459,31 @@ function TimeAnalysis() {
     : ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   const weekdayDisplayOrder = [1, 2, 3, 4, 5, 6, 0];
   const hourOptions = orderBusinessHours(Array.from({ length: 24 }, (_, hour) => ({ hour })));
-  const summaryRangeLabel = `${hourLabel(summaryStartHour)}–${hourLabel(summaryEndHour + 1 === 24 ? 0 : summaryEndHour + 1)}`;
+  // Hours shown in the weekday × hour matrix (business-ordered, active, within range).
+  const matrixHours = summaryHours;
+  const heatValue = (v: HourStat) => (heatMetric === "guests" ? v.guests : v.sales);
+  const heatMax = Math.max(
+    1,
+    ...weekdayDisplayOrder.flatMap((wd) =>
+      matrixHours.map(({ hour }) => heatValue(analysis.weekdayHours[wd][hour])),
+    ),
+  );
+  const heatBg = (v: HourStat) => {
+    const ratio = heatMax ? heatValue(v) / heatMax : 0;
+    if (ratio <= 0) return undefined;
+    const alpha = 0.1 + ratio * 0.5;
+    return heatMetric === "guests" ? `rgba(13,148,136,${alpha})` : `rgba(245,158,11,${alpha})`;
+  };
+  let peak: { wd: number; hour: number; stat: HourStat } | null = null;
+  for (const wd of weekdayDisplayOrder) {
+    for (const { hour } of matrixHours) {
+      const v = analysis.weekdayHours[wd][hour];
+      if (!peak || heatValue(v) > heatValue(peak.stat)) peak = { wd, hour, stat: v };
+    }
+  }
+  const rangeLabel = matrixHours.length
+    ? `${hourLabel(matrixHours[0].hour)}–${hourLabel(matrixHours[matrixHours.length - 1].hour)}`
+    : "—";
   const monthLabel = new Intl.DateTimeFormat(th ? "th-TH" : "en-US", {
     month: "long",
     year: "numeric",
@@ -627,99 +664,106 @@ function TimeAnalysis() {
                   <CardTitle>{th ? "วันในสัปดาห์ × ชั่วโมง" : "Weekday × hour"}</CardTitle>
                   <p className="text-xs text-muted-foreground">
                     {th
-                      ? "ค่าเฉลี่ยต่อวันที่เปิด แยกตามวันทำการของกะ ยอดหลังเที่ยงคืนยังอยู่กับวันทำการเดิม"
-                      : "Average per operating day, grouped by shift business day. After-midnight activity stays with the original business day."}
+                      ? "ยอดจริงรวม (ไม่ใช่ค่าเฉลี่ย) แยกตามวันทำการของกะ ยอดหลังเที่ยงคืนยังอยู่กับวันทำการเดิม"
+                      : "Actual totals (not averages), grouped by shift business day. After-midnight activity stays with the original business day."}
                   </p>
                 </CardHeader>
-                <CardContent className="space-y-5">
-                  {weekdayActiveHours.length === 0 ? (
+                <CardContent className="space-y-4">
+                  {matrixHours.length === 0 ? (
                     <Empty th={th} />
                   ) : (
                     <>
-                      <div>
-                        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
-                          <h3 className="text-sm font-semibold">
-                            {th
-                              ? `สรุปช่วงเวลา ${summaryRangeLabel}`
-                              : `${summaryRangeLabel} summary`}
-                          </h3>
-                          <div className="flex flex-wrap items-center gap-2 text-xs">
-                            <label className="flex items-center gap-2">
-                              <span className="text-muted-foreground">
-                                {th ? "ตั้งแต่" : "From"}
-                              </span>
-                              <select
-                                aria-label={th ? "เวลาเริ่มต้น" : "Summary start hour"}
-                                value={summaryStartHour}
-                                onChange={(event) =>
-                                  setSummaryStartHour(Number(event.target.value))
-                                }
-                                className="h-9 rounded-md border bg-background px-2 font-mono text-sm"
-                              >
-                                {hourOptions.map(({ hour }) => (
-                                  <option key={hour} value={hour}>
-                                    {hourLabel(hour)}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                            <label className="flex items-center gap-2">
-                              <span className="text-muted-foreground">
-                                {th ? "ถึง" : "Through"}
-                              </span>
-                              <select
-                                aria-label={th ? "เวลาสิ้นสุด" : "Summary end hour"}
-                                value={summaryEndHour}
-                                onChange={(event) => setSummaryEndHour(Number(event.target.value))}
-                                className="h-9 rounded-md border bg-background px-2 font-mono text-sm"
-                              >
-                                {hourOptions.map(({ hour }) => (
-                                  <option key={hour} value={hour}>
-                                    {hourLabel(hour)}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="text-muted-foreground">{th ? "สีตาม" : "Shade by"}</span>
+                          <div className="inline-flex overflow-hidden rounded-md border">
+                            <button
+                              type="button"
+                              onClick={() => setHeatMetric("guests")}
+                              className={`px-3 py-1.5 ${heatMetric === "guests" ? "bg-primary text-primary-foreground" : "bg-background"}`}
+                            >
+                              {th ? "ลูกค้า" : "Guests"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setHeatMetric("sales")}
+                              className={`border-l px-3 py-1.5 ${heatMetric === "sales" ? "bg-amber-500 text-white" : "bg-background"}`}
+                            >
+                              {th ? "ยอดขาย" : "Sales"}
+                            </button>
                           </div>
                         </div>
-                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-                          {weekdayDisplayOrder.map((weekdayIndex) => {
-                            const weekday = analysis.weekdays[weekdayIndex];
-                            const days = weekday.days.size;
-                            const selected = summaryHours.reduce(
-                              (total, { hour }) => {
-                                const value = analysis.weekdayHours[weekdayIndex][hour];
-                                total.guests += value.guests;
-                                total.sales += value.sales;
-                                total.bills += value.bills;
-                                return total;
-                              },
-                              { guests: 0, sales: 0, bills: 0 },
-                            );
-                            return (
-                              <div key={weekdayIndex} className="rounded-lg border p-3 text-sm">
-                                <div className="font-semibold">{weekdayNames[weekdayIndex]}</div>
-                                <div className="mt-2 text-lg font-bold">
-                                  {days ? (selected.guests / days).toFixed(1) : "0.0"}
-                                  <span className="ml-1 text-xs font-normal text-muted-foreground">
-                                    {th ? "คน/วัน" : "guests/day"}
-                                  </span>
-                                </div>
-                                <div className="font-semibold text-amber-600">
-                                  {thb(days ? selected.sales / days : 0)}
-                                  <span className="ml-1 text-xs font-normal text-muted-foreground">
-                                    {th ? "/วัน" : "/day"}
-                                  </span>
-                                </div>
-                                <div className="mt-1 text-xs text-muted-foreground">
-                                  {days ? (selected.bills / days).toFixed(1) : "0.0"}{" "}
-                                  {th ? "บิล/วัน" : "bills/day"} · {days} {th ? "วัน" : "days"}
-                                </div>
-                              </div>
-                            );
-                          })}
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                          <label className="flex items-center gap-2">
+                            <span className="text-muted-foreground">{th ? "ตั้งแต่" : "From"}</span>
+                            <select
+                              aria-label={th ? "เวลาเริ่มต้น" : "Start hour"}
+                              value={summaryStartHour}
+                              onChange={(event) => {
+                                setRangeTouched(true);
+                                setSummaryStartHour(Number(event.target.value));
+                              }}
+                              className="h-9 rounded-md border bg-background px-2 font-mono text-sm"
+                            >
+                              {hourOptions.map(({ hour }) => (
+                                <option key={hour} value={hour}>
+                                  {hourLabel(hour)}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="flex items-center gap-2">
+                            <span className="text-muted-foreground">{th ? "ถึง" : "Through"}</span>
+                            <select
+                              aria-label={th ? "เวลาสิ้นสุด" : "End hour"}
+                              value={summaryEndHour}
+                              onChange={(event) => {
+                                setRangeTouched(true);
+                                setSummaryEndHour(Number(event.target.value));
+                              }}
+                              className="h-9 rounded-md border bg-background px-2 font-mono text-sm"
+                            >
+                              {hourOptions.map(({ hour }) => (
+                                <option key={hour} value={hour}>
+                                  {hourLabel(hour)}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          {rangeTouched && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-9"
+                              onClick={() => setRangeTouched(false)}
+                            >
+                              {th ? "ทั้งหมด" : "All hours"}
+                            </Button>
+                          )}
                         </div>
                       </div>
+
+                      {peak && heatValue(peak.stat) > 0 && (
+                        <div className="rounded-lg border bg-muted/40 px-3 py-2 text-sm">
+                          <span className="text-muted-foreground">
+                            {th ? "ช่วงที่ยุ่งที่สุด" : "Busiest"} ({rangeLabel}):{" "}
+                          </span>
+                          <span className="font-semibold">
+                            {weekdayNames[peak.wd]} {hourLabel(peak.hour)}
+                          </span>
+                          {" — "}
+                          <span className="font-semibold">
+                            {peak.stat.guests.toLocaleString()} {th ? "คน" : "guests"}
+                          </span>
+                          {" · "}
+                          <span className="font-semibold text-amber-600">{thb(peak.stat.sales)}</span>
+                          {" · "}
+                          <span className="text-muted-foreground">
+                            {peak.stat.bills.toLocaleString()} {th ? "บิล" : "bills"}
+                          </span>
+                        </div>
+                      )}
 
                       <div className="overflow-x-auto rounded-lg border">
                         <table className="min-w-max text-sm">
@@ -728,41 +772,75 @@ function TimeAnalysis() {
                               <th className="sticky left-0 z-10 min-w-32 bg-muted px-3 py-3">
                                 {th ? "วันทำการ" : "Business day"}
                               </th>
-                              {weekdayActiveHours.map(({ hour }) => (
-                                <th key={hour} className="min-w-28 px-3 py-3 text-center font-mono">
+                              {matrixHours.map(({ hour }) => (
+                                <th key={hour} className="min-w-24 px-3 py-3 text-center font-mono">
                                   {hourLabel(hour)}
                                 </th>
                               ))}
+                              <th className="min-w-28 bg-muted/60 px-3 py-3 text-center font-semibold">
+                                {th ? "รวม" : "Total"}
+                              </th>
                             </tr>
                           </thead>
                           <tbody>
                             {weekdayDisplayOrder.map((weekdayIndex) => {
                               const weekday = analysis.weekdays[weekdayIndex];
                               const days = weekday.days.size;
+                              const rowTotal = matrixHours.reduce(
+                                (acc, { hour }) => {
+                                  const v = analysis.weekdayHours[weekdayIndex][hour];
+                                  acc.guests += v.guests;
+                                  acc.sales += v.sales;
+                                  acc.bills += v.bills;
+                                  return acc;
+                                },
+                                { guests: 0, sales: 0, bills: 0 },
+                              );
                               return (
                                 <tr key={weekdayIndex} className="border-b last:border-0">
                                   <th className="sticky left-0 z-10 bg-background px-3 py-3 text-left">
                                     {weekdayNames[weekdayIndex]}
                                     <small className="ml-1 font-normal text-muted-foreground">
-                                      ({days})
+                                      ({days} {th ? "วัน" : days === 1 ? "day" : "days"})
                                     </small>
                                   </th>
-                                  {weekdayActiveHours.map(({ hour }) => {
-                                    const value = analysis.weekdayHours[weekdayIndex][hour];
+                                  {matrixHours.map(({ hour }) => {
+                                    const v = analysis.weekdayHours[weekdayIndex][hour];
                                     return (
-                                      <td key={hour} className="px-3 py-3 text-center">
+                                      <td
+                                        key={hour}
+                                        className="px-3 py-3 text-center"
+                                        style={{ backgroundColor: heatBg(v) }}
+                                      >
                                         <div className="font-semibold">
-                                          {days ? (value.guests / days).toFixed(1) : "0.0"}
+                                          {v.guests}
                                           <span className="ml-1 text-[10px] font-normal text-muted-foreground">
                                             {th ? "คน" : "guests"}
                                           </span>
                                         </div>
                                         <div className="text-xs font-medium text-amber-600">
-                                          {thb(days ? value.sales / days : 0)}
+                                          {thb(v.sales)}
+                                        </div>
+                                        <div className="text-[10px] text-muted-foreground">
+                                          {v.bills} {th ? "บิล" : "bills"}
                                         </div>
                                       </td>
                                     );
                                   })}
+                                  <td className="bg-muted/30 px-3 py-3 text-center">
+                                    <div className="font-bold">
+                                      {rowTotal.guests.toLocaleString()}
+                                      <span className="ml-1 text-[10px] font-normal text-muted-foreground">
+                                        {th ? "คน" : "guests"}
+                                      </span>
+                                    </div>
+                                    <div className="text-xs font-semibold text-amber-600">
+                                      {thb(rowTotal.sales)}
+                                    </div>
+                                    <div className="text-[10px] text-muted-foreground">
+                                      {rowTotal.bills.toLocaleString()} {th ? "บิล" : "bills"}
+                                    </div>
+                                  </td>
                                 </tr>
                               );
                             })}
@@ -772,12 +850,13 @@ function TimeAnalysis() {
                               <th className="sticky left-0 z-10 bg-muted px-3 py-3 text-left">
                                 {th ? "รวมช่วงเวลา" : "Time total"}
                               </th>
-                              {weekdayActiveHours.map(({ hour }) => {
-                                const total = analysis.weekdayHours.reduce(
-                                  (sum, weekday) => {
-                                    sum.guests += weekday[hour].guests;
-                                    sum.sales += weekday[hour].sales;
-                                    sum.bills += weekday[hour].bills;
+                              {matrixHours.map(({ hour }) => {
+                                const total = weekdayDisplayOrder.reduce(
+                                  (sum, wd) => {
+                                    const v = analysis.weekdayHours[wd][hour];
+                                    sum.guests += v.guests;
+                                    sum.sales += v.sales;
+                                    sum.bills += v.bills;
                                     return sum;
                                   },
                                   { guests: 0, sales: 0, bills: 0 },
@@ -790,23 +869,53 @@ function TimeAnalysis() {
                                         {th ? "คน" : "guests"}
                                       </span>
                                     </div>
-                                    <div className="text-xs text-muted-foreground">
-                                      {total.bills.toLocaleString()} {th ? "บิล" : "bills"}
-                                    </div>
                                     <div className="text-xs font-semibold text-amber-600">
                                       {thb(total.sales)}
+                                    </div>
+                                    <div className="text-[10px] text-muted-foreground">
+                                      {total.bills.toLocaleString()} {th ? "บิล" : "bills"}
                                     </div>
                                   </td>
                                 );
                               })}
+                              {(() => {
+                                const grand = weekdayDisplayOrder.reduce(
+                                  (sum, wd) => {
+                                    for (const { hour } of matrixHours) {
+                                      const v = analysis.weekdayHours[wd][hour];
+                                      sum.guests += v.guests;
+                                      sum.sales += v.sales;
+                                      sum.bills += v.bills;
+                                    }
+                                    return sum;
+                                  },
+                                  { guests: 0, sales: 0, bills: 0 },
+                                );
+                                return (
+                                  <td className="bg-muted/50 px-3 py-3 text-center">
+                                    <div className="font-bold">
+                                      {grand.guests.toLocaleString()}
+                                      <span className="ml-1 text-[10px] font-normal text-muted-foreground">
+                                        {th ? "คน" : "guests"}
+                                      </span>
+                                    </div>
+                                    <div className="text-xs font-bold text-amber-600">
+                                      {thb(grand.sales)}
+                                    </div>
+                                    <div className="text-[10px] text-muted-foreground">
+                                      {grand.bills.toLocaleString()} {th ? "บิล" : "bills"}
+                                    </div>
+                                  </td>
+                                );
+                              })()}
                             </tr>
                           </tfoot>
                         </table>
                       </div>
                       <p className="text-xs text-muted-foreground">
                         {th
-                          ? "ลูกค้าใช้เวลาที่เปิดโต๊ะ ยอดขายใช้เวลาที่ชำระเงิน และทั้งสองรายการยึดวันทำการของกะ"
-                          : "Guests use table-open time; sales use payment time. Both are assigned to the shift business day."}
+                          ? "ลูกค้านับจากเวลาที่เปิดโต๊ะ ยอดขายนับจากเวลาที่ชำระเงิน เป็นยอดจริงรวมในช่วงที่เลือก แถวและคอลัมน์บวกกันได้พอดี"
+                          : "Guests use table-open time, sales use payment time — actual totals for the selected period. Rows and columns add up exactly."}
                       </p>
                     </>
                   )}
@@ -816,12 +925,16 @@ function TimeAnalysis() {
               <div className="grid gap-5 lg:grid-cols-2">
                 <Card>
                   <CardHeader>
-                    <CardTitle>{th ? "เฉลี่ยตามวันในสัปดาห์" : "Average by weekday"}</CardTitle>
+                    <CardTitle>{th ? "รวมตามวันในสัปดาห์" : "Totals by weekday"}</CardTitle>
+                    <p className="text-xs text-muted-foreground">
+                      {th
+                        ? "ยอดจริงรวมทั้งวัน (ทุกชั่วโมง) ในช่วงที่เลือก"
+                        : "Actual totals across the whole day (all hours) for the selected period."}
+                    </p>
                   </CardHeader>
                   <CardContent className="space-y-2">
                     {weekdayDisplayOrder.map((i) => {
                       const d = analysis.weekdays[i];
-                      const days = Math.max(1, d.days.size);
                       return (
                         <div
                           key={i}
@@ -829,14 +942,14 @@ function TimeAnalysis() {
                         >
                           <span className="font-medium">
                             {weekdayNames[i]}{" "}
-                            <small className="text-muted-foreground">({d.days.size})</small>
+                            <small className="text-muted-foreground">
+                              ({d.days.size} {th ? "วัน" : d.days.size === 1 ? "day" : "days"})
+                            </small>
                           </span>
                           <span>
-                            {(d.guests / days).toFixed(1)} {th ? "คน/วัน" : "guests/day"}
+                            {d.guests.toLocaleString()} {th ? "คน" : "guests"}
                           </span>
-                          <span className="w-24 text-right font-semibold">
-                            {thb(d.sales / days)}
-                          </span>
+                          <span className="w-24 text-right font-semibold">{thb(d.sales)}</span>
                         </div>
                       );
                     })}
