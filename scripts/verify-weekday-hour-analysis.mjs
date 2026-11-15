@@ -14,20 +14,26 @@ assert.match(source, /weekdays\[weekdayOfKey\(shift\.business_day\)\]\.days\.add
 assert.match(source, /weekdayHours\[weekday\]\[h\]\.guests \+= guests/);
 assert.match(source, /weekdayHours\[weekday\]\[h\]\.sales \+= total/);
 assert.match(source, /const weekdayActiveHours = orderBusinessHours\(/);
-assert.match(source, /const \[summaryStartHour, setSummaryStartHour\] = useState\(2\)/);
-assert.match(source, /const \[summaryEndHour, setSummaryEndHour\] = useState\(11\)/);
 assert.match(source, /summaryStartHour <= summaryEndHour/);
 assert.match(source, /hour >= summaryStartHour \|\| hour <= summaryEndHour/);
-assert.match(source, /Summary start hour/);
-assert.match(source, /Summary end hour/);
+assert.match(source, /Start hour/);
+assert.match(source, /End hour/);
+// The From/Through range now filters the whole matrix (not just a summary block).
+assert.match(source, /const matrixHours = summaryHours/);
+assert.match(source, /const \[rangeTouched, setRangeTouched\]/);
+assert.match(source, /const \[heatMetric, setHeatMetric\]/);
 assert.match(source, /const weekdayDisplayOrder = \[1, 2, 3, 4, 5, 6, 0\]/);
 assert.match(source, /weekdayDisplayOrder\.map\(\(weekdayIndex\) =>/);
 assert.match(source, /Time total/);
-assert.match(source, /analysis\.weekdayHours\.reduce/);
+// Footer totals sum the actual per-weekday hour values (no per-day averaging).
+assert.match(source, /analysis\.weekdayHours\[wd\]\[hour\]/);
 assert.match(source, /Weekday × hour/);
-assert.match(source, /summaryRangeLabel/);
 assert.match(source, /After-midnight activity stays with the original business day/);
-assert.match(source, /Guests use table-open time; sales use payment time/);
+assert.match(source, /Guests use table-open time, sales use payment time/);
+// Cells and the Totals-by-weekday card must show ACTUAL totals, never a per-day average.
+assert.doesNotMatch(source, /\.guests \/ days/);
+assert.doesNotMatch(source, /\.sales \/ days/);
+assert.doesNotMatch(source, /guests\/day/);
 assert.match(source, /const \[selectedMonth, setSelectedMonth\] = useState\(currentMonthKey\)/);
 assert.match(source, /if \(range === "month"\) return monthBounds\(selectedMonth\)/);
 assert.match(source, /shiftIdsFor\(range === "month" \? "custom" : range, bounds\)/);
@@ -38,4 +44,6 @@ assert.match(source, /Month shown/);
 assert.match(source, /Previous month/);
 assert.match(source, /Next month/);
 
-console.log("OK: weekday-by-hour analysis preserves shift business days and late-hour averages");
+console.log(
+  "OK: weekday-by-hour analysis preserves shift business days and shows actual totals (reconciling rows/columns)",
+);
