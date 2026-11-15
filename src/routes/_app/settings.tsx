@@ -300,12 +300,18 @@ function QrFeaturedTab() {
 
   const [sections, setSections] = useState<FeaturedSectionRow[]>([]);
   const [itemsBySection, setItemsBySection] = useState<Record<string, string[]>>({});
+  // `${section_key}::${menu_id}` -> QR special price (null = use normal price).
+  const [priceByKey, setPriceByKey] = useState<Record<string, number | null>>({});
+  // Local text buffer for the price inputs, so typing doesn't fight the number state.
+  const [priceEdit, setPriceEdit] = useState<Record<string, string>>({});
   const [menuById, setMenuById] = useState<Map<string, FeaturedMenuRow>>(new Map());
   const [pool, setPool] = useState<FeaturedMenuRow[]>([]);
   const [search, setSearch] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [unavailable, setUnavailable] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  const priceKey = (sectionKey: string, menuId: string) => `${sectionKey}::${menuId}`;
 
   const load = async () => {
     setLoading(true);
@@ -316,7 +322,10 @@ function QrFeaturedTab() {
             .from("qr_featured_sections")
             .select("key,name_th,name_en,emoji,sort,enabled")
             .order("sort"),
-          db.from("qr_featured_items").select("section_key,menu_id,sort").order("sort"),
+          db
+            .from("qr_featured_items")
+            .select("section_key,menu_id,sort,price_override")
+            .order("sort"),
           db.from("menus").select("id,name_th,name_en,available,available_qr").order("name_th"),
         ]);
       if (secErr) {
@@ -326,10 +335,21 @@ function QrFeaturedTab() {
       }
       setSections((sectionRows ?? []) as FeaturedSectionRow[]);
       const grouped: Record<string, string[]> = {};
-      for (const row of (itemRows ?? []) as { section_key: string; menu_id: string }[]) {
+      const prices: Record<string, number | null> = {};
+      const priceBuf: Record<string, string> = {};
+      for (const row of (itemRows ?? []) as {
+        section_key: string;
+        menu_id: string;
+        price_override: number | null;
+      }[]) {
         (grouped[row.section_key] ??= []).push(row.menu_id);
+        const k = priceKey(row.section_key, row.menu_id);
+        prices[k] = row.price_override;
+        priceBuf[k] = row.price_override == null ? "" : String(row.price_override);
       }
       setItemsBySection(grouped);
+      setPriceByKey(prices);
+      setPriceEdit(priceBuf);
       const allMenus = (menus ?? []) as FeaturedMenuRow[];
       setMenuById(new Map(allMenus.map((m) => [m.id, m])));
       setPool(allMenus.filter((m) => m.available && m.available_qr));
@@ -348,6 +368,47 @@ function QrFeaturedTab() {
   const patchSection = (key: string, patch: Partial<FeaturedSectionRow>) =>
     setSections((prev) => prev.map((s) => (s.key === key ? { ...s, ...patch } : s)));
 
+  // The show/hide toggle persists immediately (optimistic), so refreshing or
+  // leaving the page keeps it off when off and on when on — without needing the
+  // "Save title" button.
+  const setEnabled = async (section: FeaturedSectionRow, value: boolean) => {
+    patchSection(section.key, { enabled: value });
+    const { error } = await db
+      .from("qr_featured_sections")
+      .update({ enabled: value, updated_at: new Date().toISOString() })
+      .eq("key", section.key);
+    if (error) {
+      patchSection(section.key, { enabled: !value }); // revert on failure
+      toast.error(`${L("บันทึกไม่สำเร็จ", "Save failed")}: ${error.message}`);
+    }
+  };
+
+  // Save a per-item QR special price. Empty/blank clears it (back to normal price).
+  const saveItemPrice = async (sectionKey: string, menuId: string) => {
+    const k = priceKey(sectionKey, menuId);
+    const raw = (priceEdit[k] ?? "").trim();
+    const parsed = raw === "" ? null : Number(raw);
+    if (parsed != null && (!Number.isFinite(parsed) || parsed < 0)) {
+      toast.error(L("ราคาไม่ถูกต้อง", "Invalid price"));
+      return;
+    }
+    if ((priceByKey[k] ?? null) === parsed) return; // no change
+    setBusy(true);
+    const { error } = await db
+      .from("qr_featured_items")
+      .update({ price_override: parsed })
+      .eq("section_key", sectionKey)
+      .eq("menu_id", menuId);
+    setBusy(false);
+    if (error) {
+      toast.error(`${L("บันทึกไม่สำเร็จ", "Save failed")}: ${error.message}`);
+      return;
+    }
+    setPriceByKey((prev) => ({ ...prev, [k]: parsed }));
+    setPriceEdit((prev) => ({ ...prev, [k]: parsed == null ? "" : String(parsed) }));
+    toast.success(L("บันทึกแล้ว", "Saved"));
+  };
+
   const addItem = async (sectionKey: string, menuId: string) => {
     setBusy(true);
     const nextSort = (itemsBySection[sectionKey] ?? []).length;
@@ -363,6 +424,9 @@ function QrFeaturedTab() {
       ...prev,
       [sectionKey]: [...(prev[sectionKey] ?? []), menuId],
     }));
+    const k = priceKey(sectionKey, menuId);
+    setPriceByKey((prev) => ({ ...prev, [k]: null }));
+    setPriceEdit((prev) => ({ ...prev, [k]: "" }));
     setSearch((prev) => ({ ...prev, [sectionKey]: "" }));
   };
 
@@ -481,7 +545,7 @@ function QrFeaturedTab() {
                 <div className="flex items-center gap-2">
                   <Switch
                     checked={section.enabled}
-                    onCheckedChange={(v) => patchSection(section.key, { enabled: v })}
+                    onCheckedChange={(v) => setEnabled(section, v)}
                   />
                   <span className="text-sm">{L("แสดงให้ลูกค้า", "Show to customers")}</span>
                 </div>
@@ -506,25 +570,53 @@ function QrFeaturedTab() {
                 {itemIds.map((id) => {
                   const m = menuById.get(id);
                   const hidden = m && (!m.available || !m.available_qr);
+                  const k = priceKey(section.key, id);
+                  const hasSpecial = (priceByKey[k] ?? null) != null;
                   return (
-                    <div key={id} className="flex items-center gap-2 border rounded-lg px-3 py-2">
-                      <span className="flex-1 text-sm truncate">
-                        {m ? menuLabel(m) : id}
-                        {hidden && (
-                          <span className="ml-2 text-xs text-amber-600">
-                            {L("(ซ่อนจาก QR)", "(hidden from QR)")}
-                          </span>
+                    <div key={id} className="border rounded-lg px-3 py-2 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="flex-1 text-sm truncate">
+                          {m ? menuLabel(m) : id}
+                          {hidden && (
+                            <span className="ml-2 text-xs text-amber-600">
+                              {L("(ซ่อนจาก QR)", "(hidden from QR)")}
+                            </span>
+                          )}
+                        </span>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 text-destructive"
+                          disabled={busy}
+                          onClick={() => removeItem(section.key, id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground shrink-0">
+                          {L("ราคาพิเศษ (QR)", "QR special price")}
+                        </span>
+                        <Input
+                          type="number"
+                          inputMode="decimal"
+                          min={0}
+                          className="h-8 w-28"
+                          placeholder={L("ราคาปกติ", "Normal price")}
+                          value={priceEdit[k] ?? ""}
+                          onChange={(e) =>
+                            setPriceEdit((prev) => ({ ...prev, [k]: e.target.value }))
+                          }
+                          onBlur={() => saveItemPrice(section.key, id)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                          }}
+                        />
+                        <span className="text-xs text-muted-foreground">฿</span>
+                        {hasSpecial && (
+                          <span className="text-xs text-primary">{L("ลดราคา", "Discounted")}</span>
                         )}
-                      </span>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-8 w-8 text-destructive"
-                        disabled={busy}
-                        onClick={() => removeItem(section.key, id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      </div>
                     </div>
                   );
                 })}

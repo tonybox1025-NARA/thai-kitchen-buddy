@@ -184,13 +184,48 @@ export const Route = createFileRoute("/api/public/qr-order")({
         const menuIds = items.map((i) => i.menu_id);
         const { data: menus } = await supabase
           .from("menus")
-          .select("id,category_id,name_th,name_en,name_my,price,cost,available,available_qr")
+          .select("id,category_id,name_th,name_en,name_my,price,cost,available,available_qr,is_set")
           .in("id", menuIds);
         const menuMap = new Map((menus ?? []).map((m) => [m.id, m]));
         for (const it of items) {
           const m = menuMap.get(it.menu_id);
           if (!m || !m.available || !m.available_qr)
             return new Response(`Item unavailable: ${it.menu_id}`, { status: 400 });
+        }
+
+        // QR special price: re-derived server-side (never trust the client) the
+        // same way the QR menu API displays it — a menu pinned in an ENABLED
+        // featured section with a price_override is charged at that price. Any
+        // failure here leaves prices at the normal menu price, so ordering and
+        // printing can never break because of this.
+        const qrPriceOverride = new Map<string, number>();
+        try {
+          const db = supabase as any;
+          const [{ data: enabledSections }, { data: featuredItems }] = await Promise.all([
+            db.from("qr_featured_sections").select("key").eq("enabled", true),
+            db
+              .from("qr_featured_items")
+              .select("section_key,menu_id,price_override")
+              .in("menu_id", menuIds),
+          ]);
+          const enabledKeys = new Set(
+            ((enabledSections ?? []) as { key: string }[]).map((s) => s.key),
+          );
+          for (const row of (featuredItems ?? []) as {
+            section_key: string;
+            menu_id: string;
+            price_override: number | null;
+          }[]) {
+            if (!enabledKeys.has(row.section_key) || row.price_override == null) continue;
+            const m = menuMap.get(row.menu_id);
+            if (!m || (m as any).is_set) continue; // set-menu pricing is left untouched
+            const price = Number(row.price_override);
+            if (!Number.isFinite(price) || price < 0) continue;
+            const current = qrPriceOverride.get(row.menu_id);
+            if (current == null || price < current) qrPriceOverride.set(row.menu_id, price);
+          }
+        } catch {
+          qrPriceOverride.clear();
         }
 
         // Validate addon options + fetch authoritative prices/names
@@ -352,9 +387,11 @@ export const Route = createFileRoute("/api/public/qr-order")({
             };
           });
 
-          // Authoritative total: base price + sum of (addon price × qty)
+          // Authoritative total: base price + sum of (addon price × qty).
+          // Use the QR special price when the menu is featured at a discount.
+          const basePrice = qrPriceOverride.get(it.menu_id) ?? Number(m.price);
           const addonTotal = modifiers.reduce((s, mod) => s + mod.price * mod.qty, 0);
-          const unit_price = Number(m.price) + addonTotal;
+          const unit_price = basePrice + addonTotal;
           const category = (m as any).category_id ? categoryMap.get((m as any).category_id) : null;
           const zone = category?.kitchen_zone_id ? zoneMap.get(category.kitchen_zone_id) : null;
           const routeToFront = isFrontCounterCategory(category);

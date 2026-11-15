@@ -188,6 +188,10 @@ export const Route = createFileRoute("/api/public/qr-menu/$tableCode")({
           emoji: string | null;
           menu_ids: string[];
         }> = [];
+        // menu_id -> QR special price, taken from ENABLED featured sections only.
+        // Applied to the displayed price below so every card (featured + normal
+        // category) shows the same price; the order API re-derives it the same way.
+        const qrPriceOverride = new Map<string, number>();
         try {
           const visibleIds = new Set(visibleMenus.map((menu: any) => menu.id));
           const [{ data: sectionRows }, { data: itemRows }] = await Promise.all([
@@ -196,14 +200,33 @@ export const Route = createFileRoute("/api/public/qr-menu/$tableCode")({
               .select("key,name_th,name_en,emoji,sort,enabled")
               .eq("enabled", true)
               .order("sort"),
-            db.from("qr_featured_items").select("section_key,menu_id,sort").order("sort"),
+            db
+              .from("qr_featured_items")
+              .select("section_key,menu_id,sort,price_override")
+              .order("sort"),
           ]);
+          const enabledKeys = new Set(
+            ((sectionRows ?? []) as { key: string }[]).map((s) => s.key),
+          );
           const itemsBySection = new Map<string, string[]>();
-          for (const row of (itemRows ?? []) as { section_key: string; menu_id: string }[]) {
+          for (const row of (itemRows ?? []) as {
+            section_key: string;
+            menu_id: string;
+            price_override: number | null;
+          }[]) {
             // Respect the duplicate-collapse and keep only menus visible on the QR
             // menu, so a hidden or sold-out item drops out of the section on its own.
             const canonicalId = duplicateToCanonical.get(row.menu_id) ?? row.menu_id;
             if (!visibleIds.has(canonicalId)) continue;
+            // Special price counts only when the owning section is enabled.
+            if (enabledKeys.has(row.section_key) && row.price_override != null) {
+              const price = Number(row.price_override);
+              if (Number.isFinite(price) && price >= 0) {
+                const current = qrPriceOverride.get(canonicalId);
+                // If two sections price the same item, show the lower one.
+                if (current == null || price < current) qrPriceOverride.set(canonicalId, price);
+              }
+            }
             const list = itemsBySection.get(row.section_key) ?? [];
             if (!list.includes(canonicalId)) list.push(canonicalId);
             itemsBySection.set(row.section_key, list);
@@ -219,13 +242,23 @@ export const Route = createFileRoute("/api/public/qr-menu/$tableCode")({
             .filter((section) => section.menu_ids.length > 0);
         } catch {
           featuredSections = [];
+          qrPriceOverride.clear();
         }
+
+        // Inject the QR special price into the displayed menu price. Keep the
+        // original under original_price so the client can strike it through.
+        // Never applied to set menus (their price comes from the set definition).
+        const pricedMenus = visibleMenus.map((menu: any) => {
+          const special = qrPriceOverride.get(menu.id);
+          if (special == null || menu.is_set) return menu;
+          return { ...menu, price: special, original_price: menu.price };
+        });
 
         return Response.json(
           {
             table,
             categories: visibleCategories,
-            menus: visibleMenus,
+            menus: pricedMenus,
             restaurant_name: settings?.restaurant_name ?? "Restaurant",
             addonsByMenuId,
             setDefsByMenuId,

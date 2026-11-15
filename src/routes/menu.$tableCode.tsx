@@ -43,6 +43,8 @@ type Menu = {
   name_th: string;
   name_en: string;
   price: number;
+  // Present only when a QR special price is active; the original (struck-through) price.
+  original_price?: number;
   image_url: string | null;
   sort: number;
   is_set?: boolean;
@@ -992,7 +994,18 @@ function CustomerMenu() {
       <div className="min-w-0 flex-1">
         <div className="font-medium leading-tight line-clamp-2">{name(m)}</div>
         <div className="text-xs text-muted-foreground truncate mt-0.5">{sub(m)}</div>
-        <div className="mt-1.5 font-bold text-primary">฿{Number(m.price).toFixed(0)}</div>
+        <div className="mt-1.5 font-bold text-primary flex items-baseline gap-1.5">
+          {m.original_price != null && m.original_price > m.price ? (
+            <>
+              <span className="text-destructive">฿{Number(m.price).toFixed(0)}</span>
+              <span className="text-xs font-normal text-muted-foreground line-through">
+                ฿{Number(m.original_price).toFixed(0)}
+              </span>
+            </>
+          ) : (
+            <span>฿{Number(m.price).toFixed(0)}</span>
+          )}
+        </div>
       </div>
     </button>
   );
