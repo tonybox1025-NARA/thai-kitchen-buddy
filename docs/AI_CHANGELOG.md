@@ -1,5 +1,15 @@
 # Shared AI Change Log
 
+## 2026-11-18 — Show only food in POS Live top items
+
+- Agent: Codex
+- Scope: POS Live `Top items today` ranking and its build-enforced regression guard.
+- Decision: rank only menu items whose catalog category is food. Exclude cooked rice/porridge, drinks, beer, whisky/brandy, other alcohol, ice, desserts/ice cream, and promotional/announcement categories; retain food SET menus and food dishes such as fried rice.
+- Verification: dedicated POS Live food-category guard, AI protocol guard, TypeScript, full regression suite, and production build passed. The existing whole-file Live lint/Prettier backlog remains outside this focused change.
+- Git: `codex/live-food-only-top-items-20261118`; exact commit is reported with delivery.
+- Delivery: source implementation verified on the feature branch; merge, Lovable publication, and live verification remain separate.
+- Follow-up: complete validation, merge, publish, and verify the live POS bundle.
+
 ## 2026-11-05 — Select closing hours and show hourly totals
 
 - Agent: Codex
