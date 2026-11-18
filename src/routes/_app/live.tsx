@@ -65,36 +65,54 @@ function itemRoundKey(item: TableItemLine): string {
   return `${item.orderId}:${item.roundNumber ?? "pending"}`;
 }
 
-const TOP_ITEM_EXCLUDED_EN = new Set([
-  "water",
-  "rice",
-  "steamed rice",
-  "khao tom",
-  "rice soup",
-  "rice soup (khao tom)",
-  "rice soup refill",
-  "ice",
-  "ice (cup)",
-  "ice (bucket)",
+const TOP_ITEM_NON_FOOD_CATEGORY_IDS = new Set([
+  "59fdba25-1e80-4c80-b1fb-24cd5b9b20e5", // Promotions / announcements
+  "47b40bd2-2bab-4ddf-b3ea-4380e91996ca", // Drink promotions
+  "fdb7fca2-b2c2-44a9-82ac-74448575c9b6", // Cooked rice / porridge
+  "27d152e4-0841-473f-ba5b-c5cdff18b6c6", // Drinks
+  "71257a4e-8929-4574-989c-8742ecb5b03d", // Beer
+  "9ccc396d-db39-46d4-8095-2f3c775ad8f1", // Whisky / brandy
+  "3176859b-163b-48ba-bd02-6445aa059d02", // Ice
+  "fe69f8a2-9fd7-415d-9035-e2b34ac4621e", // Desserts / ice cream
+  "7a73b072-789e-49b4-a061-e42a92ae5b3a", // Legacy drinks / ice cream
+  "ec4b9304-7672-4d83-8e4a-d8fd6240345e", // Legacy alcohol
 ]);
 
-const TOP_ITEM_EXCLUDED_TH = new Set([
-  "น้ำเปล่า",
-  "ข้าว",
+const TOP_ITEM_NON_FOOD_CATEGORY_TOKENS = [
+  "promotion",
+  "announcement",
+  "drink",
+  "beverage",
+  "beer",
+  "alcohol",
+  "whisky",
+  "whiskey",
+  "brandy",
+  "dessert",
+  "ice cream",
+  "ice",
+  "rice & porridge",
+  "cooked rice / porridge",
+  "โปรโมชั่น",
+  "ประกาศ",
+  "เครื่องดื่ม",
+  "เบียร์",
+  "แอลกอฮอล์",
+  "วิสกี้",
+  "บรั่นดี",
+  "ของหวาน",
+  "ไอศกรีม",
+  "น้ำแข็ง",
   "ข้าวสวย",
   "ข้าวต้ม",
-  "ข้าวต้มรีฟิล",
-  "น้ำแข็ง",
-  "น้ำแข็งแก้ว",
-  "น้ำแข็งถัง",
-]);
+];
 
-function excludeFromTopItems(nameTh: string, nameEn: string): boolean {
-  const en = nameEn.trim().toLocaleLowerCase("en").replace(/\s+/g, " ");
-  const th = nameTh.trim().replace(/\s+/g, " ");
-  return TOP_ITEM_EXCLUDED_EN.has(en)
-    || TOP_ITEM_EXCLUDED_TH.has(th)
-    || th.startsWith("น้ำแข็ง ");
+function isFoodTopItemCategory(
+  category?: { id: string; name_th: string; name_en: string } | null,
+): boolean {
+  if (!category || TOP_ITEM_NON_FOOD_CATEGORY_IDS.has(category.id)) return false;
+  const label = `${category.name_th} ${category.name_en}`.normalize("NFKC").toLocaleLowerCase("en");
+  return !TOP_ITEM_NON_FOOD_CATEGORY_TOKENS.some((token) => label.includes(token));
 }
 
 function LivePage() {
@@ -254,11 +272,23 @@ function LivePage() {
       // Top items today (all non-voided order items in this shift)
       const orderIds = (shiftOrders ?? []).map((o: { id: string }) => o.id);
       const { data: oi } = orderIds.length
-        ? await (supabase as any).from("order_items").select("name_th,name_en,qty,voided_at").in("order_id", orderIds).is("voided_at", null)
-        : { data: [] as { name_th: string; name_en: string; qty: number }[] };
+        ? await (supabase as any).from("order_items").select("menu_id,name_th,name_en,qty,voided_at").in("order_id", orderIds).is("voided_at", null)
+        : { data: [] as { menu_id: string | null; name_th: string; name_en: string; qty: number }[] };
+      const menuIds = [...new Set(((oi ?? []) as { menu_id: string | null }[]).map((item) => item.menu_id).filter(Boolean))] as string[];
+      const { data: menus } = menuIds.length
+        ? await supabase.from("menus").select("id,category_id").in("id", menuIds)
+        : { data: [] as { id: string; category_id: string | null }[] };
+      const categoryIds = [...new Set((menus ?? []).map((menu) => menu.category_id).filter(Boolean))] as string[];
+      const { data: categories } = categoryIds.length
+        ? await supabase.from("categories").select("id,name_th,name_en").in("id", categoryIds)
+        : { data: [] as { id: string; name_th: string; name_en: string }[] };
+      const menuCategoryId = new Map((menus ?? []).map((menu) => [menu.id, menu.category_id]));
+      const categoryById = new Map((categories ?? []).map((category) => [category.id, category]));
       const iMap = new Map<string, { name_th: string; name_en: string; qty: number }>();
-      for (const it of (oi ?? []) as { name_th: string; name_en: string; qty: number }[]) {
-        if (excludeFromTopItems(it.name_th ?? "", it.name_en ?? "")) continue;
+      for (const it of (oi ?? []) as { menu_id: string | null; name_th: string; name_en: string; qty: number }[]) {
+        const categoryId = it.menu_id ? menuCategoryId.get(it.menu_id) : null;
+        const category = categoryId ? categoryById.get(categoryId) : null;
+        if (!isFoodTopItemCategory(category)) continue;
         const key = it.name_en || it.name_th || "Item";
         const cur = iMap.get(key) ?? { name_th: it.name_th, name_en: it.name_en, qty: 0 };
         cur.qty += Number(it.qty);
