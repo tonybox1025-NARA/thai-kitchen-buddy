@@ -67,7 +67,7 @@ const CATEGORY_PRESENTATION: Record<string, { order: number; en: string }> = {
   "d95561e7-c21b-4413-a81c-6053f1982cfe": { order: 150, en: "Add-ons" },
 };
 
-type Menu = { id: string; category_id: string | null; name_th: string; name_en: string; name_my: string; price: number; cost?: number; available: boolean; image_url: string | null; sort: number; is_set?: boolean };
+type Menu = { id: string; category_id: string | null; name_th: string; name_en: string; name_my: string; price: number; cost?: number; available: boolean; image_url: string | null; sort: number; is_set?: boolean; special_price?: number | null };
 type Category = { id: string; name_th: string; name_en: string; name_my: string; sort: number; kitchen_zone_id?: string | null };
 
 type CatalogSettings = {
@@ -472,7 +472,10 @@ function OrderPage() {
     if (isOffline()) { toast.error(t("err_offline")); return; }
     const addonsArr = Array.from(selectedAddons.values());
     const addonPrice = addonsArr.reduce((s, a) => s + a.price, 0);
-    const unit_price = selected.price + addonPrice;
+    // A featured "Today's Special" price applies on every channel — charge it
+    // here (base + add-ons), same as the customer QR order path.
+    const basePrice = selected.special_price ?? selected.price;
+    const unit_price = basePrice + addonPrice;
     const modifiers: Modifier[] | null = addonsArr.length > 0
       ? addonsArr.map((a) => ({ option_id: a.option_id, group_name: a.group_name, option_name: a.option_name, price: a.price, qty: 1 }))
       : null;
@@ -1165,7 +1168,14 @@ function OrderPage() {
                     <div className="p-3">
                       <div className="font-medium leading-tight line-clamp-2">{pickName(m, lang)}</div>
                       <div className="text-xs text-muted-foreground mt-0.5 truncate">{lang === "th" ? m.name_en : m.name_th}</div>
-                      <div className="mt-2 font-bold text-primary">{thb(m.price)}</div>
+                      {m.special_price != null ? (
+                        <div className="mt-2 font-bold">
+                          <span className="text-muted-foreground line-through mr-1.5 text-xs font-normal">{thb(m.price)}</span>
+                          <span className="text-red-600 dark:text-red-400">{thb(m.special_price)}</span>
+                        </div>
+                      ) : (
+                        <div className="mt-2 font-bold text-primary">{thb(m.price)}</div>
+                      )}
                     </div>
                   </button>
                 ))}
@@ -1397,7 +1407,7 @@ function OrderPage() {
           <DialogHeader><DialogTitle>{selected ? pickName(selected, lang) : ""}</DialogTitle></DialogHeader>
           {selected && (() => {
             const addonTotal = Array.from(selectedAddons.values()).reduce((s, a) => s + a.price, 0);
-            const totalPrice = (selected.price + addonTotal) * qty;
+            const totalPrice = ((selected.special_price ?? selected.price) + addonTotal) * qty;
             return (
               <div className="space-y-4">
                 <div>
