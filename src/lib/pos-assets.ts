@@ -56,8 +56,39 @@ export function refreshPosCatalog(force = false): Promise<void> {
       const error = menuError ?? categoryError ?? settingsError;
       if (error || !menus || !categories || !settings) throw error ?? new Error("Menu sync failed");
       if (revision !== catalogRevision) continue;
+      // A featured item with a special price is now charged that price on every
+      // channel — customer QR *and* staff POS — so a "Today's Special" sale is
+      // consistent. Fetched here so the price rides the offline catalog cache.
+      // Mirrors the QR server logic (enabled sections only, non-set menus, the
+      // lowest override when an item sits in several sections). Never allowed to
+      // block the menu: any failure degrades to normal prices.
+      const specialByMenu = new Map<string, number>();
+      try {
+        // Types for the qr_featured_* tables aren't generated yet, so query
+        // through an untyped client (same pattern as settings.tsx / qr-order.ts).
+        const fdb = supabase as any;
+        const [{ data: sections }, { data: featuredItems }] = await Promise.all([
+          fdb.from("qr_featured_sections").select("key").eq("enabled", true),
+          fdb.from("qr_featured_items").select("section_key,menu_id,price_override"),
+        ]);
+        const enabled = new Set((sections ?? []).map((s: { key: string }) => s.key));
+        for (const it of (featuredItems ?? []) as Array<{ section_key: string; menu_id: string; price_override: number | null }>) {
+          if (it.price_override == null || !enabled.has(it.section_key)) continue;
+          const p = Number(it.price_override);
+          if (!Number.isFinite(p) || p <= 0) continue;
+          const prev = specialByMenu.get(it.menu_id);
+          if (prev == null || p < prev) specialByMenu.set(it.menu_id, p);
+        }
+      } catch {
+        // Featured tables unavailable — ship normal prices.
+      }
+      const pricedMenus = menus.map((menu) => {
+        const sp = specialByMenu.get(menu.id);
+        const special_price = sp != null && !menu.is_set && sp < Number(menu.price) ? sp : null;
+        return { ...menu, special_price };
+      });
       const used = new Set(menus.map((menu) => menu.category_id).filter(Boolean));
-      writeDeviceCache(CATALOG_CACHE_KEY, { menus, categories: categories.filter((category) => used.has(category.id)), settings });
+      writeDeviceCache(CATALOG_CACHE_KEY, { menus: pricedMenus, categories: categories.filter((category) => used.has(category.id)), settings });
       catalogRefreshedAt = Date.now();
       catalogListeners.forEach((listener) => listener());
       return;

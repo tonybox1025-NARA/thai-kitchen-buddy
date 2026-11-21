@@ -605,7 +605,7 @@ function QrFeaturedTab() {
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-muted-foreground shrink-0">
-                          {L("ราคาพิเศษ (QR)", "QR special price")}
+                          {L("ราคาพิเศษ", "Special price")}
                         </span>
                         <Input
                           type="number"

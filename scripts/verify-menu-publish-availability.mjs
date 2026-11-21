@@ -133,7 +133,7 @@ const queryDb = { from(table) {
     select: () => query, eq: () => query, order: () => query, single: () => query,
     then(resolve, reject) { return Promise.resolve().then(async () => {
       queries++;
-      const data = table === "menus" ? structuredClone(live.filter((row) => row.available)) : table === "categories" ? [{ id: "food" }] : { restaurant_name: "Test" };
+      const data = table === "menus" ? structuredClone(live.filter((row) => row.available)) : table === "categories" ? [{ id: "food" }] : table === "qr_featured_sections" || table === "qr_featured_items" ? [] : { restaurant_name: "Test" };
       if (table === "menus" && gate) { const pending = gate; gate = null; await pending; }
       if (fail) return { data: null, error: new Error("offline") };
       return { data, error: null };
@@ -153,9 +153,11 @@ const first = exports.refreshPosCatalog(true);
 assert.equal(exports.refreshPosCatalog(true), first, "concurrent refreshes share one request");
 await first;
 assert.equal(cache.menus.length, 1);
-assert.equal(queries, 3);
+// 5 queries per refresh: menus + categories + settings, plus the two featured
+// tables that carry "Today's Special" prices into the offline catalog.
+assert.equal(queries, 5);
 await exports.refreshPosCatalog();
-assert.equal(queries, 3, "table transitions within the freshness window use cache");
+assert.equal(queries, 5, "table transitions within the freshness window use cache");
 gate = new Promise((resolve) => { release = resolve; });
 const pending = exports.refreshPosCatalog(true);
 await new Promise((resolve) => setImmediate(resolve));
