@@ -576,7 +576,7 @@ function OrderPage() {
       if (sc) {
         const setNotes = formatSetKitchenNotes(sc);
         const prefix = p.is_takeout ? "[ TAKEOUT ] " : "";
-        return { name_my: `${prefix}${p.name_en}`, name_en: `${prefix}${p.name_en}`, name_th: `${prefix}${p.name_th}`, qty: p.qty, notes: setNotes, modifiers: null, zoneId, zoneLabel, printToKitchen };
+        return { name_my: `${prefix}${p.name_en}`, name_en: `${prefix}${p.name_en}`, name_th: `${prefix}${p.name_th}`, qty: p.qty, notes: setNotes, modifiers: null, set_config: sc, zoneId, zoneLabel, printToKitchen };
       }
       const prefix = p.is_takeout ? "[ TAKEOUT ] " : "";
       return { name_my: `${prefix}${p.name_my}`, name_en: `${prefix}${p.name_en}`, name_th: `${prefix}${p.name_th}`, qty: p.qty, notes: p.notes, modifiers: (p.modifiers as Modifier[] | null) ?? null, zoneId, zoneLabel, printToKitchen };
@@ -976,6 +976,7 @@ function OrderPage() {
         qty: item.qty,
         notes: item.notes,
         modifiers: (item.modifiers as Modifier[] | null) ?? null,
+        set_config: item.set_config ?? null,
       }));
       await printCounter({
         kind: "order_ticket",
