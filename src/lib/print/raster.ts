@@ -74,7 +74,7 @@ const S = {
   setDish: { size: SIZE.setDish, bold: true } as Style,
   setEnglish: { size: SIZE.setEnglish, bold: false } as Style,
   addonLabel: { size: SIZE.addonLabel, bold: true } as Style,
-  addon: { size: SIZE.addon, bold: true } as Style,
+  addon: { size: SIZE.addon, bold: false } as Style,
   addonPlus: { size: SIZE.addonPlus, bold: true } as Style,
 };
 

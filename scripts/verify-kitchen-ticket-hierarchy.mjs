@@ -11,6 +11,7 @@ const checks = [
   [raster.includes("S.setDish, 58"), "Thai SET dish names receive the strong indented style"],
   [raster.includes("S.setEnglish, 58"), "English SET dish names remain subordinate"],
   [raster.includes('d.textIndented("เพิ่ม / ADD-ON"'), "add-ons have a visible bilingual heading"],
+  [raster.includes("addon: { size: SIZE.addon, bold: false }"), "add-on menu text and price remain regular weight"],
   [raster.includes("d.addon(`${on}${qs}`, ps)"), "add-ons use the large-plus layout with separate price"],
   [raster.includes("ctx.fillText(right, WIDTH - PAD_X"), "add-on price stays right-aligned"],
   [raster.includes("if (my && my !== th) d.text(my, S.myBold)"), "Myanmar main-menu line remains printed"],
