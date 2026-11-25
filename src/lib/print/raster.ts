@@ -51,6 +51,13 @@ const SIZE = {
   xl: 58, // net total
   item: 41, // kitchen menu item (Thai)
   myBold: 40, // Burmese line under it
+  setTitle: 48,
+  setLabel: 28,
+  setDish: 38,
+  setEnglish: 27,
+  addonLabel: 31,
+  addon: 36,
+  addonPlus: 54,
 } as const;
 
 type Style = { size: number; bold: boolean };
@@ -62,6 +69,13 @@ const S = {
   xl: { size: SIZE.xl, bold: true } as Style,
   item: { size: SIZE.item, bold: true } as Style,
   myBold: { size: SIZE.myBold, bold: true } as Style,
+  setTitle: { size: SIZE.setTitle, bold: true } as Style,
+  setLabel: { size: SIZE.setLabel, bold: true } as Style,
+  setDish: { size: SIZE.setDish, bold: true } as Style,
+  setEnglish: { size: SIZE.setEnglish, bold: false } as Style,
+  addonLabel: { size: SIZE.addonLabel, bold: true } as Style,
+  addon: { size: SIZE.addon, bold: true } as Style,
+  addonPlus: { size: SIZE.addonPlus, bold: true } as Style,
 };
 
 type Align = "left" | "center" | "right";
@@ -112,6 +126,12 @@ export type KitchenLine = {
   notes?: string | null;
   zoneLabel?: string | null;
   modifiers?: { option_name?: string; qty?: number; price?: number }[];
+  set_config?: {
+    main?: { th?: string; en?: string } | null;
+    sides?: { th?: string; en?: string }[] | null;
+    drink?: { th?: string; en?: string } | null;
+    rice?: "rice" | "porridge" | string;
+  } | null;
 };
 export type KitchenPayload = {
   kind: "order_ticket";
@@ -285,6 +305,56 @@ class Doc {
       });
       this.y += lh;
     }
+  }
+
+  textIndented(str: string, s: Style, indentPx: number) {
+    const { asc, lh } = this.metrics(s);
+    const maxW = Math.max(40, CONTENT_W - indentPx);
+    for (const ln of this.wrap(str, s, maxW)) {
+      const baseline = this.y + asc;
+      this.ops.push((ctx) => {
+        ctx.font = fontStr(s.size, s.bold);
+        ctx.textAlign = "left";
+        ctx.textBaseline = "alphabetic";
+        ctx.fillStyle = "#000";
+        ctx.fillText(ln, PAD_X + indentPx, baseline);
+      });
+      this.y += lh;
+    }
+  }
+
+  /** Bold kitchen add-on with a large plus and a price kept at the far right. */
+  addon(text: string, right: string) {
+    const plus = "+";
+    const plusMetrics = this.metrics(S.addonPlus);
+    const textMetrics = this.metrics(S.addon);
+    const plusW = this.measure(plus, S.addonPlus);
+    const rightW = right ? this.measure(right, S.addon) : 0;
+    const textX = PAD_X + plusW + 14;
+    const maxTextW = Math.max(80, WIDTH - PAD_X - textX - (rightW ? rightW + 14 : 0));
+    const lines = this.wrap(text, S.addon, maxTextW);
+
+    lines.forEach((line, index) => {
+      const top = this.y;
+      this.ops.push((ctx) => {
+        ctx.fillStyle = "#000";
+        ctx.textBaseline = "alphabetic";
+        ctx.textAlign = "left";
+        if (index === 0) {
+          ctx.font = fontStr(S.addonPlus.size, S.addonPlus.bold);
+          ctx.fillText(plus, PAD_X, top + plusMetrics.asc);
+        }
+        ctx.font = fontStr(S.addon.size, S.addon.bold);
+        ctx.fillText(line, textX, top + textMetrics.asc);
+        if (index === 0 && right) {
+          ctx.textAlign = "right";
+          ctx.fillText(right, WIDTH - PAD_X, top + textMetrics.asc);
+        }
+      });
+      this.y += index === 0
+        ? Math.max(plusMetrics.lh, textMetrics.lh)
+        : textMetrics.lh;
+    });
   }
 
   row(left: string, right: string, s: Style, indentPx = 0) {
@@ -689,17 +759,47 @@ export async function buildKitchen(p: KitchenPayload): Promise<Uint8Array> {
     const th = it.name_th || it.name_en || "Item";
     const my = it.name_my;
     const qty = Number(it.qty) || 0;
-    d.text(`${qty}x  ${th}`, S.item);
-    // Every operational ticket needs Burmese, including FRONT/counter items.
-    if (my && my !== th) d.text(my, S.myBold);
-    if (it.notes) d.text(`   ** ${it.notes} **`, S.norm);
-    for (const mod of it.modifiers ?? []) {
+    const set = it.set_config;
+    d.text(`${qty}x  ${th}`, set ? S.setTitle : S.item);
+    if (set) {
+      const children = [
+        ...(set.main ? [{ label: "MAIN", ...set.main }] : []),
+        ...((set.sides ?? []).map((side, index) => ({
+          label: `SIDE ${index + 1}`,
+          ...side,
+        }))),
+        ...(set.drink ? [{ label: "DRINK", ...set.drink }] : []),
+        {
+          label: "RICE",
+          th: set.rice === "porridge" ? "ข้าวต้ม" : "ข้าวสวย",
+          en: set.rice === "porridge" ? "Rice porridge" : "Steamed rice",
+        },
+      ];
+      for (const child of children) {
+        d.textIndented(`└ ${child.label}`, S.setLabel, 18);
+        d.textIndented(child.th || child.en || "-", S.setDish, 58);
+        if (child.en && child.en.toLocaleLowerCase() !== child.th?.toLocaleLowerCase()) {
+          d.textIndented(child.en, S.setEnglish, 58);
+        }
+        d.feed(5);
+      }
+    } else {
+      // Every operational ticket needs Burmese, including FRONT/counter items.
+      if (my && my !== th) d.text(my, S.myBold);
+      if (it.notes) d.text(`   ** ${it.notes} **`, S.norm);
+    }
+    const modifiers = it.modifiers ?? [];
+    if (modifiers.length > 0) {
+      d.feed(4);
+      d.textIndented("เพิ่ม / ADD-ON", S.addonLabel, 18);
+    }
+    for (const mod of modifiers) {
       const q = mod.qty ?? 1;
       const qs = q > 1 ? ` x${q}` : "";
       const price = mod.price ?? 0;
       const ps = price > 0 ? ` +${Math.round(price * q)}` : "";
       const on = mod.option_name ?? "Option";
-      d.text(`   + ${on}${qs}${ps}`, S.norm);
+      d.addon(`${on}${qs}`, ps);
     }
     // Keep adjacent dishes visually distinct when staff scan a long ticket.
     d.feed(12);

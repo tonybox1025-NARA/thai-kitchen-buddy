@@ -1,5 +1,15 @@
 # Shared AI Change Log
 
+## 2026-11-23 — Make kitchen SET choices and add-ons scannable
+
+- Agent: Codex
+- Scope: raster kitchen-ticket layout, POS/QR/reprint ticket payloads, and a build-enforced hierarchy regression guard.
+- Decision: keep ordinary menu and Myanmar lines intact; print SET titles larger, then show each MAIN/SIDE/DRINK/RICE choice as an indented branch with bold Thai and subordinate English. Print add-ons without a separating rule, using a bilingual heading, oversized plus, bold option name, and the existing price at the far right.
+- Verification: dedicated kitchen-ticket guard, AI protocol guard, TypeScript, full regression suite, and production build passed from an isolated worktree.
+- Git: `codex/kitchen-ticket-hierarchy`; exact implementation commit is reported with delivery.
+- Delivery: source preparation only. No merge, Lovable publication, database change, SUNMI update, or live printer behavior change has occurred.
+- Follow-up: review/merge and publish only after approval, then update/refresh SUNMI and print both a SET ticket and an ordinary item with add-on for physical alignment and readability checks.
+
 ## 2026-11-18 — Show only food in POS Live top items
 
 - Agent: Codex

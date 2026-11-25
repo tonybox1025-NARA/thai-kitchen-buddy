@@ -430,6 +430,7 @@ export const Route = createFileRoute("/api/public/qr-order")({
           qty: entry.row.qty,
           notes: entry.row.notes,
           modifiers: entry.row.modifiers as { option_name: string; price: number }[] | null,
+          set_config: entry.row.set_config,
         }));
         const stripZone = ({
           zoneId: _zoneId,
