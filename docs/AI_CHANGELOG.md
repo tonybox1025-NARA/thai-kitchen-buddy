@@ -1,5 +1,15 @@
 # Shared AI Change Log
 
+## 2026-11-25 — Keep add-on menu text visually subordinate
+
+- Agent: Codex
+- Scope: raster kitchen-ticket add-on typography, its regression guard, and SUNMI Android release.
+- Decision: retain the bold bilingual `ADD-ON` heading and oversized plus, but render the full add-on menu name and right-aligned price at regular weight so they do not compete with the main menu name. SET and main-menu typography remain unchanged.
+- Verification: dedicated kitchen-ticket guard, TypeScript, full regression suite, Android build, and Gradle release build passed. APK reports versionCode 96 / v1.1.94, the same signing certificate as v1.1.93, and file SHA-256 `e332c32b8223b736768a5a3fd04e0e335b6f2b1ba9e93654d653ebf869608626`.
+- Git: `codex/kitchen-addon-regular-v1.1.94`; exact merge commit is reported with delivery.
+- Delivery: v1.1.94 is published to Lovable and released as `LONMOH-POS-v1.1.94.apk`; installed-device and physical reprint confirmation remain separate.
+- Follow-up: publish, install v1.1.94, and reprint the test round for staff confirmation.
+
 ## 2026-11-25 — Deliver kitchen ticket hierarchy to SUNMI
 
 - Agent: Codex
