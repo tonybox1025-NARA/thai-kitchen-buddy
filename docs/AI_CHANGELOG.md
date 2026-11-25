@@ -1,5 +1,15 @@
 # Shared AI Change Log
 
+## 2026-11-25 — Add a dedicated Reviewer complimentary checkout
+
+- Agent: Codex
+- Scope: SUNMI payment discount flow, discount details, Register/X/Z reporting, historical report aggregation, Android v1.1.95, and a build-enforced regression guard.
+- Decision: let signed-in SUNMI staff apply one explicit `Reviewer` preset that discounts the remaining merchandise balance to zero, records no cash/QR/card tender, preserves ordered items and quantities, and stores a durable `__reviewer__` marker so complimentary reviewer meals remain separate from ordinary percent discounts and coupons.
+- Verification: dedicated Reviewer guard, AI protocol guard, TypeScript, full regression suite, production build, Android bundle, and signed Gradle release build passed. APK reports versionCode 97 / v1.1.95, signing certificate SHA-256 `301d4796a027c686d9e5b58146e49f6d645448d5ceb9b01279b68272409f39d3` (matching v1.1.94), and file SHA-256 `99dfd10080667705a06c51c54d9bc71bdc84165f6d964e7a385d90c1f8fb78c4`.
+- Git: `codex/reviewer-complimentary-discount`; exact commit is reported with delivery.
+- Delivery: source and signed v1.1.95 release candidate verified. Merge, Lovable publication, GitHub Android release/SUNMI update, and live checkout verification remain separate until completed.
+- Follow-up: merge and publish after verification, release the Android update, then use `Discount → Reviewer → Complete checkout` on the open reviewer table.
+
 ## 2026-11-25 — Keep add-on menu text visually subordinate
 
 - Agent: Codex
