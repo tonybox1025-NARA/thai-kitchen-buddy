@@ -1,5 +1,15 @@
 # Shared AI Change Log
 
+## 2026-11-25 — Deliver kitchen ticket hierarchy to SUNMI
+
+- Agent: Codex
+- Scope: production publication and SUNMI Android release for the kitchen-ticket hierarchy recorded below.
+- Decision: publish the tested raster layout and package the same merged source as Android v1.1.93 so staff can verify it on a real open table without changing any existing order, payment, or database record.
+- Verification: merged commit synchronized to Lovable; production deployment header and live print bundle inspected; full Android build passed. APK reports versionCode 95 / v1.1.93, certificate SHA-256 `301d4796a027c686d9e5b58146e49f6d645448d5ceb9b01279b68272409f39d3` (matching v1.1.92), and file SHA-256 `97c7e4dfd0640c0aa2527ca487671dcb485b8f686cbd261e9ba43ff7dc2e3623`.
+- Git: PR #111 merged as `3c1209e`; Android release branch `codex/kitchen-ticket-android-v1.1.93`.
+- Delivery: Lovable deployment `56a7a876-7572-4068-9c27-915300c90670` is live; Android v1.1.93 is released as `LONMOH-POS-v1.1.93.apk`.
+- Follow-up: install v1.1.93 on SUNMI, add one SET item and one ordinary item with a priced add-on to the open table, and inspect both printed tickets before broader use.
+
 ## 2026-11-23 — Make kitchen SET choices and add-ons scannable
 
 - Agent: Codex
