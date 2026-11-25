@@ -19,7 +19,7 @@ export const Route = createFileRoute("/_app/detail-discounts")({
 });
 
 type DiscRow = {
-  type: "percent" | "fixed" | "free_item" | "coupon" | "member";
+  type: "percent" | "fixed" | "free_item" | "coupon" | "reviewer" | "member";
   label: string;
   amount: number;
   staffName: string;
@@ -35,6 +35,7 @@ const TYPE_CLS: Record<string, string> = {
   fixed:     "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
   free_item: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
   coupon:    "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",
+  reviewer:  "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300",
   member:    "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
 };
 
@@ -53,6 +54,7 @@ function DiscountsDetail() {
     fixed:     t("disc_fixed"),
     free_item: t("disc_free_item"),
     coupon:    "Coupon",
+    reviewer:  "Reviewer",
     member:    t("disc_member"),
   };
 
@@ -130,8 +132,13 @@ function DiscountsDetail() {
 
         for (const d of (discounts as any[] ?? [])) {
           let label = "";
-          const type = d.type === "fixed" && d.free_item_name === "__coupon__" ? "coupon" : d.type;
-          if (type === "percent")   label = `${d.percent_value}%`;
+          const type = d.free_item_name === "__reviewer__"
+            ? "reviewer"
+            : d.type === "fixed" && d.free_item_name === "__coupon__"
+              ? "coupon"
+              : d.type;
+          if (type === "reviewer") label = "Social Media Reviewer · 100%";
+          else if (type === "percent")   label = `${d.percent_value}%`;
           else if (type === "fixed") label = thb(d.fixed_value ?? 0);
           else if (type === "coupon") label = `Coupon ${thb(d.fixed_value ?? d.amount)}`;
           else label = d.free_item_name ?? t("disc_free_item");
@@ -222,7 +229,7 @@ function DiscountsDetail() {
   }, [bounds, range, custom, lang]);
 
   const totals = useMemo(() => {
-    const tot = { percent: 0, fixed: 0, free_item: 0, coupon: 0, member: 0, grand: 0 };
+    const tot = { percent: 0, fixed: 0, free_item: 0, coupon: 0, reviewer: 0, member: 0, grand: 0 };
     rows.forEach(r => { tot[r.type] += r.amount; tot.grand += r.amount; });
     return tot;
   }, [rows]);
@@ -251,7 +258,7 @@ function DiscountsDetail() {
         <>
           {/* Summary */}
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-            {(["percent","fixed","free_item","coupon","member"] as const).map(type => (
+            {(["percent","fixed","free_item","coupon","reviewer","member"] as const).map(type => (
               totals[type] > 0 && (
                 <Card key={type}>
                   <CardContent className="pt-5">

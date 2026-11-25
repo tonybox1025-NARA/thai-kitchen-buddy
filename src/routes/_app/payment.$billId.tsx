@@ -252,7 +252,7 @@ function PaymentPage() {
 
   // Discount dialog
   const [discDlgOpen, setDiscDlgOpen] = useState(false);
-  const [discDlgTab, setDiscDlgTab] = useState<"percent" | "fixed" | "free_item" | "coupon">("percent");
+  const [discDlgTab, setDiscDlgTab] = useState<"percent" | "fixed" | "free_item" | "coupon" | "reviewer">("percent");
   const [discPctInput, setDiscPctInput] = useState(0);
   const [discFixedInput, setDiscFixedInput] = useState(0);
   const [discFreeItemId, setDiscFreeItemId] = useState<string>("");
@@ -458,6 +458,7 @@ function PaymentPage() {
   // Live preview amount for the dialog
   const discPreviewAmt = (() => {
     const maxDiscountAmount = Math.max(0, roundMoney(subtotal * (settingsMaxDiscountPercent / 100)) - itemDiscountTotal);
+    if (discDlgTab === "reviewer") return Math.max(0, subtotal - itemDiscountTotal - memberDisc - pointsDiscount);
     if (discDlgTab === "percent") return Math.min(roundMoney((subtotal * discPctInput) / 100), maxDiscountAmount);
     if (discDlgTab === "fixed" || discDlgTab === "coupon") return Math.min(discFixedInput, subtotal, maxDiscountAmount);
     const fi = items.find((i) => i.id === discFreeItemId);
@@ -480,7 +481,11 @@ function PaymentPage() {
     const extras: Record<string, unknown> = {};
     const availableBillDiscount = Math.max(0, roundMoney(subtotal * (settingsMaxDiscountPercent / 100)) - itemDiscountTotal);
 
-    if (discDlgTab === "percent") {
+    if (discDlgTab === "reviewer") {
+      amount = Math.max(0, subtotal - itemDiscountTotal - memberDisc - pointsDiscount);
+      extras.percent_value = 100;
+      extras.free_item_name = "__reviewer__";
+    } else if (discDlgTab === "percent") {
       if (discPctInput <= 0 || discPctInput > settingsMaxDiscountPercent) {
         toast.error(lang === "th" ? `ส่วนลดสูงสุด ${settingsMaxDiscountPercent}%` : `Maximum discount is ${settingsMaxDiscountPercent}%`);
         return;
@@ -499,7 +504,7 @@ function PaymentPage() {
       extras.free_item_name = lang === "th" ? fi.name_th : fi.name_en;
     }
     const maxDiscountAmount = roundMoney(subtotal * (settingsMaxDiscountPercent / 100));
-    if (amount + itemDiscountTotal > maxDiscountAmount) {
+    if (discDlgTab !== "reviewer" && amount + itemDiscountTotal > maxDiscountAmount) {
       toast.error(lang === "th" ? `ส่วนลดสูงสุด ${settingsMaxDiscountPercent}%` : `Maximum discount is ${settingsMaxDiscountPercent}%`);
       return;
     }
@@ -507,11 +512,12 @@ function PaymentPage() {
     // Delete any existing discount for this bill, then insert new one
     await (supabase as any).from("bill_discounts").delete().eq("bill_id", bill.id);
     const isCoupon = discDlgTab === "coupon";
+    const isReviewer = discDlgTab === "reviewer";
     const { error: discountError } = await (supabase as any).from("bill_discounts").insert({
       bill_id: bill.id,
       // Keep the existing database constraint compatible. The marker lets the
       // app and reports distinguish coupons from ordinary fixed discounts.
-      type: isCoupon ? "fixed" : discDlgTab,
+      type: isCoupon ? "fixed" : isReviewer ? "percent" : discDlgTab,
       amount,
       applied_by: staff.id,
       ...(isCoupon ? { free_item_name: "__coupon__" } : {}),
@@ -576,7 +582,13 @@ function PaymentPage() {
   const openDiscountDialog = () => {
     // Pre-fill inputs from existing discount if any
     if (appliedDiscount) {
-      setDiscDlgTab(appliedDiscount.free_item_name === "__coupon__" ? "coupon" : appliedDiscount.type);
+      setDiscDlgTab(
+        appliedDiscount.free_item_name === "__coupon__"
+          ? "coupon"
+          : appliedDiscount.free_item_name === "__reviewer__"
+            ? "reviewer"
+            : appliedDiscount.type,
+      );
       setDiscPctInput(appliedDiscount.percent_value ?? 0);
       setDiscFixedInput(appliedDiscount.fixed_value ?? 0);
       setDiscFreeItemId(appliedDiscount.free_item_id ?? "");
@@ -591,8 +603,9 @@ function PaymentPage() {
 
   // ── Discount label helpers ──────────────────────────────────────────────────
   const discTypeLabel = (d: BillDiscount) => {
-    if (d.type === "percent") return `${d.percent_value ?? ""}%`;
     if (d.free_item_name === "__coupon__") return `Coupon ${thb(d.fixed_value ?? d.amount)}`;
+    if (d.free_item_name === "__reviewer__") return "Reviewer · 100%";
+    if (d.type === "percent") return `${d.percent_value ?? ""}%`;
     if (d.type === "fixed")   return thb(d.fixed_value ?? 0);
     return d.free_item_name ?? (lang === "th" ? "แถมฟรี" : "Free item");
   };
@@ -1301,7 +1314,8 @@ function PaymentPage() {
                   <div className="flex items-center gap-1.5 min-w-0">
                     <Tag className="h-3.5 w-3.5 shrink-0" />
                     <span className="font-medium">
-                      {appliedDiscount.type === "percent" && `${t("disc_pct")} (${appliedDiscount.percent_value}%)`}
+                      {appliedDiscount.type === "percent" && appliedDiscount.free_item_name !== "__reviewer__" && `${t("disc_pct")} (${appliedDiscount.percent_value}%)`}
+                      {appliedDiscount.free_item_name === "__reviewer__" && "Reviewer · 100%"}
                       {appliedDiscount.type === "fixed" && appliedDiscount.free_item_name !== "__coupon__" && `${t("disc_fixed")} (${thb(appliedDiscount.fixed_value ?? 0)})`}
                       {appliedDiscount.free_item_name === "__coupon__" && `Coupon (${thb(appliedDiscount.fixed_value ?? appliedDiscount.amount)})`}
                       {appliedDiscount.type === "free_item" && `${t("disc_free_item")}: ${appliedDiscount.free_item_name ?? ""}`}
@@ -1701,12 +1715,26 @@ function PaymentPage() {
           </p>
 
           <Tabs value={discDlgTab} onValueChange={(v) => setDiscDlgTab(v as typeof discDlgTab)}>
-            <TabsList className="grid grid-cols-4 w-full">
+            <TabsList className="grid grid-cols-5 w-full">
               <TabsTrigger value="percent"><Percent className="h-3.5 w-3.5 mr-1" />{t("disc_pct")}</TabsTrigger>
               <TabsTrigger value="fixed"><DollarSign className="h-3.5 w-3.5 mr-1" />{t("disc_fixed")}</TabsTrigger>
               <TabsTrigger value="free_item"><Gift className="h-3.5 w-3.5 mr-1" />{t("disc_free_item")}</TabsTrigger>
               <TabsTrigger value="coupon"><Scissors className="h-3.5 w-3.5 mr-1" />Coupon</TabsTrigger>
+              <TabsTrigger value="reviewer"><Gift className="h-3.5 w-3.5 mr-1" />Reviewer</TabsTrigger>
             </TabsList>
+
+            <TabsContent value="reviewer" className="pt-3 space-y-3">
+              <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-center dark:border-sky-800 dark:bg-sky-950/30">
+                <p className="font-bold text-sky-800 dark:text-sky-300">Social Media Reviewer</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {lang === "th"
+                    ? "ส่วนลด 100% สำหรับผู้รีวิว · ไม่บันทึกเป็นเงินสด QR หรือบัตร"
+                    : "100% complimentary reviewer meal · no cash, QR, or card payment"}
+                </p>
+                <p className="mt-2 text-2xl font-black text-sky-700 dark:text-sky-300">- {thb(discPreviewAmt)}</p>
+                <p className="text-xs text-muted-foreground">{lang === "th" ? "ยอดที่ต้องชำระ" : "New total"}: {thb(0)}</p>
+              </div>
+            </TabsContent>
 
             {/* % Off */}
             <TabsContent value="percent" className="pt-3 space-y-3">

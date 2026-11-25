@@ -39,6 +39,8 @@ type ReportData = {
   gross: number; net: number; discount: number; member: number;
   coupon: number;
   couponCount: number;
+  reviewer: number;
+  reviewerCount: number;
   vatIncluded: number; vatAdded: number;
   voids: number; refunds: number; byMethod: Record<string, number>;
   openingFloat: number; bills: number;
@@ -83,6 +85,7 @@ function historicalReport(raw: Record<string, unknown>): ReportData {
     gross: Number(raw.gross ?? 0), net: Number(raw.net ?? 0), discount: Number(raw.discount ?? 0),
     member: Number(raw.member ?? 0), coupon: Number(raw.coupon ?? 0),
     couponCount: Number(raw.couponCount ?? 0),
+    reviewer: Number(raw.reviewer ?? 0), reviewerCount: Number(raw.reviewerCount ?? 0),
     vatIncluded: Number(raw.vatIncluded ?? 0), vatAdded: Number(raw.vatAdded ?? 0),
     voids: Number(raw.voids ?? 0), refunds: Number(raw.refunds ?? 0),
     byMethod: { cash: 0, qr: 0, card: 0, gov_qr: 0, ...byMethod },
@@ -165,6 +168,7 @@ async function openPrintWindow(
         ...(r.staffTabDiscount > 0 ? [["Staff discount", `- ${thb(r.staffTabDiscount)}`] as [string, string]] : []),
         ["Member discount", `- ${thb(r.member)}`],
         [`Coupon (${r.couponCount} uses)`, `- ${thb(r.coupon)}`],
+        ...(r.reviewer > 0 ? [[`Reviewer (${r.reviewerCount})`, `- ${thb(r.reviewer)}`] as [string, string]] : []),
         ...(r.vatIncluded > 0 ? [["VAT (7%) included", thb(r.vatIncluded)] as [string, string]] : []),
         ...(r.vatAdded > 0 ? [["VAT (7%) added", thb(r.vatAdded)] as [string, string]] : []), ["Net sales", thb(r.net), true],
       ]) },
@@ -211,6 +215,7 @@ ${row("Customer discount", `- ${thb(customerDiscount(r))}`)}
 ${r.staffTabDiscount > 0 ? row("Staff discount", `- ${thb(r.staffTabDiscount)}`) : ""}
 ${row("Member discount", `- ${thb(r.member)}`)}
 ${row(`Coupon (${r.couponCount} uses)`, `- ${thb(r.coupon)}`)}
+${r.reviewer > 0 ? row(`Reviewer (${r.reviewerCount})`, `- ${thb(r.reviewer)}`) : ""}
 ${r.vatIncluded > 0 ? row("VAT (7%) (included)", thb(r.vatIncluded)) : ""}
 ${r.vatAdded > 0 ? row("VAT (7%) (added)", thb(r.vatAdded)) : ""}
 ${row("Net sales", thb(r.net), true)}
@@ -402,7 +407,10 @@ function Reports() {
     ];
     const coupon = billDiscRows.filter((d) => d.free_item_name === "__coupon__").reduce((sum, d) => sum + Number(d.amount), 0);
     const couponCount = billDiscRows.filter((d) => d.free_item_name === "__coupon__").length;
-    const discount = Math.max(0, totalDiscount - coupon) + staffTabDiscount;
+    const reviewerRows = billDiscRows.filter((d) => d.free_item_name === "__reviewer__");
+    const reviewer = reviewerRows.reduce((sum, d) => sum + Number(d.amount), 0);
+    const reviewerCount = reviewerRows.length;
+    const discount = Math.max(0, totalDiscount - coupon - reviewer) + staffTabDiscount;
     const discApplierIds = [...new Set(discRows.map((d) => d.applied_by).filter(Boolean))] as string[];
     const { data: discStaffList } = discApplierIds.length
       ? await supabase.from("staff").select("id,name").in("id", discApplierIds)
@@ -412,7 +420,7 @@ function Reports() {
     const discountByType = { percent: 0, fixed: 0, free_item: 0, item: 0 };
     const discountByStaffMap = new Map<string, { staffName: string; amount: number; count: number }>();
     for (const d of discRows) {
-      if (d.free_item_name === "__coupon__") continue;
+      if (d.free_item_name === "__coupon__" || d.free_item_name === "__reviewer__") continue;
       discountByType[d.type as keyof typeof discountByType] =
         (discountByType[d.type as keyof typeof discountByType] ?? 0) + Number(d.amount);
       const key = d.applied_by ?? "__unknown__";
@@ -445,7 +453,7 @@ function Reports() {
       }))
       .filter((issue) => Math.abs(issue.paid - issue.expected) > 0.001);
     return {
-      gross, net: paidTotal - refundTotal, discount, member, coupon, couponCount, vatIncluded, vatAdded,
+      gross, net: paidTotal - refundTotal, discount, member, coupon, couponCount, reviewer, reviewerCount, vatIncluded, vatAdded,
       voids: (voids ?? []).reduce((x, v) => x + Number(v.amount), 0),
       refunds: refundTotal,
       byMethod, openingFloat: Number(s.opening_float), bills: (bills ?? []).length,
@@ -953,7 +961,7 @@ function mergeReports(reports: ReportData[]): ReportData {
   const byStaff = new Map<string, { staffName: string; amount: number; count: number }>();
   const buckets = new Map<string, QrBucketTotal>();
   const numericKeys = [
-    "gross", "net", "discount", "member", "coupon", "couponCount", "vatIncluded", "vatAdded", "voids", "refunds",
+    "gross", "net", "discount", "member", "coupon", "couponCount", "reviewer", "reviewerCount", "vatIncluded", "vatAdded", "voids", "refunds",
     "openingFloat", "bills", "tipTotal", "cardTipTotal", "cancelledCount", "takeoutTotal",
     "staffMealTotal", "staffTabCharged", "staffTabDiscount", "staffTabCashCollected", "staffTabQrCollected",
   ] as const;
@@ -2587,7 +2595,7 @@ function ReportCard({ r }: { r: ReportData }) {
         )}
         <Row label="Gross sales" value={thb(r.gross)} />
         {/* Discount breakdown — simplified: by type + member, then grand total */}
-        {(r.discount > 0 || r.member > 0) ? (
+        {(r.discount > 0 || r.member > 0 || r.reviewer > 0) ? (
           <>
             <div className="space-y-0.5 text-xs text-muted-foreground pl-1">
               {r.discountByType.percent > 0   && <Row label="  % Discount"      value={`- ${thb(r.discountByType.percent)}`}   />}
@@ -2596,8 +2604,9 @@ function ReportCard({ r }: { r: ReportData }) {
               {r.discountByType.item > 0      && <Row label="  Item Discount"  value={`- ${thb(r.discountByType.item)}`}      />}
               {r.staffTabDiscount > 0         && <Row label="  Staff Discount" value={`- ${thb(r.staffTabDiscount)}`}         />}
               {r.member > 0                   && <Row label="  Member Discount" value={`- ${thb(r.member)}`}                  />}
+              {r.reviewer > 0                 && <Row label={`  Reviewer (${r.reviewerCount})`} value={`- ${thb(r.reviewer)}`} />}
             </div>
-            <Row label="Total discounts" value={`- ${thb(r.discount + r.member)}`} bold />
+            <Row label="Total discounts" value={`- ${thb(r.discount + r.member + r.reviewer)}`} bold />
           </>
         ) : (
           <Row label="Discounts" value={thb(0)} />
