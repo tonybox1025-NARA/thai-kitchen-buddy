@@ -166,6 +166,7 @@ export type ReportPayload = {
   report_type: "X" | "Z" | "OPEN" | "SALES";
   business_day: string;
   printed_at?: string;
+  operator_name?: string;
   sections: {
     title: string;
     rows: { label: string; value: string; bold?: boolean; indent?: boolean }[];
@@ -884,6 +885,13 @@ export async function buildReport(p: ReportPayload): Promise<Uint8Array> {
     d.rule();
   }
 
+  if (p.operator_name && (p.report_type === "OPEN" || p.report_type === "Z")) {
+    const label = p.report_type === "OPEN"
+      ? "OPENED BY / ผู้เปิดกะ"
+      : "CLOSED BY / ผู้ปิดกะ";
+    d.text(`${label}: ${p.operator_name}`, S.bold, "center");
+    d.feed(4);
+  }
   d.text(reportTitle, S.bold, "center");
   const out: number[] = [];
   appendBytes(out, INIT);

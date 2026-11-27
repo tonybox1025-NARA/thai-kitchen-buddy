@@ -2187,9 +2187,11 @@ export type Database = {
           cash_count: Json | null
           closed_at: string | null
           closed_by: string | null
+          closed_operator_name: string | null
           id: string
           opened_at: string
           opened_by: string | null
+          opened_operator_name: string | null
           opening_float: number
           status: Database["public"]["Enums"]["shift_status"]
           totals: Json | null
@@ -2199,9 +2201,11 @@ export type Database = {
           cash_count?: Json | null
           closed_at?: string | null
           closed_by?: string | null
+          closed_operator_name?: string | null
           id?: string
           opened_at?: string
           opened_by?: string | null
+          opened_operator_name?: string | null
           opening_float?: number
           status?: Database["public"]["Enums"]["shift_status"]
           totals?: Json | null
@@ -2211,9 +2215,11 @@ export type Database = {
           cash_count?: Json | null
           closed_at?: string | null
           closed_by?: string | null
+          closed_operator_name?: string | null
           id?: string
           opened_at?: string
           opened_by?: string | null
+          opened_operator_name?: string | null
           opening_float?: number
           status?: Database["public"]["Enums"]["shift_status"]
           totals?: Json | null
@@ -2653,6 +2659,7 @@ export type Database = {
         Args: {
           p_cash_count: Json
           p_closed_by: string
+          p_operator_name: string
           p_print_payload?: Json
           p_shift_id: string
           p_totals: Json
@@ -2837,6 +2844,7 @@ export type Database = {
           p_business_day: string
           p_opened_by: string
           p_opening_float: number
+          p_operator_name: string
           p_print_jobs?: Json
         }
         Returns: Json

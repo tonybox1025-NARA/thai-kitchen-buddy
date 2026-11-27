@@ -30,10 +30,20 @@ import { localizeError } from "@/lib/localized-error";
 import { HistoryRangeBar, type HistoryRange } from "@/components/HistoryRangeBar";
 import { ShiftCloseReview } from "@/components/ShiftCloseReview";
 import { totalMemberDiscount } from "@/lib/member-discount";
+import { ShiftOperatorPicker, type ShiftOperatorName } from "@/components/ShiftOperatorPicker";
 
 export const Route = createFileRoute("/_app/reports")({ component: Reports });
 
-type Shift = { id: string; business_day: string; opened_at: string; closed_at: string | null; opening_float: number; status: "open" | "closed" };
+type Shift = {
+  id: string;
+  business_day: string;
+  opened_at: string;
+  closed_at: string | null;
+  opening_float: number;
+  status: "open" | "closed";
+  opened_operator_name?: string | null;
+  closed_operator_name?: string | null;
+};
 type StaffTabCollection = { staffName: string; method: "cash" | "qr"; amount: number };
 type ReportData = {
   gross: number; net: number; discount: number; member: number;
@@ -151,6 +161,7 @@ async function openPrintWindow(
   // When given, the native ticket payload is handed here (to be recorded in the
   // durable outbox) instead of being written straight to the printer.
   sink?: (payload: CounterPrintPayload) => Promise<void>,
+  operatorName?: string | null,
 ) {
   const { cashTotal, expected, overShort } = calcCashSummary(counts, r);
   const row = (l: string, v: string, b = false) =>
@@ -199,7 +210,7 @@ async function openPrintWindow(
         ["Counted", thb(cashTotal)], ["Over / Short", thb(overShort), true],
       ]) },
     ];
-    const reportPayload = { kind: "report", restaurant: restaurantName || "Restaurant", report_type: kind, business_day: shift.business_day, printed_at: now.toISOString(), sections } as CounterPrintPayload;
+    const reportPayload = { kind: "report", restaurant: restaurantName || "Restaurant", report_type: kind, business_day: shift.business_day, printed_at: now.toISOString(), operator_name: kind === "Z" ? operatorName ?? shift.closed_operator_name ?? undefined : undefined, sections } as CounterPrintPayload;
     if (sink) await sink(reportPayload);
     else await enqueueDurablePrint({ jobKey: `${kind.toLowerCase()}-print:${shift.id}:${crypto.randomUUID()}`, printer: "counter", payload: reportPayload, sourceType: kind === "Z" ? "z_reprint" : "x_report", sourceId: shift.id });
     return;
@@ -248,6 +259,7 @@ ${cashTipsPaidOut(r) > 0 ? row("Tips paid out (cash)", `- ${thb(cashTipsPaidOut(
 ${row("Counted", thb(cashTotal))}
 ${row("Over / Short", thb(overShort), true)}
 </table>
+${kind === "Z" && (operatorName ?? shift.closed_operator_name) ? `<p style="margin:14px 0 4px;text-align:center;font-weight:700">CLOSED BY / ผู้ปิดกะ: ${escapeHtml(operatorName ?? shift.closed_operator_name ?? "")}</p>` : ""}
 <script>window.onload=()=>setTimeout(()=>window.print(),100)</script>
 </body></html>`;
   const w = window.open("", "_blank");
@@ -324,9 +336,13 @@ function Reports() {
   // Register open flow
   const [openDlg, setOpenDlg] = useState(false);
   const [openCashCount, setOpenCashCount] = useState<Record<number, number>>({});
+  const [openOperatorName, setOpenOperatorName] = useState<ShiftOperatorName | "">("");
+  const [openStep, setOpenStep] = useState<"operator" | "cash">("operator");
   const [openingShift, setOpeningShift] = useState(false);
   const openingShiftRef = useRef(false);
   const [closeDlg, setCloseDlg] = useState(false);
+  const [closeOperatorDlg, setCloseOperatorDlg] = useState(false);
+  const [closeOperatorName, setCloseOperatorName] = useState<ShiftOperatorName | "">("");
 
   // Scenario 2: Z-report payment type adjustment
   const [adjDlg, setAdjDlg] = useState(false);
@@ -476,7 +492,7 @@ function Reports() {
 
   const openTotal = DENOMS.reduce((sum, d) => sum + d * (openCashCount[d] || 0), 0);
 
-  const printOpenSlip = async (s: Shift, counts: Record<number, number>) => {
+  const printOpenSlip = async (s: Shift, counts: Record<number, number>, operatorName: string) => {
     const total = DENOMS.reduce((sum, d) => sum + d * (counts[d] || 0), 0);
     const denomRows = DENOMS.filter((d) => (counts[d] ?? 0) > 0)
       .map((d) => `<tr><td>${d}฿ × ${counts[d]}</td><td style="text-align:right">${thb(d * counts[d])}</td></tr>`)
@@ -491,6 +507,7 @@ function Reports() {
         report_type: "OPEN",
         business_day: s.business_day,
         printed_at: s.opened_at ?? new Date().toISOString(),
+        operator_name: operatorName,
         sections: [{
           title: t("cash_count"),
           rows: [...countRows, { label: t("starting_cash"), value: thb(total), bold: true }],
@@ -505,6 +522,7 @@ function Reports() {
 <div class="meta">${t("rep_open_slip")} · ${escapeHtml(s.business_day)}<br/>${when}</div>
 <h2>${t("cash_count")}</h2>
 <table>${denomRows}<tr class="tot"><td>${t("starting_cash")}</td><td style="text-align:right">${thb(total)}</td></tr></table>
+<p style="margin:14px 0 4px;text-align:center;font-weight:700">OPENED BY / ผู้เปิดกะ: ${escapeHtml(operatorName)}</p>
 <script>window.onload=()=>setTimeout(()=>window.print(),100)</script>
 </body></html>`;
     const w = window.open("", "_blank");
@@ -513,13 +531,13 @@ function Reports() {
 
   // Native OPENING tickets are built up-front and committed in the same
   // transaction as the shift, so a printer outage can never lose them.
-  const buildOpeningJobs = (counts: Record<number, number>, businessDay: string) => {
+  const buildOpeningJobs = (counts: Record<number, number>, businessDay: string, operatorName: string) => {
     if (!canPrintDirect()) return [];
     const at = new Date().toISOString();
     const total = DENOMS.reduce((sum, d) => sum + d * (counts[d] || 0), 0);
     const countRows = DENOMS.filter((d) => (counts[d] ?? 0) > 0)
       .map((d) => ({ label: `${d} THB x ${counts[d]}`, value: thb(d * counts[d]) }));
-    const base = { kind: "report", restaurant: restaurantName || "Restaurant", report_type: "OPEN", business_day: businessDay, printed_at: at };
+    const base = { kind: "report", restaurant: restaurantName || "Restaurant", report_type: "OPEN", business_day: businessDay, printed_at: at, operator_name: operatorName };
     return [
       { printer: "counter" as const, payload: preparePayloadForOutbox({ ...base, sections: [{ title: t("cash_count"), rows: [...countRows, { label: t("starting_cash"), value: thb(total), bold: true }] }] } as CounterPrintPayload) },
       { printer: "kitchen" as const, payload: preparePayloadForOutbox({ ...base, sections: [{ title: "OPENING PRINTER CHECK", rows: [
@@ -530,6 +548,7 @@ function Reports() {
   };
 
   const openShift = async () => {
+    if (!openOperatorName) return;
     if (openingShiftRef.current) return;
     openingShiftRef.current = true;
     setOpeningShift(true);
@@ -537,14 +556,14 @@ function Reports() {
       const today = bangkokDateKey();
       const counts = openCashCount;
       const result = await openShiftSafely<Shift>({
-        openedBy: staff?.id, openingFloat: openTotal, businessDay: today,
-        printJobs: buildOpeningJobs(counts, today),
+        openedBy: staff?.id, operatorName: openOperatorName, openingFloat: openTotal, businessDay: today,
+        printJobs: buildOpeningJobs(counts, today, openOperatorName),
       });
       setShift(result.shift);
       setOpenDlg(false);
       setOpenCashCount({});
       // Web (no native printer): keep the browser slip for a freshly opened shift.
-      if (result.created && !canPrintDirect()) void printOpenSlip(result.shift, counts).catch(() => {});
+      if (result.created && !canPrintDirect()) void printOpenSlip(result.shift, counts, openOperatorName).catch(() => {});
       toast.success(t("rep_shift_opened"));
     } catch (error) {
       toast.error(localizeError(error, lang, "load"));
@@ -570,7 +589,7 @@ function Reports() {
   };
 
   const startZ = async () => {
-    if (!shift) return;
+    if (!shift || !closeOperatorName) return;
     try {
       const blockers = await getShiftCloseBlockers(shift.id);
       const r = await buildReport(shift);
@@ -598,10 +617,10 @@ function Reports() {
     try {
       let printPayload: unknown = null;
       if (canPrintDirect()) {
-        await openPrintWindow("Z", report, shift, cashCount, restaurantName, async (p) => { printPayload = preparePayloadForOutbox(p); });
+        await openPrintWindow("Z", report, shift, cashCount, restaurantName, async (p) => { printPayload = preparePayloadForOutbox(p); }, closeOperatorName);
       }
       const result = await closeShiftWithTicket({
-        shiftId: shift.id, closedBy: staff?.id, cashCount,
+        shiftId: shift.id, closedBy: staff?.id, operatorName: closeOperatorName, cashCount,
         totals: { ...report, cashTotal, expected, overShort },
         printPayload,
       });
@@ -618,7 +637,7 @@ function Reports() {
       toast.error(localizeError(error, lang, "closeShift"));
       return false;
     }
-    setZDlg(false); setShift(null); setReport(null);
+    setZDlg(false); setShift(null); setReport(null); setCloseOperatorName("");
     const reviewCount = Number(closeResult?.manager_review_count ?? 0);
     toast.success(reviewCount > 0
       ? `Shift closed. Manager review saved: ${reviewCount}. Staff action is not required.`
@@ -752,19 +771,33 @@ function Reports() {
           <DialogHeader>
             <DialogTitle>{t("rep_open_register")}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">{t("rep_count_starting_cash")}</p>
-            <DenomGrid cashCount={openCashCount} onChange={setOpenCashCount} />
-            <div className="flex items-center justify-between border-t pt-3">
-              <span className="font-semibold">{t("starting_cash")}</span>
-              <span className="text-xl font-bold tabular-nums">{thb(openTotal)}</span>
+          {openStep === "operator" ? (
+            <ShiftOperatorPicker value={openOperatorName} onChange={setOpenOperatorName} />
+          ) : (
+            <div className="space-y-3">
+              <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
+                OPENED BY / ผู้เปิดกะ: <b>{openOperatorName}</b>
+              </div>
+              <p className="text-sm text-muted-foreground">{t("rep_count_starting_cash")}</p>
+              <DenomGrid cashCount={openCashCount} onChange={setOpenCashCount} />
+              <div className="flex items-center justify-between border-t pt-3">
+                <span className="font-semibold">{t("starting_cash")}</span>
+                <span className="text-xl font-bold tabular-nums">{thb(openTotal)}</span>
+              </div>
             </div>
-          </div>
+          )}
           <DialogFooter className="pt-2">
             <Button variant="outline" onClick={() => setOpenDlg(false)}>{t("cancel")}</Button>
-            <Button onClick={openShift} disabled={openingShift}>
-              {openingShift ? "Opening…" : t("rep_open_and_print")}
-            </Button>
+            {openStep === "operator" ? (
+              <Button onClick={() => setOpenStep("cash")} disabled={!openOperatorName}>Continue</Button>
+            ) : (
+              <>
+                <Button variant="outline" onClick={() => setOpenStep("operator")}>Back</Button>
+                <Button onClick={openShift} disabled={openingShift}>
+                  {openingShift ? "Opening…" : t("rep_open_and_print")}
+                </Button>
+              </>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -782,11 +815,28 @@ function Reports() {
               <span className="text-xs text-muted-foreground font-normal">{t("rep_x_desc")}</span>
             </Button>
             <Button variant="destructive" className="h-auto py-4 flex flex-col items-start gap-0.5"
-              onClick={() => { setCloseDlg(false); startZ(); }}>
+              onClick={() => { setCloseDlg(false); setCloseOperatorName(""); setCloseOperatorDlg(true); }}>
               <span className="font-bold">{t("z_report")}</span>
               <span className="text-xs opacity-80 font-normal">{t("rep_z_desc")}</span>
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Z close step 1 — identify the employee closing the shift. */}
+      <Dialog open={closeOperatorDlg} onOpenChange={setCloseOperatorDlg}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Close shift / ปิดกะ</DialogTitle>
+          </DialogHeader>
+          <ShiftOperatorPicker value={closeOperatorName} onChange={setCloseOperatorName} />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCloseOperatorDlg(false)}>{t("cancel")}</Button>
+            <Button variant="destructive" disabled={!closeOperatorName} onClick={() => {
+              setCloseOperatorDlg(false);
+              void startZ();
+            }}>Continue to Z Report</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -821,6 +871,9 @@ function Reports() {
           <DialogHeader>
             <DialogTitle>{t("z_report")}</DialogTitle>
           </DialogHeader>
+          <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
+            CLOSED BY / ผู้ปิดกะ: <b>{closeOperatorName}</b>
+          </div>
           {report && (
             <div className="space-y-4">
               <ReportCard r={report} />
@@ -845,7 +898,7 @@ function Reports() {
                 const shiftToPrint = shift;
                 const cashCountToPrint = cashCount;
                 const closed = await submitZ();
-                if (closed && !canPrintDirect()) await openPrintWindow("Z", reportToPrint, shiftToPrint, cashCountToPrint, restaurantName);
+                if (closed && !canPrintDirect()) await openPrintWindow("Z", reportToPrint, shiftToPrint, cashCountToPrint, restaurantName, undefined, closeOperatorName);
               } catch (error) {
                 toast.error(localizeError(error, lang, "print"));
               }
@@ -1410,7 +1463,7 @@ function ZReportHistoryTab({ restaurantName }: { restaurantName: string }) {
       const ids = await shiftIdsFor(range, bounds);
       const { data, error } = ids.length
         ? await supabase.from("shifts")
-          .select("id,business_day,opened_at,closed_at,opening_float,status,cash_count,totals")
+          .select("id,business_day,opened_at,closed_at,opening_float,status,cash_count,totals,opened_operator_name,closed_operator_name")
           .eq("status", "closed").in("id", ids).order("business_day", { ascending: false })
         : { data: [] as ClosedShift[], error: null };
       if (error) throw error;
@@ -1498,7 +1551,7 @@ function ZReportHistoryTab({ restaurantName }: { restaurantName: string }) {
       // Reprint is its own explicit job key and never touches shift data.
       await openPrintWindow("Z", report, shift, counts, restaurantName, canPrintDirect()
         ? async (p) => { await enqueueDurablePrint({ jobKey: `z-reprint:${shift.id}:${crypto.randomUUID()}`, printer: "counter", payload: p, sourceType: "z_reprint", sourceId: shift.id }); }
-        : undefined);
+        : undefined, shift.closed_operator_name);
       toast.success(`Z report ${shift.business_day} sent to printer`);
     } catch (error) {
       toast.error(localizeError(error, lang, "print"));
