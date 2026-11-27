@@ -107,6 +107,7 @@ export type OpenShiftResult<S> = { created: boolean; shift: S };
 /** Atomic, idempotent open. Repeated taps/timeouts return the committed shift. */
 export async function openShiftSafely<S>(args: {
   openedBy: string | null | undefined;
+  operatorName: string;
   openingFloat: number;
   businessDay: string;
   printJobs: Array<{ printer: "counter" | "kitchen"; payload: unknown }>;
@@ -115,6 +116,7 @@ export async function openShiftSafely<S>(args: {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const { data, error } = await (supabase as any).rpc("open_shift_safely", {
       p_opened_by: args.openedBy ?? null,
+      p_operator_name: args.operatorName,
       p_opening_float: args.openingFloat,
       p_business_day: args.businessDay,
       p_print_jobs: args.printJobs,
@@ -135,6 +137,7 @@ export type CloseWithTicketResult = SafeCloseResult & { adopted?: boolean };
 export async function closeShiftWithTicket(args: {
   shiftId: string;
   closedBy: string | null | undefined;
+  operatorName: string;
   cashCount: Record<number, number>;
   totals: Record<string, unknown>;
   printPayload: unknown | null;
@@ -144,6 +147,7 @@ export async function closeShiftWithTicket(args: {
     const { data, error } = await (supabase as any).rpc("close_shift_with_ticket", {
       p_shift_id: args.shiftId,
       p_closed_by: args.closedBy ?? null,
+      p_operator_name: args.operatorName,
       p_cash_count: args.cashCount,
       p_totals: args.totals,
       p_print_payload: args.printPayload,

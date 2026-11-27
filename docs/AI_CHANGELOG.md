@@ -1,5 +1,15 @@
 # Shared AI Change Log
 
+## 2026-11-27 — Record opening and closing employees on shift reports
+
+- Agent: Codex
+- Scope: register open and Z-close workflows, saved shift audit fields, OPEN/Z thermal and browser prints, and historical Z reprints
+- Decision: require a first-step selection from THA, GIFT, TANNIE, JAY, or TONY without adding login or authorization; save the selected crew member separately from the signed-in account and print `OPENED BY` or `CLOSED BY` at the bottom of the corresponding report
+- Verification: dedicated shift-operator regression guard, full build-enforced regression suite, and production web build
+- Git: `codex/shift-operator-reports`; see the commit containing this entry
+- Delivery: source and migration prepared; production database migration, merge/publish, Android release, and physical SUNMI verification are reported separately
+- Follow-up: after delivery, select one employee on OPEN and another on Z close, then confirm both names on the physical tickets and the closing name on a Z-history reprint
+
 ## 2026-11-25 — Add a dedicated Reviewer complimentary checkout
 
 - Agent: Codex
