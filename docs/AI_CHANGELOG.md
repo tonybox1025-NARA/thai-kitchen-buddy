@@ -3,11 +3,11 @@
 ## 2026-11-27 — Record opening and closing employees on shift reports
 
 - Agent: Codex
-- Scope: register open and Z-close workflows, saved shift audit fields, OPEN/Z thermal and browser prints, and historical Z reprints
+- Scope: register open and Z-close workflows, saved shift audit fields, OPEN/Z thermal and browser prints, historical Z reprints, and Android v1.1.96
 - Decision: require a first-step selection from THA, GIFT, TANNIE, JAY, or TONY without adding login or authorization; save the selected crew member separately from the signed-in account and print `OPENED BY` or `CLOSED BY` at the bottom of the corresponding report
-- Verification: dedicated shift-operator regression guard, full build-enforced regression suite, and production web build
+- Verification: dedicated shift-operator regression guard, full build-enforced regression suite, production web build, Android bundle sync, and signed v1.1.96 release build passed. APK reports versionCode 98 / v1.1.96, signing certificate SHA-256 `301d4796a027c686d9e5b58146e49f6d645448d5ceb9b01279b68272409f39d3` (matching v1.1.95), and file SHA-256 `b0a714083b0a999a8d9a7804f3115eea4e208344f4daa07db594bf0233da6de4`
 - Git: `codex/shift-operator-reports`; see the commit containing this entry
-- Delivery: source and migration prepared; production database migration, merge/publish, Android release, and physical SUNMI verification are reported separately
+- Delivery: source merged, production database migration applied, and Lovable publication initiated; Android v1.1.96 release and physical SUNMI verification are reported separately
 - Follow-up: after delivery, select one employee on OPEN and another on Z close, then confirm both names on the physical tickets and the closing name on a Z-history reprint
 
 ## 2026-11-25 — Add a dedicated Reviewer complimentary checkout
